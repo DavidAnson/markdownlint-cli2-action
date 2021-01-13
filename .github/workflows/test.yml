@@ -18,4 +18,10 @@ jobs:
     - name: One glob (test/error.md, errors)
       uses: ./
       with:
-        glob: test/errors.md
+        globs: test/errors.md
+    - name: Two globs (README.md and test/error.md, errors)
+      uses: ./
+      with:
+        globs: |
+          *.md
+          test/*

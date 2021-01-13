@@ -2,8 +2,8 @@ name: 'markdownlint-cli2-action'
 author: 'David Anson'
 description: 'A GitHub Action to run the markdownlint-cli2 tool for linting Markdown/CommonMark files with the markdownlint library'
 inputs:
-  glob:
-    description: 'Glob expression of files to lint'
+  globs:
+    description: 'Glob expression(s) of files to lint (newline-delimited)'
     default: '*.{md,markdown}'
     required: false
 runs:

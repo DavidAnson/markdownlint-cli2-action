@@ -5,11 +5,11 @@ Markdown/CommonMark files with the markdownlint library
 
 ## Inputs
 
-### glob (optional)
+### globs (optional)
 
-Glob expression of files to lint
+Glob expression(s) of files to lint (newline-delimited)
 
-Default: `*.{md,markdown}`
+The default `*.{md,markdown}` lints all Markdown files in the base directory
 
 ## Outputs
 
