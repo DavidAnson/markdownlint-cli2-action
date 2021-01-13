@@ -7,7 +7,7 @@ const { "main": markdownlintCli2 } = require("markdownlint-cli2");
 
 const logMessage = core.info;
 const logError = core.error;
-const argv = core.getInput("globs").split("\n").filter(String));
+const argv = core.getInput("globs").split("\n").filter(String);
 
 markdownlintCli2({
   argv,
