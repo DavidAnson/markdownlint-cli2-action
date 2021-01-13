@@ -1,7 +1,8 @@
 # markdownlint-cli2-action
 
-A GitHub Action to run the markdownlint-cli2 tool for linting
-Markdown/CommonMark files with the markdownlint library
+A GitHub Action to run the [`markdownlint-cli2`][markdownlint-cli2] tool
+for linting [Markdown][markdown]/[CommonMark][commonmark] files with
+[`markdownlint`][markdownlint]
 
 ## Inputs
 
@@ -15,6 +16,28 @@ The default `*.{md,markdown}` lints all Markdown files in the base directory
 
 [None]
 
-## Example
+## Examples
 
-...
+To lint all Markdown files in a project:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v1
+  with:
+    globs: **/*.md
+```
+
+To lint specific Markdown files in a project:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v1
+  with:
+    globs: |
+      README.md
+      CHANGELOG.md
+      docs/*.md
+```
+
+[commonmark]: https://commonmark.org/
+[markdown]: https://wikipedia.org/wiki/Markdown
+[markdownlint]: https://github.com/DavidAnson/markdownlint
+[markdownlint-cli2]: https://github.com/DavidAnson/markdownlint-cli2
