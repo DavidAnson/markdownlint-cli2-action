@@ -13,5 +13,9 @@ jobs:
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
-    - name: No inputs
+    - name: No globs (README.md, no errors)
       uses: ./
+    - name: One glob (test/error.md, errors)
+      uses: ./
+      with:
+        glob: test/error.md
