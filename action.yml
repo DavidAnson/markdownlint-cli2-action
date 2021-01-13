@@ -1,0 +1,11 @@
+name: 'markdownlint-cli2-action'
+author: 'David Anson'
+description: 'A GitHub Action to run the markdownlint-cli2 tool for linting Markdown/CommonMark files with the markdownlint library'
+inputs:
+  glob:
+    description: 'Glob expression of files to lint'
+    default: '*.{md,markdown}'
+    required: false
+runs:
+  using: 'node12'
+  main: 'dist/index.js'
