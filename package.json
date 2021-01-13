@@ -1,6 +1,5 @@
 {
   "name": "markdownlint-cli2-action",
-  "version": "0.0.1",
   "description": "A GitHub Action to run the markdownlint-cli2 tool for linting Markdown/CommonMark files with the markdownlint library",
   "author": {
     "name": "David Anson",
@@ -18,7 +17,6 @@
   },
   "dependencies": {
     "@actions/core": "~1.2.6",
-    "@actions/github": "~4.0.0",
     "markdownlint-cli2": "~0.0.13"
   },
   "devDependencies": {

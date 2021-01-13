@@ -3,7 +3,6 @@
 "use strict";
 
 const core = require("@actions/core");
-// const github = require("@actions/github");
 const { "main": markdownlintCli2 } = require("markdownlint-cli2");
 
 const logMessage = core.info;
