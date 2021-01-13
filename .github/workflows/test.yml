@@ -18,4 +18,4 @@ jobs:
     - name: One glob (test/error.md, errors)
       uses: ./
       with:
-        glob: test/error.md
+        glob: test/errors.md
