@@ -4,9 +4,15 @@ A GitHub Action to run the markdownlint-cli2 tool for linting Markdown/CommonMar
 
 ## Inputs
 
-### glob
+### glob (optional)
 
-...
+Glob expression of files to lint
+
+Default: `*.{md,markdown}`
+
+## Outputs
+
+[None]
 
 ## Example
 

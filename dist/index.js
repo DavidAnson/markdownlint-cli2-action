@@ -16,8 +16,10 @@ const { "main": markdownlintCli2 } = __nccwpck_require__(9202);
 
 const logMessage = core.info;
 const logError = core.error;
+const glob = core.getInput("glob");
+
 markdownlintCli2({
-  "argv": [],
+  "argv": [ glob ],
   logMessage,
   logError
 }).then(
