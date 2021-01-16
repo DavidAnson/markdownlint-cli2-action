@@ -13,13 +13,17 @@
   },
   "bugs": "https://github.com/DavidAnson/markdownlint-cli2-action/issues",
   "scripts": {
-    "build": "ncc build markdownlint-cli2-action.js"
+    "build": "ncc build markdownlint-cli2-action.js",
+    "test": "eslint *.js"
   },
   "dependencies": {
     "@actions/core": "~1.2.6",
     "markdownlint-cli2": "~0.0.13"
   },
   "devDependencies": {
-    "@vercel/ncc": "~0.27.0"
+    "@vercel/ncc": "~0.27.0",
+    "eslint": "~7.18.0",
+    "eslint-plugin-node": "~11.1.0",
+    "eslint-plugin-unicorn": "~26.0.1"
   }
 }

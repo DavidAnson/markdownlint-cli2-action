@@ -11,20 +11,22 @@ module.exports =
 
 
 const core = __nccwpck_require__(2186);
-// const github = require("@actions/github");
-const { "main": markdownlintCli2 } = __nccwpck_require__(9202);
+const {"main": markdownlintCli2} = __nccwpck_require__(9202);
 
 const logMessage = core.info;
 const logError = core.error;
-const argv = core.getInput("globs").split("\n").filter(String);
+const argv =
+  core.getInput("globs").
+    split("\n").
+    filter(String);
 
 markdownlintCli2({
   argv,
   logMessage,
   logError
 }).then(
-  (exitCode) => exitCode && core.setFailed(`Failed with exit code: ${exitCode}`),
-  (reason) => core.setFailed(`Failed due to reason: ${reason}`)
+  (code) => code && core.setFailed(`Failed with exit code: ${code}`),
+  (error) => core.setFailed(`Failed due to error: ${error}`)
 );
 
 
