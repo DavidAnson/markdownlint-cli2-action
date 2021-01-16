@@ -6,6 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
+  test-script:
+    name: Run test script
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-node@v1
+    - run: npm install --no-package-lock
+    - run: npm run test
   no-globs:
     name: No globs (README.md, no errors)
     runs-on: ubuntu-latest
