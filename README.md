@@ -11,12 +11,19 @@ for linting [Markdown][markdown]/[CommonMark][commonmark] files with
 Glob expression(s) of files to lint (newline-delimited)
 
 The default `*.{md,markdown}` lints all Markdown files in the base directory
+of a project
 
 ## Outputs
 
 [None]
 
 ## Examples
+
+To lint Markdown files in the base directory of a project:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v1
+```
 
 To lint all Markdown files in a project:
 
