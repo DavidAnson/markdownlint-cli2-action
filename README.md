@@ -11,7 +11,9 @@ for linting [Markdown][markdown]/[CommonMark][commonmark] files with
 Glob expression(s) of files to lint (newline-delimited)
 
 The default `*.{md,markdown}` lints all Markdown files in the base directory
-of a project
+of a project.
+
+For more detail, read about [glob syntax in `markdownlint-cli2`][glob-syntax].
 
 ## Outputs
 
@@ -44,7 +46,12 @@ To lint specific Markdown files in a project:
       docs/*.md
 ```
 
+See [`example.yml`][example-yml] for a simple GitHub workflow that uses
+`markdownlint-cli2-action`.
+
 [commonmark]: https://commonmark.org/
+[example-yml]: .github/workflows/example.yml
+[glob-syntax]: https://github.com/DavidAnson/markdownlint-cli2#use
 [markdown]: https://wikipedia.org/wiki/Markdown
 [markdownlint]: https://github.com/DavidAnson/markdownlint
 [markdownlint-cli2]: https://github.com/DavidAnson/markdownlint-cli2
