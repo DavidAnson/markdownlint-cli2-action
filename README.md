@@ -24,13 +24,13 @@ For more detail, read about [glob syntax in `markdownlint-cli2`][glob-syntax].
 To lint Markdown files in the base directory of a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v1
+- uses: DavidAnson/markdownlint-cli2-action@v2
 ```
 
 To lint all Markdown files in a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v1
+- uses: DavidAnson/markdownlint-cli2-action@v2
   with:
     globs: **/*.md
 ```
@@ -38,7 +38,7 @@ To lint all Markdown files in a project:
 To lint specific Markdown files in a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v1
+- uses: DavidAnson/markdownlint-cli2-action@v2
   with:
     globs: |
       README.md
