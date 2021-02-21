@@ -18,7 +18,7 @@ const logError = core.error;
 const argv =
   core.getInput("globs").
     split("\n").
-    filter(String);
+    filter((glob) => String(glob));
 
 markdownlintCli2({
   argv,
