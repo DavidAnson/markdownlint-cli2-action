@@ -3116,7 +3116,11 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DEFAULT_FILE_SYSTEM_ADAPTER = void 0;
 const fs = __nccwpck_require__(5747);
 const os = __nccwpck_require__(2087);
-const CPU_COUNT = os.cpus().length;
+/**
+ * The `os.cpus` method can return zero. We expect the number of cores to be greater than zero.
+ * https://github.com/nodejs/node/blob/7faeddf23a98c53896f8b574a6e66589e8fb1eb8/lib/os.js#L106-L107
+ */
+const CPU_COUNT = Math.max(os.cpus().length, 1);
 exports.DEFAULT_FILE_SYSTEM_ADAPTER = {
     lstat: fs.lstat,
     lstatSync: fs.lstatSync,
@@ -4016,7 +4020,7 @@ const {promisify} = __nccwpck_require__(1669);
 const fs = __nccwpck_require__(5747);
 const path = __nccwpck_require__(5622);
 const fastGlob = __nccwpck_require__(3664);
-const gitIgnore = __nccwpck_require__(4777);
+const gitIgnore = __nccwpck_require__(2069);
 const slash = __nccwpck_require__(4111);
 
 const DEFAULT_IGNORE = [
@@ -4324,61 +4328,7 @@ module.exports.gitignore = gitignore;
 
 /***/ }),
 
-/***/ 2408:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-const {Transform} = __nccwpck_require__(2413);
-
-class ObjectTransform extends Transform {
-	constructor() {
-		super({
-			objectMode: true
-		});
-	}
-}
-
-class FilterStream extends ObjectTransform {
-	constructor(filter) {
-		super();
-		this._filter = filter;
-	}
-
-	_transform(data, encoding, callback) {
-		if (this._filter(data)) {
-			this.push(data);
-		}
-
-		callback();
-	}
-}
-
-class UniqueStream extends ObjectTransform {
-	constructor() {
-		super();
-		this._pushed = new Set();
-	}
-
-	_transform(data, encoding, callback) {
-		if (!this._pushed.has(data)) {
-			this.push(data);
-			this._pushed.add(data);
-		}
-
-		callback();
-	}
-}
-
-module.exports = {
-	FilterStream,
-	UniqueStream
-};
-
-
-/***/ }),
-
-/***/ 4777:
+/***/ 2069:
 /***/ ((module) => {
 
 // A simple implementation of make-array
@@ -4978,6 +4928,60 @@ if (
     REGIX_IS_WINDOWS_PATH_ABSOLUTE.test(path)
     || isNotRelative(path)
 }
+
+
+/***/ }),
+
+/***/ 2408:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+const {Transform} = __nccwpck_require__(2413);
+
+class ObjectTransform extends Transform {
+	constructor() {
+		super({
+			objectMode: true
+		});
+	}
+}
+
+class FilterStream extends ObjectTransform {
+	constructor(filter) {
+		super();
+		this._filter = filter;
+	}
+
+	_transform(data, encoding, callback) {
+		if (this._filter(data)) {
+			this.push(data);
+		}
+
+		callback();
+	}
+}
+
+class UniqueStream extends ObjectTransform {
+	constructor() {
+		super();
+		this._pushed = new Set();
+	}
+
+	_transform(data, encoding, callback) {
+		if (!this._pushed.has(data)) {
+			this.push(data);
+			this._pushed.add(data);
+		}
+
+		callback();
+	}
+}
+
+module.exports = {
+	FilterStream,
+	UniqueStream
+};
 
 
 /***/ }),
@@ -6001,7 +6005,6 @@ module.exports = [
   'main',
   'menu',
   'menuitem',
-  'meta',
   'nav',
   'noframes',
   'ol',
@@ -6049,7 +6052,7 @@ var open_tag    = '<[A-Za-z][A-Za-z0-9\\-]*' + attribute + '*\\s*\\/?>';
 
 var close_tag   = '<\\/[A-Za-z][A-Za-z0-9\\-]*\\s*>';
 var comment     = '<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->';
-var processing  = '<[?].*?[?]>';
+var processing  = '<[?][\\s\\S]*?[?]>';
 var declaration = '<![A-Z]+\\s+[^>]*>';
 var cdata       = '<!\\[CDATA\\[[\\s\\S]*?\\]\\]>';
 
@@ -6431,6 +6434,7 @@ module.exports = function parseLinkDestination(str, pos, max) {
     while (pos < max) {
       code = str.charCodeAt(pos);
       if (code === 0x0A /* \n */) { return result; }
+      if (code === 0x3C /* < */) { return result; }
       if (code === 0x3E /* > */) {
         result.pos = pos + 1;
         result.str = unescapeAll(str.slice(start + 1, pos));
@@ -6461,12 +6465,14 @@ module.exports = function parseLinkDestination(str, pos, max) {
     if (code < 0x20 || code === 0x7F) { break; }
 
     if (code === 0x5C /* \ */ && pos + 1 < max) {
+      if (str.charCodeAt(pos + 1) === 0x20) { break; }
       pos += 2;
       continue;
     }
 
     if (code === 0x28 /* ( */) {
       level++;
+      if (level > 32) { return result; }
     }
 
     if (code === 0x29 /* ) */) {
@@ -6588,6 +6594,8 @@ module.exports = function parseLinkTitle(str, pos, max) {
       result.lines = lines;
       result.str = unescapeAll(str.slice(start + 1, pos));
       result.ok = true;
+      return result;
+    } else if (code === 0x28 /* ( */ && marker === 0x29 /* ) */) {
       return result;
     } else if (code === 0x0A) {
       lines++;
@@ -7851,7 +7859,7 @@ default_rules.fence = function (tokens, idx, options, env, slf) {
   }
 
   // If language exists, inject class gently, without modifying original token.
-  // May be, one day we will add .clone() for token and simplify this part, but
+  // May be, one day we will add .deepClone() for token and simplify this part, but
   // now we prefer to keep things local.
   if (info) {
     i        = token.attrIndex('class');
@@ -7860,6 +7868,7 @@ default_rules.fence = function (tokens, idx, options, env, slf) {
     if (i < 0) {
       tmpAttrs.push([ 'class', options.langPrefix + langName ]);
     } else {
+      tmpAttrs[i] = tmpAttrs[i].slice();
       tmpAttrs[i][1] += ' ' + options.langPrefix + langName;
     }
 
@@ -10888,24 +10897,31 @@ module.exports = StateCore;
 
 
 /*eslint max-len:0*/
-var EMAIL_RE    = /^<([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/;
-var AUTOLINK_RE = /^<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}):([^<>\x00-\x20]*)>/;
+var EMAIL_RE    = /^([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)$/;
+var AUTOLINK_RE = /^([a-zA-Z][a-zA-Z0-9+.\-]{1,31}):([^<>\x00-\x20]*)$/;
 
 
 module.exports = function autolink(state, silent) {
-  var tail, linkMatch, emailMatch, url, fullUrl, token,
+  var url, fullUrl, token, ch, start, max,
       pos = state.pos;
 
   if (state.src.charCodeAt(pos) !== 0x3C/* < */) { return false; }
 
-  tail = state.src.slice(pos);
+  start = state.pos;
+  max = state.posMax;
 
-  if (tail.indexOf('>') < 0) { return false; }
+  for (;;) {
+    if (++pos >= max) return false;
 
-  if (AUTOLINK_RE.test(tail)) {
-    linkMatch = tail.match(AUTOLINK_RE);
+    ch = state.src.charCodeAt(pos);
 
-    url = linkMatch[0].slice(1, -1);
+    if (ch === 0x3C /* < */) return false;
+    if (ch === 0x3E /* > */) break;
+  }
+
+  url = state.src.slice(start + 1, pos);
+
+  if (AUTOLINK_RE.test(url)) {
     fullUrl = state.md.normalizeLink(url);
     if (!state.md.validateLink(fullUrl)) { return false; }
 
@@ -10923,14 +10939,11 @@ module.exports = function autolink(state, silent) {
       token.info    = 'auto';
     }
 
-    state.pos += linkMatch[0].length;
+    state.pos += url.length + 2;
     return true;
   }
 
-  if (EMAIL_RE.test(tail)) {
-    emailMatch = tail.match(EMAIL_RE);
-
-    url = emailMatch[0].slice(1, -1);
+  if (EMAIL_RE.test(url)) {
     fullUrl = state.md.normalizeLink('mailto:' + url);
     if (!state.md.validateLink(fullUrl)) { return false; }
 
@@ -10948,7 +10961,7 @@ module.exports = function autolink(state, silent) {
       token.info    = 'auto';
     }
 
-    state.pos += emailMatch[0].length;
+    state.pos += url.length + 2;
     return true;
   }
 
@@ -10966,8 +10979,9 @@ module.exports = function autolink(state, silent) {
 
 
 
+
 module.exports = function backtick(state, silent) {
-  var start, max, marker, matchStart, matchEnd, token,
+  var start, max, marker, token, matchStart, matchEnd, openerLength, closerLength,
       pos = state.pos,
       ch = state.src.charCodeAt(pos);
 
@@ -10977,20 +10991,33 @@ module.exports = function backtick(state, silent) {
   pos++;
   max = state.posMax;
 
+  // scan marker length
   while (pos < max && state.src.charCodeAt(pos) === 0x60/* ` */) { pos++; }
 
   marker = state.src.slice(start, pos);
+  openerLength = marker.length;
+
+  if (state.backticksScanned && (state.backticks[openerLength] || 0) <= start) {
+    if (!silent) state.pending += marker;
+    state.pos += openerLength;
+    return true;
+  }
 
   matchStart = matchEnd = pos;
 
+  // Nothing found in the cache, scan until the end of the line (or until marker is found)
   while ((matchStart = state.src.indexOf('`', matchEnd)) !== -1) {
     matchEnd = matchStart + 1;
 
+    // scan marker length
     while (matchEnd < max && state.src.charCodeAt(matchEnd) === 0x60/* ` */) { matchEnd++; }
 
-    if (matchEnd - matchStart === marker.length) {
+    closerLength = matchEnd - matchStart;
+
+    if (closerLength === openerLength) {
+      // Found matching closer length.
       if (!silent) {
-        token         = state.push('code_inline', 'code', 0);
+        token     = state.push('code_inline', 'code', 0);
         token.markup  = marker;
         token.content = state.src.slice(pos, matchStart)
           .replace(/\n/g, ' ')
@@ -10999,10 +11026,16 @@ module.exports = function backtick(state, silent) {
       state.pos = matchEnd;
       return true;
     }
+
+    // Some different length found, put it in cache as upper limit of where closer can be found
+    state.backticks[closerLength] = matchStart;
   }
 
-  if (!silent) { state.pending += marker; }
-  state.pos += marker.length;
+  // Scanned through the end, didn't find anything
+  state.backticksScanned = true;
+
+  if (!silent) state.pending += marker;
+  state.pos += openerLength;
   return true;
 };
 
@@ -11042,16 +11075,18 @@ function processDelimiters(state, delimiters) {
     }
 
     minOpenerIdx = openersBottom[closer.marker][closer.length % 3];
-    newMinOpenerIdx = -1;
 
     openerIdx = closerIdx - closer.jump - 1;
+
+    // avoid crash if `closer.jump` is pointing outside of the array, see #742
+    if (openerIdx < -1) openerIdx = -1;
+
+    newMinOpenerIdx = openerIdx;
 
     for (; openerIdx > minOpenerIdx; openerIdx -= opener.jump + 1) {
       opener = delimiters[openerIdx];
 
       if (opener.marker !== closer.marker) continue;
-
-      if (newMinOpenerIdx === -1) newMinOpenerIdx = openerIdx;
 
       if (opener.open && opener.end < 0) {
 
@@ -11620,9 +11655,9 @@ module.exports = function link(state, silent) {
       pos,
       res,
       ref,
-      title,
       token,
       href = '',
+      title = '',
       oldPos = state.pos,
       max = state.posMax,
       start = state.pos,
@@ -11665,31 +11700,29 @@ module.exports = function link(state, silent) {
       } else {
         href = '';
       }
-    }
-
-    // [link](  <href>  "title"  )
-    //                ^^ skipping these spaces
-    start = pos;
-    for (; pos < max; pos++) {
-      code = state.src.charCodeAt(pos);
-      if (!isSpace(code) && code !== 0x0A) { break; }
-    }
-
-    // [link](  <href>  "title"  )
-    //                  ^^^^^^^ parsing link title
-    res = state.md.helpers.parseLinkTitle(state.src, pos, state.posMax);
-    if (pos < max && start !== pos && res.ok) {
-      title = res.str;
-      pos = res.pos;
 
       // [link](  <href>  "title"  )
-      //                         ^^ skipping these spaces
+      //                ^^ skipping these spaces
+      start = pos;
       for (; pos < max; pos++) {
         code = state.src.charCodeAt(pos);
         if (!isSpace(code) && code !== 0x0A) { break; }
       }
-    } else {
-      title = '';
+
+      // [link](  <href>  "title"  )
+      //                  ^^^^^^^ parsing link title
+      res = state.md.helpers.parseLinkTitle(state.src, pos, state.posMax);
+      if (pos < max && start !== pos && res.ok) {
+        title = res.str;
+        pos = res.pos;
+
+        // [link](  <href>  "title"  )
+        //                         ^^ skipping these spaces
+        for (; pos < max; pos++) {
+          code = state.src.charCodeAt(pos);
+          if (!isSpace(code) && code !== 0x0A) { break; }
+        }
+      }
     }
 
     if (pos >= max || state.src.charCodeAt(pos) !== 0x29/* ) */) {
@@ -11844,6 +11877,10 @@ function StateInline(src, md, env, outTokens) {
 
   // Stack of delimiter lists for upper level tags
   this._prev_delimiters = [];
+
+  // backtick length => last seen position
+  this.backticks = {};
+  this.backticksScanned = false;
 }
 
 
@@ -12003,8 +12040,8 @@ module.exports.w = function strikethrough(state, silent) {
 
     state.delimiters.push({
       marker: marker,
-      length: 0, // disable "rule of 3" length checks meant for emphasis
-      jump:   i,
+      length: 0,     // disable "rule of 3" length checks meant for emphasis
+      jump:   i / 2, // for `~~` 1 marker = 2 characters
       token:  state.tokens.length - 1,
       end:    -1,
       open:   scanned.can_open,
@@ -12542,7 +12579,7 @@ const appendToArray = __nccwpck_require__(3112);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.0.13";
+const packageVersion = "0.0.14";
 const libraryVersion = markdownlintLibrary.getVersion();
 const dotOnlySubstitute = "*.{md,markdown}";
 const utf8 = "utf8";
@@ -12600,13 +12637,20 @@ const requireConfig = (dir, name, otherwise) => {
 };
 
 // Process command-line arguments and return glob patterns
-const processArgv = (argv, logMessage) => {
+const processArgv = (argv) => {
   const globPatterns = argv.map((glob) => glob.replace(/^#/u, "!"));
-  if (globPatterns.length === 0) {
-    // Output help if missing arguments
-    const { name, homepage } = __nccwpck_require__(9040);
-    /* eslint-disable max-len */
-    logMessage(`${homepage}
+  if ((globPatterns.length === 1) && (globPatterns[0] === ".")) {
+    // Substitute a more reasonable pattern
+    globPatterns[0] = dotOnlySubstitute;
+  }
+  return globPatterns;
+};
+
+// Show help if missing arguments
+const showHelp = (logMessage) => {
+  const { name, homepage } = __nccwpck_require__(9040);
+  /* eslint-disable max-len */
+  logMessage(`${homepage}
 
 Syntax: ${name} glob0 [glob1] [...] [globN]
 
@@ -12639,14 +12683,8 @@ Cross-platform compatibility:
 
 Therefore, the most compatible glob syntax for cross-platform support:
 $ ${name} "**/*.md" "#node_modules"`
-    );
-    /* eslint-enable max-len */
-    return null;
-  } else if ((globPatterns.length === 1) && (globPatterns[0] === ".")) {
-    // Substitute a more reasonable pattern
-    globPatterns[0] = dotOnlySubstitute;
-  }
-  return globPatterns;
+  );
+  /* eslint-enable max-len */
 };
 
 // Get (creating if necessary) and process a directory's info object
@@ -12732,11 +12770,17 @@ const getBaseOptions = async (globPatterns, fixDefault) => {
     ...dirToDirInfo["."].markdownlintOptions
   };
 
+  // Append any globs specified in markdownlint-cli2 configuration
+  const globs = baseMarkdownlintOptions.globs || [];
+  appendToArray(globPatterns, globs);
+
   // Pass base ignore globs as globby patterns (best performance)
-  const ignorePatterns = (baseMarkdownlintOptions.ignores || []).
-    map(negateGlob);
+  const ignorePatterns =
+    // eslint-disable-next-line unicorn/no-array-callback-reference
+    (baseMarkdownlintOptions.ignores || []).map(negateGlob);
   appendToArray(globPatterns, ignorePatterns);
   delete baseMarkdownlintOptions.ignores;
+
   return {
     baseMarkdownlintOptions,
     dirToDirInfo
@@ -12868,6 +12912,7 @@ const lintFiles = async (dirInfos) => {
     const { dir, files, markdownlintConfig, markdownlintOptions } = dirInfo;
     let filteredFiles = files;
     if (markdownlintOptions.ignores) {
+      // eslint-disable-next-line unicorn/no-array-callback-reference
       const ignores = markdownlintOptions.ignores.map(negateGlob);
       const micromatch = __nccwpck_require__(6228);
       filteredFiles = micromatch(
@@ -12949,7 +12994,9 @@ const createSummary = (taskResults) => {
     a.ruleNames[0].localeCompare(b.ruleNames[0]) ||
     (a.counter - b.counter)
   ));
-  summary.forEach((result) => delete result.counter);
+  for (const result of summary) {
+    delete result.counter;
+  }
   return summary;
 };
 
@@ -12963,11 +13010,9 @@ const outputSummary =
         logMessage,
         logError
       };
-      // const formattersAndParams = requireIdsAndParams(
-      //   ".",
-      //   outputFormatters || [ [ "markdownlint-cli2-formatter-default" ] ]
-      // );
-      const formattersAndParams = [ [ __nccwpck_require__(8552) ] ];
+      const formattersAndParams = outputFormatters
+        ? requireIdsAndParams(".", outputFormatters)
+        : [ [ __nccwpck_require__(8552) ] ];
       await Promise.all(formattersAndParams.map((formatterAndParams) => {
         const [ formatter, ...formatterParams ] = formatterAndParams;
         return formatter(formatterOptions, ...formatterParams);
@@ -12983,19 +13028,23 @@ const main = async (params) => {
     `${packageName} v${packageVersion} ` +
     `(${markdownlintLibraryName} v${libraryVersion})`
   );
-  const globPatterns = processArgv(argv, logMessage);
-  if (!globPatterns) {
-    return 1;
-  }
+  const globPatterns = processArgv(argv);
   const { baseMarkdownlintOptions, dirToDirInfo } =
     await getBaseOptions(globPatterns, fixDefault);
+  if (globPatterns.length === 0) {
+    showHelp(logMessage);
+    return 1;
+  }
   const showProgress = !baseMarkdownlintOptions.noProgress;
   if (showProgress) {
     logMessage(`Finding: ${globPatterns.join(" ")}`);
   }
   const dirInfos = await createDirInfos(globPatterns, dirToDirInfo);
   if (showProgress) {
-    const fileCount = dirInfos.reduce((p, c) => p + c.files.length, 0);
+    let fileCount = 0;
+    for (const dirInfo of dirInfos) {
+      fileCount += dirInfo.files.length;
+    }
     logMessage(`Linting: ${fileCount} file(s)`);
   }
   const lintResults = await lintFiles(dirInfos);
@@ -13148,32 +13197,47 @@ module.exports.includesSorted = function includesSorted(array, element) {
   return false;
 };
 
-// Replaces the text of all properly-formatted HTML comments with whitespace
+// Replaces the content of properly-formatted CommonMark comments with "."
 // This preserves the line/column information for the rest of the document
-// Trailing whitespace is avoided with a '\' character in the last column
-// See https://www.w3.org/TR/html5/syntax.html#comments for details
+// https://spec.commonmark.org/0.29/#html-blocks
+// https://spec.commonmark.org/0.29/#html-comment
 const htmlCommentBegin = "<!--";
 const htmlCommentEnd = "-->";
 module.exports.clearHtmlCommentText = function clearHtmlCommentText(text) {
   let i = 0;
   while ((i = text.indexOf(htmlCommentBegin, i)) !== -1) {
-    const j = text.indexOf(htmlCommentEnd, i);
+    const j = text.indexOf(htmlCommentEnd, i + 2);
     if (j === -1) {
       // Un-terminated comments are treated as text
       break;
     }
-    const comment = text.slice(i + htmlCommentBegin.length, j);
-    if ((comment.length > 0) &&
-        (comment[0] !== ">") &&
-        (comment[comment.length - 1] !== "-") &&
-        !comment.includes("--") &&
-        (text.slice(i, j + htmlCommentEnd.length)
-          .search(inlineCommentRe) === -1)) {
-      const blanks = comment
-        .replace(/[^\r\n]/g, " ")
-        .replace(/ ([\r\n])/g, "\\$1");
-      text = text.slice(0, i + htmlCommentBegin.length) +
-        blanks + text.slice(j);
+    // If the comment has content...
+    if (j > i + htmlCommentBegin.length) {
+      let k = i - 1;
+      while (text[k] === " ") {
+        k--;
+      }
+      // If comment is not within an indented code block...
+      if (k >= i - 4) {
+        const content = text.slice(i + htmlCommentBegin.length, j);
+        const isBlock = (k < 0) || (text[k] === "\n");
+        const isValid = isBlock ||
+          (!content.startsWith(">") && !content.startsWith("->") &&
+           !content.endsWith("-") && !content.includes("--"));
+        // If a valid block/inline comment...
+        if (isValid) {
+          const inlineCommentIndex = text
+            .slice(i, j + htmlCommentEnd.length)
+            .search(inlineCommentRe);
+          // If not a markdownlint inline directive...
+          if (inlineCommentIndex === -1) {
+            text =
+              text.slice(0, i + htmlCommentBegin.length) +
+              content.replace(/[^\r\n]/g, ".") +
+              text.slice(j);
+          }
+        }
+      }
     }
     i = j + htmlCommentEnd.length;
   }
@@ -13222,7 +13286,7 @@ module.exports.fencedCodeBlockStyleFor =
  */
 function indentFor(token) {
   const line = token.line.replace(/^[\s>]*(> |>)/, "");
-  return line.length - line.trimLeft().length;
+  return line.length - line.trimStart().length;
 }
 module.exports.indentFor = indentFor;
 
@@ -13272,37 +13336,56 @@ function filterTokens(params, type, handler) {
 }
 module.exports.filterTokens = filterTokens;
 
+/**
+ * Returns whether a token is a math block (created by markdown-it-texmath).
+ *
+ * @param {Object} token MarkdownItToken instance.
+ * @returns {boolean} True iff token is a math block.
+ */
+function isMathBlock(token) {
+  return (
+    (token.tag === "math") &&
+    token.type.startsWith("math_block") &&
+    !token.type.endsWith("_end")
+  );
+}
+
 // Get line metadata array
 module.exports.getLineMetadata = function getLineMetadata(params) {
-  const lineMetadata = params.lines.map(function mapLine(line, index) {
-    return [ line, index, false, 0, false, false ];
-  });
-  filterTokens(params, "fence", function forToken(token) {
+  const lineMetadata = params.lines.map(
+    (line, index) => [ line, index, false, 0, false, false, false, false ]
+  );
+  filterTokens(params, "fence", (token) => {
     lineMetadata[token.map[0]][3] = 1;
     lineMetadata[token.map[1] - 1][3] = -1;
     for (let i = token.map[0] + 1; i < token.map[1] - 1; i++) {
       lineMetadata[i][2] = true;
     }
   });
-  filterTokens(params, "code_block", function forToken(token) {
+  filterTokens(params, "code_block", (token) => {
     for (let i = token.map[0]; i < token.map[1]; i++) {
       lineMetadata[i][2] = true;
     }
   });
-  filterTokens(params, "table_open", function forToken(token) {
+  filterTokens(params, "table_open", (token) => {
     for (let i = token.map[0]; i < token.map[1]; i++) {
       lineMetadata[i][4] = true;
     }
   });
-  filterTokens(params, "list_item_open", function forToken(token) {
+  filterTokens(params, "list_item_open", (token) => {
     let count = 1;
     for (let i = token.map[0]; i < token.map[1]; i++) {
       lineMetadata[i][5] = count;
       count++;
     }
   });
-  filterTokens(params, "hr", function forToken(token) {
+  filterTokens(params, "hr", (token) => {
     lineMetadata[token.map[0]][6] = true;
+  });
+  params.tokens.filter(isMathBlock).forEach((token) => {
+    for (let i = token.map[0]; i < token.map[1]; i++) {
+      lineMetadata[i][7] = true;
+    }
   });
   return lineMetadata;
 };
@@ -13310,7 +13393,8 @@ module.exports.getLineMetadata = function getLineMetadata(params) {
 // Calls the provided function for each line (with context)
 module.exports.forEachLine = function forEachLine(lineMetadata, handler) {
   lineMetadata.forEach(function forMetadata(metadata) {
-    // Parameters: line, lineIndex, inCode, onFence, inTable, inItem, inBreak
+    // Parameters:
+    // line, lineIndex, inCode, onFence, inTable, inItem, inBreak, inMath
     handler(...metadata);
   });
 };
@@ -13323,13 +13407,9 @@ module.exports.flattenLists = function flattenLists(params) {
   let nesting = 0;
   const nestingStack = [];
   let lastWithMap = { "map": [ 0, 1 ] };
-  params.tokens.forEach(function forToken(token) {
-    if (
-      (token.type === "math_block") &&
-      (token.tag === "math") &&
-      token.map[1]
-    ) {
-      // markdown-it-texmath package does not account for math_block_end
+  params.tokens.forEach((token) => {
+    if (isMathBlock(token) && token.map[1]) {
+      // markdown-it-texmath plugin does not account for math_block_end
       token.map[1]++;
     }
     if ((token.type === "bullet_list_open") ||
@@ -13741,8 +13821,9 @@ module.exports.applyFixes = function applyFixes(input, errors) {
     const editIndex = editColumn - 1;
     if (
       (lineIndex !== lastLineIndex) ||
-      ((editIndex + deleteCount) < lastEditIndex) ||
-      (deleteCount === -1)
+      (deleteCount === -1) ||
+      ((editIndex + deleteCount) <=
+        (lastEditIndex - ((deleteCount > 0) ? 0 : 1)))
     ) {
       lines[lineIndex] = applyFix(lines[lineIndex], fixInfo, lineEnding);
     }
@@ -13861,32 +13942,47 @@ module.exports.includesSorted = function includesSorted(array, element) {
   return false;
 };
 
-// Replaces the text of all properly-formatted HTML comments with whitespace
+// Replaces the content of properly-formatted CommonMark comments with "."
 // This preserves the line/column information for the rest of the document
-// Trailing whitespace is avoided with a '\' character in the last column
-// See https://www.w3.org/TR/html5/syntax.html#comments for details
+// https://spec.commonmark.org/0.29/#html-blocks
+// https://spec.commonmark.org/0.29/#html-comment
 const htmlCommentBegin = "<!--";
 const htmlCommentEnd = "-->";
 module.exports.clearHtmlCommentText = function clearHtmlCommentText(text) {
   let i = 0;
   while ((i = text.indexOf(htmlCommentBegin, i)) !== -1) {
-    const j = text.indexOf(htmlCommentEnd, i);
+    const j = text.indexOf(htmlCommentEnd, i + 2);
     if (j === -1) {
       // Un-terminated comments are treated as text
       break;
     }
-    const comment = text.slice(i + htmlCommentBegin.length, j);
-    if ((comment.length > 0) &&
-        (comment[0] !== ">") &&
-        (comment[comment.length - 1] !== "-") &&
-        !comment.includes("--") &&
-        (text.slice(i, j + htmlCommentEnd.length)
-          .search(inlineCommentRe) === -1)) {
-      const blanks = comment
-        .replace(/[^\r\n]/g, " ")
-        .replace(/ ([\r\n])/g, "\\$1");
-      text = text.slice(0, i + htmlCommentBegin.length) +
-        blanks + text.slice(j);
+    // If the comment has content...
+    if (j > i + htmlCommentBegin.length) {
+      let k = i - 1;
+      while (text[k] === " ") {
+        k--;
+      }
+      // If comment is not within an indented code block...
+      if (k >= i - 4) {
+        const content = text.slice(i + htmlCommentBegin.length, j);
+        const isBlock = (k < 0) || (text[k] === "\n");
+        const isValid = isBlock ||
+          (!content.startsWith(">") && !content.startsWith("->") &&
+           !content.endsWith("-") && !content.includes("--"));
+        // If a valid block/inline comment...
+        if (isValid) {
+          const inlineCommentIndex = text
+            .slice(i, j + htmlCommentEnd.length)
+            .search(inlineCommentRe);
+          // If not a markdownlint inline directive...
+          if (inlineCommentIndex === -1) {
+            text =
+              text.slice(0, i + htmlCommentBegin.length) +
+              content.replace(/[^\r\n]/g, ".") +
+              text.slice(j);
+          }
+        }
+      }
     }
     i = j + htmlCommentEnd.length;
   }
@@ -13935,7 +14031,7 @@ module.exports.fencedCodeBlockStyleFor =
  */
 function indentFor(token) {
   const line = token.line.replace(/^[\s>]*(> |>)/, "");
-  return line.length - line.trimLeft().length;
+  return line.length - line.trimStart().length;
 }
 module.exports.indentFor = indentFor;
 
@@ -13985,37 +14081,56 @@ function filterTokens(params, type, handler) {
 }
 module.exports.filterTokens = filterTokens;
 
+/**
+ * Returns whether a token is a math block (created by markdown-it-texmath).
+ *
+ * @param {Object} token MarkdownItToken instance.
+ * @returns {boolean} True iff token is a math block.
+ */
+function isMathBlock(token) {
+  return (
+    (token.tag === "math") &&
+    token.type.startsWith("math_block") &&
+    !token.type.endsWith("_end")
+  );
+}
+
 // Get line metadata array
 module.exports.getLineMetadata = function getLineMetadata(params) {
-  const lineMetadata = params.lines.map(function mapLine(line, index) {
-    return [ line, index, false, 0, false, false ];
-  });
-  filterTokens(params, "fence", function forToken(token) {
+  const lineMetadata = params.lines.map(
+    (line, index) => [ line, index, false, 0, false, false, false, false ]
+  );
+  filterTokens(params, "fence", (token) => {
     lineMetadata[token.map[0]][3] = 1;
     lineMetadata[token.map[1] - 1][3] = -1;
     for (let i = token.map[0] + 1; i < token.map[1] - 1; i++) {
       lineMetadata[i][2] = true;
     }
   });
-  filterTokens(params, "code_block", function forToken(token) {
+  filterTokens(params, "code_block", (token) => {
     for (let i = token.map[0]; i < token.map[1]; i++) {
       lineMetadata[i][2] = true;
     }
   });
-  filterTokens(params, "table_open", function forToken(token) {
+  filterTokens(params, "table_open", (token) => {
     for (let i = token.map[0]; i < token.map[1]; i++) {
       lineMetadata[i][4] = true;
     }
   });
-  filterTokens(params, "list_item_open", function forToken(token) {
+  filterTokens(params, "list_item_open", (token) => {
     let count = 1;
     for (let i = token.map[0]; i < token.map[1]; i++) {
       lineMetadata[i][5] = count;
       count++;
     }
   });
-  filterTokens(params, "hr", function forToken(token) {
+  filterTokens(params, "hr", (token) => {
     lineMetadata[token.map[0]][6] = true;
+  });
+  params.tokens.filter(isMathBlock).forEach((token) => {
+    for (let i = token.map[0]; i < token.map[1]; i++) {
+      lineMetadata[i][7] = true;
+    }
   });
   return lineMetadata;
 };
@@ -14023,7 +14138,8 @@ module.exports.getLineMetadata = function getLineMetadata(params) {
 // Calls the provided function for each line (with context)
 module.exports.forEachLine = function forEachLine(lineMetadata, handler) {
   lineMetadata.forEach(function forMetadata(metadata) {
-    // Parameters: line, lineIndex, inCode, onFence, inTable, inItem, inBreak
+    // Parameters:
+    // line, lineIndex, inCode, onFence, inTable, inItem, inBreak, inMath
     handler(...metadata);
   });
 };
@@ -14036,13 +14152,9 @@ module.exports.flattenLists = function flattenLists(params) {
   let nesting = 0;
   const nestingStack = [];
   let lastWithMap = { "map": [ 0, 1 ] };
-  params.tokens.forEach(function forToken(token) {
-    if (
-      (token.type === "math_block") &&
-      (token.tag === "math") &&
-      token.map[1]
-    ) {
-      // markdown-it-texmath package does not account for math_block_end
+  params.tokens.forEach((token) => {
+    if (isMathBlock(token) && token.map[1]) {
+      // markdown-it-texmath plugin does not account for math_block_end
       token.map[1]++;
     }
     if ((token.type === "bullet_list_open") ||
@@ -14454,8 +14566,9 @@ module.exports.applyFixes = function applyFixes(input, errors) {
     const editIndex = editColumn - 1;
     if (
       (lineIndex !== lastLineIndex) ||
-      ((editIndex + deleteCount) < lastEditIndex) ||
-      (deleteCount === -1)
+      (deleteCount === -1) ||
+      ((editIndex + deleteCount) <=
+        (lastEditIndex - ((deleteCount > 0) ? 0 : 1)))
     ) {
       lines[lineIndex] = applyFix(lines[lineIndex], fixInfo, lineEnding);
     }
@@ -14517,6 +14630,11 @@ const rules = __nccwpck_require__(7494);
 const helpers = __nccwpck_require__(2935);
 const cache = __nccwpck_require__(3266);
 
+// @ts-ignore
+// eslint-disable-next-line camelcase, max-len, no-inline-comments, no-undef
+const dynamicRequire = (typeof require === "undefined") ? require : /* c8 ignore next */ eval("require");
+// Capture native require implementation for dynamic loading of modules
+
 const deprecatedRuleNames = [ "MD002", "MD006" ];
 
 /**
@@ -14558,10 +14676,12 @@ function validateRuleList(ruleList) {
         result = newError(property);
       }
     });
-    if (!result && rule.information) {
-      if (Object.getPrototypeOf(rule.information) !== URL.prototype) {
-        result = newError("information");
-      }
+    if (
+      !result &&
+      rule.information &&
+      (Object.getPrototypeOf(rule.information) !== URL.prototype)
+    ) {
+      result = newError("information");
     }
     if (!result) {
       rule.names.forEach(function forName(name) {
@@ -15228,6 +15348,7 @@ function lintInput(options, synchronous, callback) {
   // Normalize inputs
   options = options || {};
   callback = callback || function noop() {};
+  // eslint-disable-next-line unicorn/prefer-spread
   const ruleList = rules.concat(options.customRules || []);
   const ruleErr = validateRuleList(ruleList);
   if (ruleErr) {
@@ -15360,7 +15481,7 @@ function markdownlint(options, callback) {
   return lintInput(options, false, callback);
 }
 
-const markdownlintPromisify = promisify(markdownlint);
+const markdownlintPromisify = promisify && promisify(markdownlint);
 
 /**
  * Lint specified Markdown files.
@@ -15440,7 +15561,10 @@ function resolveConfigExtends(configFile, referenceId) {
     // If not a file or fs.statSync throws, try require.resolve
   }
   try {
-    return require.resolve(referenceId, { "paths": [ configFileDirname ] });
+    return dynamicRequire.resolve(
+      referenceId,
+      { "paths": [ configFileDirname ] }
+    );
   } catch {
     // If require.resolve throws, return resolvedExtendsFile
   }
@@ -15492,7 +15616,7 @@ function readConfig(file, parsers, callback) {
   });
 }
 
-const readConfigPromisify = promisify(readConfig);
+const readConfigPromisify = promisify && promisify(readConfig);
 
 /**
  * Read specified configuration file.
@@ -15685,7 +15809,7 @@ module.exports = markdownlint;
  * @property {string} errorDetail Detail about the error.
  * @property {string} errorContext Context for the error.
  * @property {number[]} errorRange Column number (1-based) and length.
- * @property {FixInfo} fixInfo Fix information.
+ * @property {FixInfo} [fixInfo] Fix information.
  */
 
 /**
@@ -15781,7 +15905,7 @@ const { addErrorDetailIf } = __nccwpck_require__(2935);
 
 module.exports = {
   "names": [ "MD002", "first-heading-h1", "first-header-h1" ],
-  "description": "First heading should be a top level heading",
+  "description": "First heading should be a top-level heading",
   "tags": [ "headings", "headers" ],
   "function": function MD002(params, onError) {
     const level = Number(params.config.level || 1);
@@ -15857,9 +15981,21 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, listItemMarkerRe,
-  rangeFromRegExp, unorderedListStyleFor } = __nccwpck_require__(2935);
+const { addErrorDetailIf, listItemMarkerRe, unorderedListStyleFor } =
+  __nccwpck_require__(2935);
 const { flattenedLists } = __nccwpck_require__(3266);
+
+const expectedStyleToMarker = {
+  "dash": "-",
+  "plus": "+",
+  "asterisk": "*"
+};
+const differentItemStyle = {
+  "dash": "plus",
+  "plus": "asterisk",
+  "asterisk": "dash"
+};
+const validStyles = Object.keys(expectedStyleToMarker);
 
 module.exports = {
   "names": [ "MD004", "ul-style" ],
@@ -15878,19 +16014,40 @@ module.exports = {
           const itemStyle = unorderedListStyleFor(item);
           if (style === "sublist") {
             const nesting = list.nesting;
-            if (!nestingStyles[nesting] &&
-              (itemStyle !== nestingStyles[nesting - 1])) {
-              nestingStyles[nesting] = itemStyle;
-            } else {
-              addErrorDetailIf(onError, item.lineNumber,
-                nestingStyles[nesting], itemStyle, null, null,
-                rangeFromRegExp(item.line, listItemMarkerRe));
+            if (!nestingStyles[nesting]) {
+              nestingStyles[nesting] =
+                (itemStyle === nestingStyles[nesting - 1]) ?
+                  differentItemStyle[itemStyle] :
+                  itemStyle;
             }
-          } else {
-            addErrorDetailIf(onError, item.lineNumber,
-              expectedStyle, itemStyle, null, null,
-              rangeFromRegExp(item.line, listItemMarkerRe));
+            expectedStyle = nestingStyles[nesting];
           }
+          if (!validStyles.includes(expectedStyle)) {
+            expectedStyle = validStyles[0];
+          }
+          let range = null;
+          let fixInfo = null;
+          const match = item.line.match(listItemMarkerRe);
+          if (match) {
+            const column = match.index + 1;
+            const length = match[0].length;
+            range = [ column, length ];
+            fixInfo = {
+              "editColumn": match[1].length + 1,
+              "deleteCount": 1,
+              "insertText": expectedStyleToMarker[expectedStyle]
+            };
+          }
+          addErrorDetailIf(
+            onError,
+            item.lineNumber,
+            expectedStyle,
+            itemStyle,
+            null,
+            null,
+            range,
+            fixInfo
+          );
         });
       }
     });
@@ -16008,7 +16165,7 @@ module.exports = {
             null,
             rangeFromRegExp(line, listItemMarkerRe),
             {
-              "deleteCount": line.length - line.trimLeft().length
+              "deleteCount": line.length - line.trimStart().length
             });
         });
       }
@@ -16129,26 +16286,30 @@ module.exports = {
     const expected = (brSpaces < 2) ? 0 : brSpaces;
     forEachLine(lineMetadata(), (line, lineIndex, inCode) => {
       const lineNumber = lineIndex + 1;
-      const trailingSpaces = line.length - line.trimRight().length;
-      if (trailingSpaces && !inCode &&
-        !includesSorted(listItemLineNumbers, lineNumber)) {
-        if ((expected !== trailingSpaces) ||
-            (strict &&
-             (!includesSorted(paragraphLineNumbers, lineNumber) ||
-              includesSorted(codeInlineLineNumbers, lineNumber)))) {
-          const column = line.length - trailingSpaces + 1;
-          addError(
-            onError,
-            lineNumber,
-            "Expected: " + (expected === 0 ? "" : "0 or ") +
-              expected + "; Actual: " + trailingSpaces,
-            null,
-            [ column, trailingSpaces ],
-            {
-              "editColumn": column,
-              "deleteCount": trailingSpaces
-            });
-        }
+      const trailingSpaces = line.length - line.trimEnd().length;
+      if (
+        trailingSpaces &&
+        !inCode &&
+        !includesSorted(listItemLineNumbers, lineNumber) &&
+        (
+          (expected !== trailingSpaces) ||
+          (strict &&
+            (!includesSorted(paragraphLineNumbers, lineNumber) ||
+             includesSorted(codeInlineLineNumbers, lineNumber)))
+        )
+      ) {
+        const column = line.length - trailingSpaces + 1;
+        addError(
+          onError,
+          lineNumber,
+          "Expected: " + (expected === 0 ? "" : "0 or ") +
+            expected + "; Actual: " + trailingSpaces,
+          null,
+          [ column, trailingSpaces ],
+          {
+            "editColumn": column,
+            "deleteCount": trailingSpaces
+          });
       }
     });
   }
@@ -16479,7 +16640,7 @@ module.exports = {
   "function": function MD018(params, onError) {
     forEachLine(lineMetadata(), (line, lineIndex, inCode) => {
       if (!inCode &&
-        /^#+[^#\s]/.test(line) &&
+        /^#+[^# \t]/.test(line) &&
         !/#\s*$/.test(line) &&
         !line.startsWith("#️⃣")) {
         const hashCount = /^#+/.exec(line)[0].length;
@@ -16522,7 +16683,7 @@ module.exports = {
     filterTokens(params, "heading_open", (token) => {
       if (headingStyleFor(token) === "atx") {
         const { line, lineNumber } = token;
-        const match = /^(#+)(\s{2,})(?:\S)/.exec(line);
+        const match = /^(#+)([ \t]{2,})(?:\S)/.exec(line);
         if (match) {
           const [
             ,
@@ -16569,7 +16730,7 @@ module.exports = {
     forEachLine(lineMetadata(), (line, lineIndex, inCode) => {
       if (!inCode) {
         const match =
-          /^(#+)(\s*)([^#]*?[^#\\])(\s*)((?:\\#)?)(#+)(\s*)$/.exec(line);
+          /^(#+)([ \t]*)([^#]*?[^#\\])([ \t]*)((?:\\#)?)(#+)(\s*)$/.exec(line);
         if (match) {
           const [
             ,
@@ -16639,7 +16800,7 @@ module.exports = {
     filterTokens(params, "heading_open", (token) => {
       if (headingStyleFor(token) === "atx_closed") {
         const { line, lineNumber } = token;
-        const match = /^(#+)(\s+)([^#]+?)(\s+)(#+)(\s*)$/.exec(line);
+        const match = /^(#+)([ \t]+)([^#]+?)([ \t]+)(#+)(\s*)$/.exec(line);
         if (match) {
           const [
             ,
@@ -16775,7 +16936,7 @@ module.exports = {
       if (match) {
         const [ prefixAndFirstChar, prefix ] = match;
         let deleteCount = prefix.length;
-        const prefixLengthNoSpace = prefix.trimRight().length;
+        const prefixLengthNoSpace = prefix.trimEnd().length;
         if (prefixLengthNoSpace) {
           deleteCount -= prefixLengthNoSpace - 1;
         }
@@ -16857,7 +17018,7 @@ const { addErrorContext, filterTokens, frontMatterHasTitle } =
 
 module.exports = {
   "names": [ "MD025", "single-title", "single-h1" ],
-  "description": "Multiple top level headings in the same document",
+  "description": "Multiple top-level headings in the same document",
   "tags": [ "headings", "headers" ],
   "function": function MD025(params, onError) {
     const level = Number(params.config.level || 1);
@@ -17240,7 +17401,7 @@ module.exports = {
       const firstIndex = list.open.map[0];
       if (!isBlankLine(lines[firstIndex - 1])) {
         const line = lines[firstIndex];
-        const quotePrefix = line.match(quotePrefixRe)[0].trimRight();
+        const quotePrefix = line.match(quotePrefixRe)[0].trimEnd();
         addErrorContext(
           onError,
           firstIndex + 1,
@@ -17255,7 +17416,7 @@ module.exports = {
       const lastIndex = list.lastLineIndex - 1;
       if (!isBlankLine(lines[lastIndex + 1])) {
         const line = lines[lastIndex];
-        const quotePrefix = line.match(quotePrefixRe)[0].trimRight();
+        const quotePrefix = line.match(quotePrefixRe)[0].trimEnd();
         addErrorContext(
           onError,
           lastIndex + 1,
@@ -17506,6 +17667,7 @@ const emphasisRe = /(^|[^\\]|\\\\)(?:(\*\*?\*?)|(__?_?))/g;
 const asteriskListItemMarkerRe = /^([\s>]*)\*(\s+)/;
 const leftSpaceRe = /^\s+/;
 const rightSpaceRe = /\s+$/;
+const tablePipeRe = /\|/;
 
 module.exports = {
   "names": [ "MD037", "no-space-in-emphasis" ],
@@ -17524,18 +17686,23 @@ module.exports = {
       pendingError = null;
     }
     // eslint-disable-next-line jsdoc/require-jsdoc
-    function handleRunEnd(line, lineIndex, contextLength, match, matchIndex) {
+    function handleRunEnd(
+      line, lineIndex, contextLength, match, matchIndex, inTable
+    ) {
       // Close current run
       let content = line.substring(emphasisIndex, matchIndex);
       if (!emphasisLength) {
-        content = content.trimLeft();
+        content = content.trimStart();
       }
       if (!match) {
-        content = content.trimRight();
+        content = content.trimEnd();
       }
       const leftSpace = leftSpaceRe.test(content);
       const rightSpace = rightSpaceRe.test(content);
-      if (leftSpace || rightSpace) {
+      if (
+        (leftSpace || rightSpace) &&
+        (!inTable || !tablePipeRe.test(content))
+      ) {
         // Report the violation
         const contextStart = emphasisIndex - emphasisLength;
         const contextEnd = matchIndex + contextLength;
@@ -17566,13 +17733,13 @@ module.exports = {
     resetRunTracking();
     forEachLine(
       lineMetadata(),
-      (line, lineIndex, inCode, onFence, inTable, inItem, onBreak) => {
+      (line, lineIndex, inCode, onFence, inTable, inItem, onBreak, inMath) => {
         const onItemStart = (inItem === 1);
         if (inCode || inTable || onBreak || onItemStart || isBlankLine(line)) {
           // Emphasis resets when leaving a block
           resetRunTracking();
         }
-        if (inCode || onBreak) {
+        if (inCode || onBreak || inMath) {
           // Emphasis has no meaning here
           return;
         }
@@ -17602,12 +17769,20 @@ module.exports = {
             if (matchLength === effectiveEmphasisLength) {
               // Ending an existing run, report any pending error
               if (pendingError) {
+                // @ts-ignore
                 addErrorContext(...pendingError);
                 pendingError = null;
               }
               const error = handleRunEnd(
-                line, lineIndex, effectiveEmphasisLength, match, matchIndex);
+                line,
+                lineIndex,
+                effectiveEmphasisLength,
+                match,
+                matchIndex,
+                inTable
+              );
               if (error) {
+                // @ts-ignore
                 addErrorContext(...error);
               }
               // Reset
@@ -17635,7 +17810,7 @@ module.exports = {
         }
         if (emphasisIndex !== -1) {
           pendingError = pendingError ||
-            handleRunEnd(line, lineIndex, 0, null, line.length);
+            handleRunEnd(line, lineIndex, 0, null, line.length, inTable);
           // Adjust for pending run on new line
           emphasisIndex = 0;
           emphasisLength = 0;
@@ -17754,8 +17929,8 @@ module.exports = {
           linkText = "";
         } else if (type === "link_close") {
           inLink = false;
-          const left = linkText.trimLeft().length !== linkText.length;
-          const right = linkText.trimRight().length !== linkText.length;
+          const left = linkText.trimStart().length !== linkText.length;
+          const right = linkText.trimEnd().length !== linkText.length;
           if (left || right) {
             const line = params.lines[lineNumber - 1];
             let range = null;
@@ -17834,7 +18009,7 @@ const { addErrorContext, frontMatterHasTitle } = __nccwpck_require__(2935);
 
 module.exports = {
   "names": [ "MD041", "first-line-heading", "first-line-h1" ],
-  "description": "First line in file should be a top level heading",
+  "description": "First line in a file should be a top-level heading",
   "tags": [ "headings", "headers" ],
   "function": function MD041(params, onError) {
     const level = Number(params.config.level || 1);
@@ -17845,11 +18020,22 @@ module.exports = {
         params.config.front_matter_title
       );
     if (!foundFrontMatterTitle) {
+      const htmlHeadingRe = new RegExp(`^<h${level}[ />]`, "i");
       params.tokens.every((token) => {
+        let isError = false;
         if (token.type === "html_block") {
-          return true;
+          if (token.content.startsWith("<!--")) {
+            // Ignore leading HTML comments
+            return true;
+          } else if (!htmlHeadingRe.test(token.content)) {
+            // Something other than an HTML heading
+            isError = true;
+          }
+        } else if ((token.type !== "heading_open") || (token.tag !== tag)) {
+          // Something other than a Markdown heading
+          isError = true;
         }
-        if ((token.type !== "heading_open") || (token.tag !== tag)) {
+        if (isError) {
           addErrorContext(onError, token.lineNumber, token.line);
         }
         return false;
@@ -17943,10 +18129,10 @@ module.exports = {
         if (!hasError) {
           anyHeadings = true;
           const actual = levels[heading.tag] + " " + content;
-          let expected = getExpected();
+          const expected = getExpected();
           if (expected === "*") {
             matchAny = true;
-            expected = getExpected();
+            getExpected();
           } else if (expected === "+") {
             matchAny = true;
           } else if (expected.toLowerCase() === actual.toLowerCase()) {
@@ -18276,7 +18462,8 @@ const rules = [
 ];
 rules.forEach((rule) => {
   const name = rule.names[0].toLowerCase();
-  rule.information =
+  // eslint-disable-next-line dot-notation
+  rule["information"] =
     new URL(`${homepage}/blob/v${version}/doc/Rules.md#${name}`);
 });
 module.exports = rules;
@@ -21660,6 +21847,22 @@ exports.wrapOutput = (input, state = {}, options = {}) => {
 
 /***/ }),
 
+/***/ 9795:
+/***/ ((module) => {
+
+/*! queue-microtask. MIT License. Feross Aboukhadijeh <https://feross.org/opensource> */
+let promise
+
+module.exports = typeof queueMicrotask === 'function'
+  ? queueMicrotask.bind(globalThis)
+  // reuse resolved promise, and allocate it lazily
+  : cb => (promise || (promise = Promise.resolve()))
+    .then(cb)
+    .catch(err => setTimeout(() => { throw err }, 0))
+
+
+/***/ }),
+
 /***/ 2113:
 /***/ ((module) => {
 
@@ -21702,14 +21905,16 @@ module.exports = reusify
 /***/ }),
 
 /***/ 5288:
-/***/ ((module) => {
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 /*! run-parallel. MIT License. Feross Aboukhadijeh <https://feross.org/opensource> */
 module.exports = runParallel
 
+const queueMicrotask = __nccwpck_require__(9795)
+
 function runParallel (tasks, cb) {
-  var results, pending, keys
-  var isSync = true
+  let results, pending, keys
+  let isSync = true
 
   if (Array.isArray(tasks)) {
     results = []
@@ -21725,7 +21930,7 @@ function runParallel (tasks, cb) {
       if (cb) cb(err, results)
       cb = null
     }
-    if (isSync) process.nextTick(end)
+    if (isSync) queueMicrotask(end)
     else end()
   }
 
@@ -28795,7 +29000,7 @@ module.exports = JSON.parse("{\"Aacute\":\"Á\",\"aacute\":\"á\",\"Abreve\":\"�
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse("{\"_from\":\"markdownlint-cli2@~0.0.13\",\"_id\":\"markdownlint-cli2@0.0.13\",\"_inBundle\":false,\"_integrity\":\"sha512-Fg4bIf70vPW9CHHBE6wkL5TYwOF/bQ7XQ+VGXLws5TTgP8voaeVmF085TkyWYOSippWRU+Ify1VkMw1S0VlbwA==\",\"_location\":\"/markdownlint-cli2\",\"_phantomChildren\":{},\"_requested\":{\"type\":\"range\",\"registry\":true,\"raw\":\"markdownlint-cli2@~0.0.13\",\"name\":\"markdownlint-cli2\",\"escapedName\":\"markdownlint-cli2\",\"rawSpec\":\"~0.0.13\",\"saveSpec\":null,\"fetchSpec\":\"~0.0.13\"},\"_requiredBy\":[\"/\"],\"_resolved\":\"https://registry.npmjs.org/markdownlint-cli2/-/markdownlint-cli2-0.0.13.tgz\",\"_shasum\":\"eba0f07b90b2cf63e9889bc0d6a41ab7e440ad9e\",\"_spec\":\"markdownlint-cli2@~0.0.13\",\"_where\":\"/Users/david/Documents/markdownlint-cli2-action\",\"author\":{\"name\":\"David Anson\",\"url\":\"https://dlaa.me/\"},\"bin\":{\"markdownlint-cli2\":\"markdownlint-cli2.js\",\"markdownlint-cli2-fix\":\"markdownlint-cli2-fix.js\"},\"bugs\":{\"url\":\"https://github.com/DavidAnson/markdownlint-cli2/issues\"},\"bundleDependencies\":false,\"dependencies\":{\"globby\":\"~11.0.1\",\"markdownlint\":\"~0.22.0\",\"markdownlint-cli2-formatter-default\":\"~0.0.2\",\"markdownlint-rule-helpers\":\"~0.13.0\",\"micromatch\":\"~4.0.2\",\"strip-json-comments\":\"~3.1.1\",\"yaml\":\"~1.10.0\"},\"deprecated\":false,\"description\":\"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library\",\"devDependencies\":{\"@iktakahiro/markdown-it-katex\":\"~4.0.1\",\"ava\":\"~3.14.0\",\"c8\":\"~7.3.5\",\"cpy\":\"~8.1.1\",\"del\":\"~6.0.0\",\"eslint\":\"~7.15.0\",\"eslint-plugin-node\":\"~11.1.0\",\"eslint-plugin-unicorn\":\"~23.0.0\",\"execa\":\"~5.0.0\",\"markdown-it-emoji\":\"~2.0.0\",\"markdown-it-for-inline\":\"~0.1.1\",\"markdownlint-cli2-formatter-json\":\"~0.0.3\",\"markdownlint-cli2-formatter-junit\":\"~0.0.2\",\"markdownlint-cli2-formatter-pretty\":\"~0.0.2\",\"markdownlint-cli2-formatter-summarize\":\"~0.0.3\",\"markdownlint-rule-titlecase\":\"~0.0.5\"},\"engines\":{\"node\":\">=10.17.0\"},\"files\":[\"append-to-array.js\",\"markdownlint-cli2.js\",\"markdownlint-cli2-fix.js\"],\"homepage\":\"https://github.com/DavidAnson/markdownlint-cli2\",\"keywords\":[\"markdown\",\"lint\",\"cli\",\"md\",\"CommonMark\",\"markdownlint\"],\"license\":\"MIT\",\"main\":\"markdownlint-cli2.js\",\"name\":\"markdownlint-cli2\",\"repository\":{\"type\":\"git\",\"url\":\"git+https://github.com/DavidAnson/markdownlint-cli2.git\"},\"scripts\":{\"ci\":\"npm run test-cover && npm run lint\",\"lint\":\"eslint --max-warnings 0 .\",\"lint-watch\":\"git ls-files | entr npm run lint\",\"test\":\"ava test/*.js\",\"test-cover\":\"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test\",\"test-watch\":\"git ls-files | entr npm run test\"},\"version\":\"0.0.13\"}");
+module.exports = JSON.parse("{\"name\":\"markdownlint-cli2\",\"version\":\"0.0.14\",\"description\":\"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library\",\"author\":{\"name\":\"David Anson\",\"url\":\"https://dlaa.me/\"},\"license\":\"MIT\",\"main\":\"markdownlint-cli2.js\",\"bin\":{\"markdownlint-cli2\":\"markdownlint-cli2.js\",\"markdownlint-cli2-fix\":\"markdownlint-cli2-fix.js\"},\"homepage\":\"https://github.com/DavidAnson/markdownlint-cli2\",\"repository\":{\"type\":\"git\",\"url\":\"https://github.com/DavidAnson/markdownlint-cli2.git\"},\"bugs\":\"https://github.com/DavidAnson/markdownlint-cli2/issues\",\"scripts\":{\"ci\":\"npm-run-all --continue-on-error --parallel test-cover lint\",\"lint\":\"eslint --max-warnings 0 .\",\"lint-watch\":\"git ls-files | entr npm run lint\",\"test\":\"ava test/*.js\",\"test-cover\":\"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test\",\"test-watch\":\"git ls-files | entr npm run test\"},\"engines\":{\"node\":\">=10.17.0\"},\"files\":[\"append-to-array.js\",\"markdownlint-cli2.js\",\"markdownlint-cli2-fix.js\"],\"dependencies\":{\"globby\":\"~11.0.2\",\"markdownlint\":\"~0.23.1\",\"markdownlint-cli2-formatter-default\":\"~0.0.2\",\"markdownlint-rule-helpers\":\"~0.14.0\",\"micromatch\":\"~4.0.2\",\"strip-json-comments\":\"~3.1.1\",\"yaml\":\"~1.10.0\"},\"devDependencies\":{\"@iktakahiro/markdown-it-katex\":\"~4.0.1\",\"ava\":\"~3.15.0\",\"c8\":\"~7.6.0\",\"cpy\":\"~8.1.1\",\"del\":\"~6.0.0\",\"eslint\":\"~7.20.0\",\"eslint-plugin-node\":\"~11.1.0\",\"eslint-plugin-unicorn\":\"~28.0.1\",\"execa\":\"~5.0.0\",\"markdown-it-emoji\":\"~2.0.0\",\"markdown-it-for-inline\":\"~0.1.1\",\"markdownlint-cli2-formatter-json\":\"~0.0.3\",\"markdownlint-cli2-formatter-junit\":\"~0.0.2\",\"markdownlint-cli2-formatter-pretty\":\"~0.0.2\",\"markdownlint-cli2-formatter-summarize\":\"~0.0.3\",\"markdownlint-rule-titlecase\":\"~0.1.0\",\"npm-run-all\":\"~4.1.5\"},\"keywords\":[\"markdown\",\"lint\",\"cli\",\"md\",\"CommonMark\",\"markdownlint\"]}");
 
 /***/ }),
 
@@ -28803,7 +29008,7 @@ module.exports = JSON.parse("{\"_from\":\"markdownlint-cli2@~0.0.13\",\"_id\":\"
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse("{\"_from\":\"markdownlint@~0.22.0\",\"_id\":\"markdownlint@0.22.0\",\"_inBundle\":false,\"_integrity\":\"sha512-J4B+iMc12pOdp/wfYi03W2qfAfEyiZzq3qvQh/8vOMNU8vXYY6Jg440EY7dWTBCqROhb1i4nAn3BTByJ5kdx1w==\",\"_location\":\"/markdownlint\",\"_phantomChildren\":{},\"_requested\":{\"type\":\"range\",\"registry\":true,\"raw\":\"markdownlint@~0.22.0\",\"name\":\"markdownlint\",\"escapedName\":\"markdownlint\",\"rawSpec\":\"~0.22.0\",\"saveSpec\":null,\"fetchSpec\":\"~0.22.0\"},\"_requiredBy\":[\"/markdownlint-cli2\"],\"_resolved\":\"https://registry.npmjs.org/markdownlint/-/markdownlint-0.22.0.tgz\",\"_shasum\":\"4ed95b61c17ae9f4dfca6a01f038c744846c0a72\",\"_spec\":\"markdownlint@~0.22.0\",\"_where\":\"/Users/david/Documents/markdownlint-cli2-action/node_modules/markdownlint-cli2\",\"author\":{\"name\":\"David Anson\",\"url\":\"https://dlaa.me/\"},\"browser\":{\"markdown-it\":\"../demo/markdown-it-stub.js\"},\"bugs\":{\"url\":\"https://github.com/DavidAnson/markdownlint/issues\"},\"bundleDependencies\":false,\"dependencies\":{\"markdown-it\":\"12.0.2\"},\"deprecated\":false,\"description\":\"A Node.js style checker and lint tool for Markdown/CommonMark files.\",\"devDependencies\":{\"@types/node\":\"~14.14.9\",\"browserify\":\"~17.0.0\",\"c8\":\"~7.3.5\",\"cpy-cli\":\"~3.1.1\",\"eslint\":\"~7.14.0\",\"eslint-plugin-jsdoc\":\"~30.7.8\",\"eslint-plugin-node\":\"~11.1.0\",\"eslint-plugin-unicorn\":\"~23.0.0\",\"globby\":\"~11.0.1\",\"js-yaml\":\"~3.14.0\",\"make-dir-cli\":\"~2.0.0\",\"markdown-it-for-inline\":\"~0.1.1\",\"markdown-it-sub\":\"~1.0.0\",\"markdown-it-sup\":\"~1.0.0\",\"markdown-it-texmath\":\"~0.8.0\",\"markdownlint-rule-helpers\":\"~0.12.0\",\"rimraf\":\"~3.0.2\",\"strip-json-comments\":\"~3.1.1\",\"tape\":\"~5.0.1\",\"tape-player\":\"~0.1.1\",\"toml\":\"~3.0.0\",\"tv4\":\"~1.3.0\",\"typescript\":\"~4.1.2\",\"uglify-js\":\"~3.12.0\"},\"engines\":{\"node\":\">=10\"},\"homepage\":\"https://github.com/DavidAnson/markdownlint\",\"keywords\":[\"markdown\",\"lint\",\"md\",\"CommonMark\",\"markdownlint\"],\"license\":\"MIT\",\"main\":\"lib/markdownlint.js\",\"name\":\"markdownlint\",\"repository\":{\"type\":\"git\",\"url\":\"git+https://github.com/DavidAnson/markdownlint.git\"},\"scripts\":{\"build-config-schema\":\"node schema/build-config-schema.js\",\"build-declaration\":\"tsc --allowJs --declaration --emitDeclarationOnly --resolveJsonModule lib/markdownlint.js && rimraf 'lib/{c,md,r}*.d.ts' 'helpers/*.d.ts'\",\"build-demo\":\"cpy node_modules/markdown-it/dist/markdown-it.min.js demo && cd demo && rimraf markdownlint-browser.* && cpy file-header.js . --rename=markdownlint-browser.js && tsc --allowJs --resolveJsonModule --outDir ../lib-es3 ../lib/markdownlint.js && cpy ../helpers/package.json ../lib-es3/helpers && browserify ../lib-es3/lib/markdownlint.js --standalone markdownlint >> markdownlint-browser.js && browserify ../lib-es3/helpers/helpers.js --standalone helpers >> markdownlint-rule-helpers-browser.js && uglifyjs markdownlint-browser.js markdownlint-rule-helpers-browser.js --compress --mangle --comments --output markdownlint-browser.min.js\",\"build-example\":\"npm install --no-save --ignore-scripts grunt grunt-cli gulp through2\",\"ci\":\"npm run test-cover && npm run lint && npm run test-declaration\",\"clean-test-repos\":\"rimraf test-repos\",\"clone-test-repos\":\"make-dir test-repos && cd test-repos && git clone https://github.com/eslint/eslint eslint-eslint --depth 1 --no-tags --quiet && git clone https://github.com/mkdocs/mkdocs mkdocs-mkdocs --depth 1 --no-tags --quiet && git clone https://github.com/pi-hole/docs pi-hole-docs --depth 1 --no-tags --quiet\",\"clone-test-repos-large\":\"npm run clone-test-repos && cd test-repos && git clone https://github.com/dotnet/docs dotnet-docs --depth 1 --no-tags --quiet\",\"example\":\"cd example && node standalone.js && grunt markdownlint --force && gulp markdownlint\",\"lint\":\"eslint --max-warnings 0 lib helpers test schema && eslint --env browser --global markdownit --global markdownlint --rule \\\"no-unused-vars: 0, no-extend-native: 0, max-statements: 0, no-console: 0, no-var: 0, unicorn/prefer-add-event-listener: 0, unicorn/prefer-query-selector: 0, unicorn/prefer-replace-all: 0\\\" demo && eslint --rule \\\"no-console: 0, no-invalid-this: 0, no-shadow: 0, object-property-newline: 0, node/no-missing-require: 0, node/no-extraneous-require: 0\\\" example\",\"lint-test-repos\":\"node test/markdownlint-test-repos.js\",\"test\":\"tape test/markdownlint-test.js test/markdownlint-test-custom-rules.js test/markdownlint-test-helpers.js test/markdownlint-test-result-object.js test/markdownlint-test-scenarios.js\",\"test-cover\":\"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 tape test/markdownlint-test.js test/markdownlint-test-custom-rules.js test/markdownlint-test-helpers.js test/markdownlint-test-result-object.js test/markdownlint-test-scenarios.js\",\"test-declaration\":\"cd example/typescript && tsc && node type-check.js\",\"test-extra\":\"node test/markdownlint-test-extra.js\"},\"types\":\"lib/markdownlint.d.ts\",\"version\":\"0.22.0\"}");
+module.exports = JSON.parse("{\"name\":\"markdownlint\",\"version\":\"0.23.1\",\"description\":\"A Node.js style checker and lint tool for Markdown/CommonMark files.\",\"main\":\"lib/markdownlint.js\",\"types\":\"lib/markdownlint.d.ts\",\"author\":\"David Anson (https://dlaa.me/)\",\"license\":\"MIT\",\"homepage\":\"https://github.com/DavidAnson/markdownlint\",\"repository\":{\"type\":\"git\",\"url\":\"https://github.com/DavidAnson/markdownlint.git\"},\"bugs\":\"https://github.com/DavidAnson/markdownlint/issues\",\"scripts\":{\"build-config\":\"npm run build-config-schema && npm run build-config-example\",\"build-config-example\":\"node schema/build-config-example.js\",\"build-config-schema\":\"node schema/build-config-schema.js\",\"build-declaration\":\"tsc --allowJs --declaration --emitDeclarationOnly --resolveJsonModule lib/markdownlint.js && rimraf 'lib/{c,md,r}*.d.ts' 'helpers/*.d.ts'\",\"build-demo\":\"cpy node_modules/markdown-it/dist/markdown-it.min.js demo && cd demo && rimraf markdownlint-browser.* && webpack --no-stats\",\"build-example\":\"npm install --no-save --ignore-scripts grunt grunt-cli gulp through2\",\"ci\":\"npm-run-all --continue-on-error --parallel test-cover lint declaration build-config build-demo && git diff --exit-code\",\"clean-test-repos\":\"rimraf test-repos\",\"clone-test-repos\":\"mkdir test-repos && cd test-repos && git clone https://github.com/eslint/eslint eslint-eslint --depth 1 --no-tags --quiet && git clone https://github.com/mkdocs/mkdocs mkdocs-mkdocs --depth 1 --no-tags --quiet && git clone https://github.com/pi-hole/docs pi-hole-docs --depth 1 --no-tags --quiet\",\"clone-test-repos-large\":\"npm run clone-test-repos && cd test-repos && git clone https://github.com/dotnet/docs dotnet-docs --depth 1 --no-tags --quiet\",\"declaration\":\"npm run build-declaration && npm run test-declaration\",\"example\":\"cd example && node standalone.js && grunt markdownlint --force && gulp markdownlint\",\"lint\":\"eslint --max-warnings 0 .\",\"lint-test-repos\":\"ava --timeout=5m test/markdownlint-test-repos.js\",\"test\":\"ava test/markdownlint-test.js test/markdownlint-test-custom-rules.js test/markdownlint-test-helpers.js test/markdownlint-test-result-object.js test/markdownlint-test-scenarios.js\",\"test-cover\":\"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test\",\"test-declaration\":\"cd example/typescript && tsc && node type-check.js\",\"test-extra\":\"ava --timeout=5m test/markdownlint-test-extra.js\"},\"engines\":{\"node\":\">=10\"},\"dependencies\":{\"markdown-it\":\"12.0.4\"},\"devDependencies\":{\"ava\":\"~3.15.0\",\"c8\":\"~7.5.0\",\"cpy-cli\":\"~3.1.1\",\"eslint\":\"~7.19.0\",\"eslint-plugin-jsdoc\":\"~31.6.0\",\"eslint-plugin-node\":\"~11.1.0\",\"eslint-plugin-unicorn\":\"~27.0.0\",\"globby\":\"~11.0.2\",\"js-yaml\":\"~4.0.0\",\"markdown-it-for-inline\":\"~0.1.1\",\"markdown-it-sub\":\"~1.0.0\",\"markdown-it-sup\":\"~1.0.0\",\"markdown-it-texmath\":\"~0.8.0\",\"markdownlint-rule-helpers\":\"~0.13.0\",\"npm-run-all\":\"~4.1.5\",\"rimraf\":\"~3.0.2\",\"strip-json-comments\":\"~3.1.1\",\"toml\":\"~3.0.0\",\"ts-loader\":\"~8.0.15\",\"tv4\":\"~1.3.0\",\"typescript\":\"~4.1.3\",\"webpack\":\"~5.21.1\",\"webpack-cli\":\"~4.5.0\"},\"keywords\":[\"markdown\",\"lint\",\"md\",\"CommonMark\",\"markdownlint\"]}");
 
 /***/ }),
 

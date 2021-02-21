@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@actions/core": "~1.2.6",
-    "markdownlint-cli2": "~0.0.13"
+    "markdownlint-cli2": "^0.0.14"
   },
   "devDependencies": {
     "@vercel/ncc": "~0.27.0",
