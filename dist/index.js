@@ -6,14 +6,27 @@
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __importStar = (this && this.__importStar) || function (mod) {
     if (mod && mod.__esModule) return mod;
     var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.issue = exports.issueCommand = void 0;
 const os = __importStar(__nccwpck_require__(2087));
 const utils_1 = __nccwpck_require__(5278);
 /**
@@ -92,6 +105,25 @@ function escapeProperty(s) {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -101,14 +133,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getState = exports.saveState = exports.group = exports.endGroup = exports.startGroup = exports.info = exports.warning = exports.error = exports.debug = exports.isDebug = exports.setFailed = exports.setCommandEcho = exports.setOutput = exports.getBooleanInput = exports.getMultilineInput = exports.getInput = exports.addPath = exports.setSecret = exports.exportVariable = exports.ExitCode = void 0;
 const command_1 = __nccwpck_require__(7351);
 const file_command_1 = __nccwpck_require__(717);
 const utils_1 = __nccwpck_require__(5278);
@@ -175,7 +201,9 @@ function addPath(inputPath) {
 }
 exports.addPath = addPath;
 /**
- * Gets the value of an input.  The value is also trimmed.
+ * Gets the value of an input.
+ * Unless trimWhitespace is set to false in InputOptions, the value is also trimmed.
+ * Returns an empty string if the value is not defined.
  *
  * @param     name     name of the input to get
  * @param     options  optional. See InputOptions.
@@ -186,9 +214,49 @@ function getInput(name, options) {
     if (options && options.required && !val) {
         throw new Error(`Input required and not supplied: ${name}`);
     }
+    if (options && options.trimWhitespace === false) {
+        return val;
+    }
     return val.trim();
 }
 exports.getInput = getInput;
+/**
+ * Gets the values of an multiline input.  Each value is also trimmed.
+ *
+ * @param     name     name of the input to get
+ * @param     options  optional. See InputOptions.
+ * @returns   string[]
+ *
+ */
+function getMultilineInput(name, options) {
+    const inputs = getInput(name, options)
+        .split('\n')
+        .filter(x => x !== '');
+    return inputs;
+}
+exports.getMultilineInput = getMultilineInput;
+/**
+ * Gets the input value of the boolean type in the YAML 1.2 "core schema" specification.
+ * Support boolean input list: `true | True | TRUE | false | False | FALSE` .
+ * The return value is also in boolean type.
+ * ref: https://yaml.org/spec/1.2/spec.html#id2804923
+ *
+ * @param     name     name of the input to get
+ * @param     options  optional. See InputOptions.
+ * @returns   boolean
+ */
+function getBooleanInput(name, options) {
+    const trueValue = ['true', 'True', 'TRUE'];
+    const falseValue = ['false', 'False', 'FALSE'];
+    const val = getInput(name, options);
+    if (trueValue.includes(val))
+        return true;
+    if (falseValue.includes(val))
+        return false;
+    throw new TypeError(`Input does not meet YAML 1.2 "Core Schema" specification: ${name}\n` +
+        `Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
+}
+exports.getBooleanInput = getBooleanInput;
 /**
  * Sets the value of an output.
  *
@@ -339,14 +407,27 @@ exports.getState = getState;
 "use strict";
 
 // For internal use, subject to change.
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __importStar = (this && this.__importStar) || function (mod) {
     if (mod && mod.__esModule) return mod;
     var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.issueCommand = void 0;
 // We use any as a valid input type
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const fs = __importStar(__nccwpck_require__(5747));
@@ -377,6 +458,7 @@ exports.issueCommand = issueCommand;
 // We use any as a valid input type
 /* eslint-disable @typescript-eslint/no-explicit-any */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.toCommandValue = void 0;
 /**
  * Sanitizes an input into a string so it can be passed into issueCommand safely
  * @param input input to sanitize into a string
@@ -12652,23 +12734,33 @@ module.exports = appendToArray;
 
 
 
+// @ts-ignore
+// eslint-disable-next-line camelcase, max-len, no-inline-comments, no-undef
+const dynamicRequire = (typeof require === "undefined") ? require : /* c8 ignore next */ eval("require");
+// Capture native require implementation for dynamic loading of modules
+
 // Requires
 const fs = __nccwpck_require__(5747).promises;
 const path = __nccwpck_require__(5622);
 const globby = __nccwpck_require__(3398);
-const markdownlintLibraryName = "markdownlint";
 const markdownlintLibrary = __nccwpck_require__(3611);
 const { markdownlint, "readConfig": markdownlintReadConfig } =
   markdownlintLibrary.promises;
 const markdownlintRuleHelpers = __nccwpck_require__(2870);
 const appendToArray = __nccwpck_require__(3112);
+const mergeOptions = __nccwpck_require__(9307);
+const resolveAndRequire = __nccwpck_require__(3924);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.0.14";
+const packageVersion = "0.1.3";
+const libraryName = "markdownlint";
 const libraryVersion = markdownlintLibrary.getVersion();
 const dotOnlySubstitute = "*.{md,markdown}";
 const utf8 = "utf8";
+
+// No-op function
+const noop = () => null;
 
 // Parse JSONC text
 const jsoncParse = (text) => JSON.parse(__nccwpck_require__(2562)(text));
@@ -12679,9 +12771,12 @@ const yamlParse = (text) => __nccwpck_require__(3552).parse(text);
 // Negate a glob
 const negateGlob = (glob) => `!${glob}`;
 
+// Return a posix path (even on Windows)
+const posixPath = (p) => p.split(path.sep).join(path.posix.sep);
+
 // Read a JSON(C) or YAML file and return the object
 const readConfig = (dir, name, otherwise) => {
-  const file = path.join(dir, name);
+  const file = path.posix.join(dir, name);
   return () => fs.access(file).
     then(
       // @ts-ignore
@@ -12693,18 +12788,21 @@ const readConfig = (dir, name, otherwise) => {
 // Require a module ID with the specified directory in the path
 const requireResolve = (dir, id) => {
   if (typeof id === "string") {
-    const paths = [ dir, ...require.resolve.paths("") ];
-    const resolved = require.resolve(id, { paths });
-    return require(resolved);
+    return resolveAndRequire(dynamicRequire, id, dir);
   }
   return id;
 };
 
 // Require an array of modules by ID
-const requireIds = (dir, ids) => ids.map((id) => requireResolve(dir, id));
+const requireIds = (dir, ids, noRequire) => (
+  noRequire ? [] : ids.map((id) => requireResolve(dir, id))
+);
 
 // Require an array of modules by ID (preserving parameters)
-const requireIdsAndParams = (dir, idsAndParams) => {
+const requireIdsAndParams = (dir, idsAndParams, noRequire) => {
+  if (noRequire) {
+    return [];
+  }
   const ids = idsAndParams.map((entry) => entry[0]);
   const modules = requireIds(dir, ids);
   const modulesAndParams = idsAndParams.
@@ -12713,12 +12811,13 @@ const requireIdsAndParams = (dir, idsAndParams) => {
 };
 
 // Require a JS file and return the exported object
-const requireConfig = (dir, name, otherwise) => {
-  const file = path.join(dir, name);
-  return () => fs.access(file).
+const requireConfig = (dir, name, noRequire) => {
+  const file = path.posix.join(dir, name);
+  // eslint-disable-next-line prefer-promise-reject-errors
+  return () => (noRequire ? Promise.reject() : fs.access(file)).
     then(
       () => requireResolve(dir, `./${name}`),
-      otherwise
+      noop
     );
 };
 
@@ -12774,7 +12873,7 @@ $ ${name} "**/*.md" "#node_modules"`
 };
 
 // Get (creating if necessary) and process a directory's info object
-const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, func) => {
+const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, noRequire, func) => {
   let dirInfo = dirToDirInfo[dir];
   if (!dirInfo) {
     dirInfo = {
@@ -12787,8 +12886,10 @@ const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, func) => {
     dirToDirInfo[dir] = dirInfo;
 
     // Load markdownlint-cli2 object(s)
-    const markdownlintCli2Jsonc = path.join(dir, ".markdownlint-cli2.jsonc");
-    const markdownlintCli2Yaml = path.join(dir, ".markdownlint-cli2.yaml");
+    const markdownlintCli2Jsonc =
+      path.posix.join(dir, ".markdownlint-cli2.jsonc");
+    const markdownlintCli2Yaml =
+      path.posix.join(dir, ".markdownlint-cli2.yaml");
     tasks.push(
       fs.access(markdownlintCli2Jsonc).
         then(
@@ -12799,7 +12900,7 @@ const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, func) => {
               requireConfig(
                 dir,
                 ".markdownlint-cli2.js",
-                () => null
+                noRequire
               )
             )
         ).
@@ -12825,7 +12926,7 @@ const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, func) => {
               requireConfig(
                 dir,
                 ".markdownlint.js",
-                () => null
+                noRequire
               )
             )
           )
@@ -12845,16 +12946,18 @@ const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, func) => {
 };
 
 // Get base markdownlint-cli2 options object
-const getBaseOptions = async (globPatterns, fixDefault) => {
+const getBaseOptions =
+async (baseDir, globPatterns, optionsDefault, fixDefault, noRequire) => {
   const tasks = [];
   const dirToDirInfo = {};
-  getAndProcessDirInfo(tasks, dirToDirInfo, ".");
+  getAndProcessDirInfo(tasks, dirToDirInfo, baseDir, noRequire);
   await Promise.all(tasks);
   // eslint-disable-next-line no-multi-assign
-  const baseMarkdownlintOptions = dirToDirInfo["."].markdownlintOptions = {
-    "fix": fixDefault,
-    ...dirToDirInfo["."].markdownlintOptions
-  };
+  const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions =
+    mergeOptions(
+      mergeOptions(optionsDefault, { "fix": fixDefault }),
+      dirToDirInfo[baseDir].markdownlintOptions
+    );
 
   // Append any globs specified in markdownlint-cli2 configuration
   const globs = baseMarkdownlintOptions.globs || [];
@@ -12862,7 +12965,6 @@ const getBaseOptions = async (globPatterns, fixDefault) => {
 
   // Pass base ignore globs as globby patterns (best performance)
   const ignorePatterns =
-    // eslint-disable-next-line unicorn/no-array-callback-reference
     (baseMarkdownlintOptions.ignores || []).map(negateGlob);
   appendToArray(globPatterns, ignorePatterns);
   delete baseMarkdownlintOptions.ignores;
@@ -12874,12 +12976,17 @@ const getBaseOptions = async (globPatterns, fixDefault) => {
 };
 
 // Enumerate files from globs and build directory infos
-const enumerateFiles = async (globPatterns, dirToDirInfo) => {
+const enumerateFiles =
+async (baseDir, globPatterns, dirToDirInfo, noRequire) => {
   const tasks = [];
-  for await (const file of globby.stream(globPatterns)) {
+  const globbyOptions = {
+    "absolute": true,
+    "cwd": baseDir
+  };
+  for await (const file of globby.stream(globPatterns, globbyOptions)) {
     // @ts-ignore
-    const dir = path.dirname(file);
-    getAndProcessDirInfo(tasks, dirToDirInfo, dir, (dirInfo) => {
+    const dir = path.posix.dirname(file);
+    getAndProcessDirInfo(tasks, dirToDirInfo, dir, noRequire, (dirInfo) => {
       dirInfo.files.push(file);
     });
   }
@@ -12887,27 +12994,47 @@ const enumerateFiles = async (globPatterns, dirToDirInfo) => {
 };
 
 // Enumerate (possibly missing) parent directories and update directory infos
-const enumerateParents = async (dirToDirInfo) => {
+const enumerateParents = async (baseDir, dirToDirInfo, noRequire) => {
   const tasks = [];
+
+  // Create a lookup of baseDir and parents
+  const baseDirParents = {};
+  let baseDirParent = baseDir;
+  do {
+    baseDirParents[baseDirParent] = true;
+    baseDirParent = path.posix.dirname(baseDirParent);
+  } while (!baseDirParents[baseDirParent]);
+
+  // Visit parents of each dirInfo
   for (let lastDirInfo of Object.values(dirToDirInfo)) {
     let { dir } = lastDirInfo;
     let lastDir = dir;
-    while ((dir = path.dirname(dir)) && (dir !== lastDir)) {
+    while (
+      !baseDirParents[dir] &&
+      (dir = path.posix.dirname(dir)) &&
+      (dir !== lastDir)
+    ) {
       lastDir = dir;
       lastDirInfo =
         // eslint-disable-next-line no-loop-func
-        getAndProcessDirInfo(tasks, dirToDirInfo, dir, (dirInfo) => {
+        getAndProcessDirInfo(tasks, dirToDirInfo, dir, noRequire, (dirInfo) => {
           lastDirInfo.parent = dirInfo;
         });
+    }
+
+    // If dir not under baseDir, inject it as parent for configuration
+    if (dir !== baseDir) {
+      dirToDirInfo[dir].parent = dirToDirInfo[baseDir];
     }
   }
   await Promise.all(tasks);
 };
 
 // Create directory info objects by enumerating file globs
-const createDirInfos = async (globPatterns, dirToDirInfo) => {
-  await enumerateFiles(globPatterns, dirToDirInfo);
-  await enumerateParents(dirToDirInfo);
+const createDirInfos =
+async (baseDir, globPatterns, dirToDirInfo, optionsOverride, noRequire) => {
+  await enumerateFiles(baseDir, globPatterns, dirToDirInfo, noRequire);
+  await enumerateParents(baseDir, dirToDirInfo, noRequire);
 
   // Merge file lists with identical configuration
   const dirs = Object.keys(dirToDirInfo);
@@ -12928,11 +13055,23 @@ const createDirInfos = async (globPatterns, dirToDirInfo) => {
       dirToDirInfo[dir] = null;
     } else {
       const { markdownlintOptions } = dirInfo;
-      if (markdownlintOptions) {
-        markdownlintOptions.customRules =
-          requireIds(dir, markdownlintOptions.customRules || []);
+      if (markdownlintOptions && markdownlintOptions.customRules) {
+        const customRules =
+          requireIds(
+            dir,
+            markdownlintOptions.customRules,
+            noRequire
+          );
+        // Expand nested arrays (for packages that export multiple rules)
+        markdownlintOptions.customRules = [].concat(...customRules);
+      }
+      if (markdownlintOptions && markdownlintOptions.markdownItPlugins) {
         markdownlintOptions.markdownItPlugins =
-          requireIdsAndParams(dir, markdownlintOptions.markdownItPlugins || []);
+          requireIdsAndParams(
+            dir,
+            markdownlintOptions.markdownItPlugins,
+            noRequire
+          );
       }
       dirInfos.push(dirInfo);
     }
@@ -12944,10 +13083,19 @@ const createDirInfos = async (globPatterns, dirToDirInfo) => {
   }
 
   // Verify dirInfos is simplified
-  // if (dirInfos.filter(
-  //   (di) => di.parent && !dirInfos.includes(di.parent)).length > 0
+  // if (
+  //   dirInfos.filter(
+  //     (di) => di.parent && !dirInfos.includes(di.parent)
+  //   ).length > 0
   // ) {
   //   throw new Error("Extra parent");
+  // }
+  // if (
+  //   dirInfos.filter(
+  //     (di) => !di.parent && (di.dir !== baseDir)
+  //   ).length > 0
+  // ) {
+  //   throw new Error("Missing parent");
   // }
   // if (
   //   dirInfos.filter(
@@ -12956,6 +13104,9 @@ const createDirInfos = async (globPatterns, dirToDirInfo) => {
   //   ).length > 0
   // ) {
   //   throw new Error("Missing object");
+  // }
+  // if (dirInfos.filter((di) => di.dir === "/").length > 0) {
+  //   throw new Error("Includes root");
   // }
 
   // Merge configuration by inheritance
@@ -12966,15 +13117,10 @@ const createDirInfos = async (globPatterns, dirToDirInfo) => {
     // eslint-disable-next-line prefer-destructuring
     while ((parent = parent.parent)) {
       if (parent.markdownlintOptions) {
-        const config = {
-          ...parent.markdownlintOptions.config,
-          ...markdownlintOptions.config
-        };
-        markdownlintOptions = {
-          ...parent.markdownlintOptions,
-          ...markdownlintOptions,
-          config
-        };
+        markdownlintOptions = mergeOptions(
+          parent.markdownlintOptions,
+          markdownlintOptions
+        );
       }
       if (
         !markdownlintConfig &&
@@ -12985,29 +13131,43 @@ const createDirInfos = async (globPatterns, dirToDirInfo) => {
         markdownlintConfig = parent.markdownlintConfig;
       }
     }
-    dirInfo.markdownlintOptions = markdownlintOptions;
+    dirInfo.markdownlintOptions = mergeOptions(
+      markdownlintOptions,
+      optionsOverride
+    );
     dirInfo.markdownlintConfig = markdownlintConfig;
   }
   return dirInfos;
 };
 
 // Lint files in groups by shared configuration
-const lintFiles = async (dirInfos) => {
+const lintFiles = (dirInfos, fileContents) => {
   const tasks = [];
+  // For each dirInfo
   for (const dirInfo of dirInfos) {
     const { dir, files, markdownlintConfig, markdownlintOptions } = dirInfo;
-    let filteredFiles = files;
+    // Filter file/string inputs to only those in the dirInfo
+    const filteredFileContents = {};
+    for (const file in fileContents) {
+      if (files.includes(file)) {
+        filteredFileContents[file] = fileContents[file];
+      }
+    }
+    let filteredFiles = files.filter(
+      (file) => fileContents[file] === undefined
+    );
     if (markdownlintOptions.ignores) {
-      // eslint-disable-next-line unicorn/no-array-callback-reference
       const ignores = markdownlintOptions.ignores.map(negateGlob);
       const micromatch = __nccwpck_require__(6228);
       filteredFiles = micromatch(
-        files.map((file) => path.relative(dir, file)),
+        files.map((file) => path.posix.relative(dir, file)),
         ignores
-      ).map((file) => path.join(dir, file));
+      ).map((file) => path.posix.join(dir, file));
     }
+    // Create markdownlint options object
     const options = {
       "files": filteredFiles,
+      "strings": filteredFileContents,
       "config": markdownlintConfig || markdownlintOptions.config,
       "customRules": markdownlintOptions.customRules,
       "frontMatter": markdownlintOptions.frontMatter
@@ -13018,7 +13178,10 @@ const lintFiles = async (dirInfos) => {
       "noInlineConfig": Boolean(markdownlintOptions.noInlineConfig),
       "resultVersion": 3
     };
+    // Invoke markdownlint
+    // @ts-ignore
     let task = markdownlint(options);
+    // For any fixable errors, read file, apply fixes, and write it back
     if (markdownlintOptions.fix) {
       task = task.then((results) => {
         options.files = [];
@@ -13040,6 +13203,7 @@ const lintFiles = async (dirInfos) => {
           }
         }
         return Promise.all(subTasks).
+          // @ts-ignore
           then(() => markdownlint(options)).
           then((fixResults) => ({
             ...results,
@@ -13047,26 +13211,24 @@ const lintFiles = async (dirInfos) => {
           }));
       });
     }
+    // Queue tasks for this dirInfo
     tasks.push(task);
   }
-  const taskResults = await Promise.all(tasks);
-  return taskResults;
+  // Return result of all tasks
+  return Promise.all(tasks);
 };
 
 // Create summary of results
-const createSummary = (taskResults) => {
+const createSummary = (baseDir, taskResults) => {
   const summary = [];
   let counter = 0;
   for (const results of taskResults) {
     for (const fileName in results) {
       const errorInfos = results[fileName];
       for (const errorInfo of errorInfos) {
-        const fileNameRelativePosix = path.
-          relative("", fileName).
-          split(path.sep).
-          join(path.posix.sep);
+        const fileNameRelative = path.posix.relative(baseDir, fileName);
         summary.push({
-          "fileName": fileNameRelativePosix,
+          "fileName": fileNameRelative,
           ...errorInfo,
           counter
         });
@@ -13088,16 +13250,17 @@ const createSummary = (taskResults) => {
 
 // Output summary via formatters
 const outputSummary =
-  async (summary, outputFormatters, logMessage, logError) => {
+  async (baseDir, summary, outputFormatters, logMessage, logError) => {
     const errorsPresent = (summary.length > 0);
     if (errorsPresent || outputFormatters) {
       const formatterOptions = {
+        "directory": baseDir,
         "results": summary,
         logMessage,
         logError
       };
       const formattersAndParams = outputFormatters
-        ? requireIdsAndParams(".", outputFormatters)
+        ? requireIdsAndParams(baseDir, outputFormatters)
         : [ [ __nccwpck_require__(8552) ] ];
       await Promise.all(formattersAndParams.map((formatterAndParams) => {
         const [ formatter, ...formatterParams ] = formatterAndParams;
@@ -13109,23 +13272,70 @@ const outputSummary =
 
 // Main function
 const main = async (params) => {
-  const { argv, logMessage, logError, fixDefault } = params;
+  // Capture parameters
+  const {
+    directory,
+    argv,
+    optionsDefault,
+    optionsOverride,
+    fixDefault,
+    fileContents,
+    nonFileContents,
+    noRequire
+  } = params;
+  const logMessage = params.logMessage || noop;
+  const logError = params.logError || noop;
+  const baseDirSystem =
+    (directory && path.resolve(directory)) ||
+    process.cwd();
+  const baseDir = posixPath(baseDirSystem);
+  // Output banner
   logMessage(
-    `${packageName} v${packageVersion} ` +
-    `(${markdownlintLibraryName} v${libraryVersion})`
+    `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`
   );
+  // Process arguments and get base options
   const globPatterns = processArgv(argv);
   const { baseMarkdownlintOptions, dirToDirInfo } =
-    await getBaseOptions(globPatterns, fixDefault);
-  if (globPatterns.length === 0) {
+    await getBaseOptions(
+      baseDir,
+      globPatterns,
+      optionsDefault,
+      fixDefault,
+      noRequire
+    );
+  if ((globPatterns.length === 0) && !nonFileContents) {
     showHelp(logMessage);
     return 1;
   }
+  // Include any file overrides or non-file content
+  const resolvedFileContents = {};
+  for (const file in fileContents) {
+    const resolvedFile = posixPath(path.resolve(baseDirSystem, file));
+    resolvedFileContents[resolvedFile] =
+      fileContents[file];
+  }
+  for (const nonFile in nonFileContents) {
+    resolvedFileContents[nonFile] = nonFileContents[nonFile];
+  }
+  appendToArray(
+    dirToDirInfo[baseDir].files,
+    Object.keys(nonFileContents || {})
+  );
+  // Output finding status
   const showProgress = !baseMarkdownlintOptions.noProgress;
   if (showProgress) {
     logMessage(`Finding: ${globPatterns.join(" ")}`);
   }
-  const dirInfos = await createDirInfos(globPatterns, dirToDirInfo);
+  // Create linting tasks
+  const dirInfos =
+    await createDirInfos(
+      baseDir,
+      globPatterns,
+      dirToDirInfo,
+      optionsOverride,
+      noRequire
+    );
+  // Output linting status
   if (showProgress) {
     let fileCount = 0;
     for (const dirInfo of dirInfos) {
@@ -13133,14 +13343,20 @@ const main = async (params) => {
     }
     logMessage(`Linting: ${fileCount} file(s)`);
   }
-  const lintResults = await lintFiles(dirInfos);
-  const summary = createSummary(lintResults);
+  // Lint files
+  const lintResults = await lintFiles(dirInfos, resolvedFileContents);
+  // Output summary
+  const summary = createSummary(baseDir, lintResults);
   if (showProgress) {
     logMessage(`Summary: ${summary.length} error(s)`);
   }
-  const { outputFormatters } = baseMarkdownlintOptions;
-  const errorsPresent =
-    await outputSummary(summary, outputFormatters, logMessage, logError);
+  const outputFormatters =
+    (optionsOverride && optionsOverride.outputFormatters) ||
+    baseMarkdownlintOptions.outputFormatters;
+  const errorsPresent = await outputSummary(
+    baseDir, summary, outputFormatters, logMessage, logError
+  );
+  // Return result
   return errorsPresent ? 1 : 0;
 };
 
@@ -13174,6 +13390,69 @@ module.exports = {
 // Run if invoked as a CLI
 // @ts-ignore
 if (false) {}
+
+
+/***/ }),
+
+/***/ 9307:
+/***/ ((module) => {
+
+"use strict";
+// @ts-check
+
+
+
+/**
+ * Merges two options objects by combining config and replacing properties.
+ * @param {Object} first First options object.
+ * @param {Object} second Second options object.
+ * @returns {Object} Merged options object.
+ */
+const mergeOptions = (first, second) => {
+  const merged = {
+    ...first,
+    ...second
+  };
+  const firstConfig = first && first.config;
+  const secondConfig = second && second.config;
+  if (firstConfig || secondConfig) {
+    merged.config = {
+      ...firstConfig,
+      ...secondConfig
+    };
+  }
+  return merged;
+};
+
+module.exports = mergeOptions;
+
+
+/***/ }),
+
+/***/ 3924:
+/***/ ((module) => {
+
+"use strict";
+// @ts-check
+
+
+
+/**
+ * Wrapper for calling Node's require.resolve/require with an additional path.
+ *
+ * @param {Object} req Node's require function (or equivalent).
+ * @param {*} id Package identifier to require.
+ * @param {*} dir Directory to include when resolving paths.
+ * @returns {Object} Exported module content.
+ */
+const resolveAndRequire = (req, id, dir) => {
+  const resolvePaths = req.resolve.paths ? req.resolve.paths("") : [];
+  const paths = [ dir, ...resolvePaths ];
+  const resolved = req.resolve(id, { paths });
+  return req(resolved);
+};
+
+module.exports = resolveAndRequire;
 
 
 /***/ }),
@@ -29158,7 +29437,7 @@ module.exports = JSON.parse('{"Aacute":"Á","aacute":"á","Abreve":"Ă","abreve"
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"markdownlint-cli2","version":"0.0.14","description":"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library","author":{"name":"David Anson","url":"https://dlaa.me/"},"license":"MIT","main":"markdownlint-cli2.js","bin":{"markdownlint-cli2":"markdownlint-cli2.js","markdownlint-cli2-fix":"markdownlint-cli2-fix.js"},"homepage":"https://github.com/DavidAnson/markdownlint-cli2","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint-cli2.git"},"bugs":"https://github.com/DavidAnson/markdownlint-cli2/issues","scripts":{"ci":"npm-run-all --continue-on-error --parallel test-cover lint","lint":"eslint --max-warnings 0 .","lint-watch":"git ls-files | entr npm run lint","test":"ava test/*.js","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-watch":"git ls-files | entr npm run test"},"engines":{"node":">=10.17.0"},"files":["append-to-array.js","markdownlint-cli2.js","markdownlint-cli2-fix.js"],"dependencies":{"globby":"~11.0.2","markdownlint":"~0.23.1","markdownlint-cli2-formatter-default":"~0.0.2","markdownlint-rule-helpers":"~0.14.0","micromatch":"~4.0.2","strip-json-comments":"~3.1.1","yaml":"~1.10.0"},"devDependencies":{"@iktakahiro/markdown-it-katex":"~4.0.1","ava":"~3.15.0","c8":"~7.6.0","cpy":"~8.1.1","del":"~6.0.0","eslint":"~7.20.0","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~28.0.1","execa":"~5.0.0","markdown-it-emoji":"~2.0.0","markdown-it-for-inline":"~0.1.1","markdownlint-cli2-formatter-json":"~0.0.3","markdownlint-cli2-formatter-junit":"~0.0.2","markdownlint-cli2-formatter-pretty":"~0.0.2","markdownlint-cli2-formatter-summarize":"~0.0.3","markdownlint-rule-titlecase":"~0.1.0","npm-run-all":"~4.1.5"},"keywords":["markdown","lint","cli","md","CommonMark","markdownlint"]}');
+module.exports = JSON.parse('{"name":"markdownlint-cli2","version":"0.1.3","description":"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library","author":{"name":"David Anson","url":"https://dlaa.me/"},"license":"MIT","main":"markdownlint-cli2.js","bin":{"markdownlint-cli2":"markdownlint-cli2.js","markdownlint-cli2-fix":"markdownlint-cli2-fix.js"},"homepage":"https://github.com/DavidAnson/markdownlint-cli2","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint-cli2.git"},"bugs":"https://github.com/DavidAnson/markdownlint-cli2/issues","scripts":{"ci":"npm-run-all --continue-on-error --parallel test-cover lint","lint":"eslint --max-warnings 0 .","lint-watch":"git ls-files | entr npm run lint","test":"ava test/append-to-array-test.js test/markdownlint-cli2-test.js test/markdownlint-cli2-test-exec.js test/markdownlint-cli2-test-main.js test/merge-options-test.js test/resolve-and-require-test.js","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-watch":"git ls-files | entr npm run test"},"engines":{"node":">=10.17.0"},"files":["append-to-array.js","markdownlint-cli2.js","markdownlint-cli2-fix.js","merge-options.js","resolve-and-require.js"],"dependencies":{"globby":"~11.0.3","markdownlint":"~0.23.1","markdownlint-cli2-formatter-default":"^0.0.2","markdownlint-rule-helpers":"~0.14.0","micromatch":"~4.0.2","strip-json-comments":"~3.1.1","yaml":"~1.10.2"},"devDependencies":{"@iktakahiro/markdown-it-katex":"~4.0.1","ava":"~3.15.0","c8":"~7.7.0","cpy":"~8.1.2","del":"~6.0.0","eslint":"~7.23.0","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~29.0.0","execa":"~5.0.0","markdown-it-emoji":"~2.0.0","markdown-it-for-inline":"~0.1.1","markdownlint-cli2-formatter-json":"^0.0.4","markdownlint-cli2-formatter-junit":"^0.0.3","markdownlint-cli2-formatter-pretty":"^0.0.2","markdownlint-cli2-formatter-summarize":"^0.0.3","markdownlint-rule-titlecase":"~0.1.0","npm-run-all":"~4.1.5"},"keywords":["markdown","lint","cli","md","CommonMark","markdownlint"]}');
 
 /***/ }),
 
