@@ -3838,11 +3838,12 @@ function queueAsPromised (context, worker, concurrency) {
 
   queue.push = push
   queue.unshift = unshift
+  queue.drained = drained
 
   return queue
 
   function push (value) {
-    return new Promise(function (resolve, reject) {
+    var p = new Promise(function (resolve, reject) {
       pushCb(value, function (err, result) {
         if (err) {
           reject(err)
@@ -3851,10 +3852,17 @@ function queueAsPromised (context, worker, concurrency) {
         resolve(result)
       })
     })
+
+    // Let's fork the promise chain to
+    // make the error bubble up to the user but
+    // not lead to a unhandledRejection
+    p.catch(noop)
+
+    return p
   }
 
   function unshift (value) {
-    return new Promise(function (resolve, reject) {
+    var p = new Promise(function (resolve, reject) {
       unshiftCb(value, function (err, result) {
         if (err) {
           reject(err)
@@ -3863,6 +3871,26 @@ function queueAsPromised (context, worker, concurrency) {
         resolve(result)
       })
     })
+
+    // Let's fork the promise chain to
+    // make the error bubble up to the user but
+    // not lead to a unhandledRejection
+    p.catch(noop)
+
+    return p
+  }
+
+  function drained () {
+    var previousDrain = queue.drain
+
+    var p = new Promise(function (resolve) {
+      queue.drain = function () {
+        previousDrain()
+        resolve()
+      }
+    })
+
+    return p
   }
 }
 
