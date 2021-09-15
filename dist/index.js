@@ -134,7 +134,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getState = exports.saveState = exports.group = exports.endGroup = exports.startGroup = exports.info = exports.warning = exports.error = exports.debug = exports.isDebug = exports.setFailed = exports.setCommandEcho = exports.setOutput = exports.getBooleanInput = exports.getMultilineInput = exports.getInput = exports.addPath = exports.setSecret = exports.exportVariable = exports.ExitCode = void 0;
+exports.getState = exports.saveState = exports.group = exports.endGroup = exports.startGroup = exports.info = exports.notice = exports.warning = exports.error = exports.debug = exports.isDebug = exports.setFailed = exports.setCommandEcho = exports.setOutput = exports.getBooleanInput = exports.getMultilineInput = exports.getInput = exports.addPath = exports.setSecret = exports.exportVariable = exports.ExitCode = void 0;
 const command_1 = __nccwpck_require__(7351);
 const file_command_1 = __nccwpck_require__(717);
 const utils_1 = __nccwpck_require__(5278);
@@ -312,19 +312,30 @@ exports.debug = debug;
 /**
  * Adds an error issue
  * @param message error issue message. Errors will be converted to string via toString()
+ * @param properties optional properties to add to the annotation.
  */
-function error(message) {
-    command_1.issue('error', message instanceof Error ? message.toString() : message);
+function error(message, properties = {}) {
+    command_1.issueCommand('error', utils_1.toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 exports.error = error;
 /**
- * Adds an warning issue
+ * Adds a warning issue
  * @param message warning issue message. Errors will be converted to string via toString()
+ * @param properties optional properties to add to the annotation.
  */
-function warning(message) {
-    command_1.issue('warning', message instanceof Error ? message.toString() : message);
+function warning(message, properties = {}) {
+    command_1.issueCommand('warning', utils_1.toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 exports.warning = warning;
+/**
+ * Adds a notice issue
+ * @param message notice issue message. Errors will be converted to string via toString()
+ * @param properties optional properties to add to the annotation.
+ */
+function notice(message, properties = {}) {
+    command_1.issueCommand('notice', utils_1.toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+}
+exports.notice = notice;
 /**
  * Writes info to log with console.log.
  * @param message info message
@@ -458,7 +469,7 @@ exports.issueCommand = issueCommand;
 // We use any as a valid input type
 /* eslint-disable @typescript-eslint/no-explicit-any */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.toCommandValue = void 0;
+exports.toCommandProperties = exports.toCommandValue = void 0;
 /**
  * Sanitizes an input into a string so it can be passed into issueCommand safely
  * @param input input to sanitize into a string
@@ -473,6 +484,25 @@ function toCommandValue(input) {
     return JSON.stringify(input);
 }
 exports.toCommandValue = toCommandValue;
+/**
+ *
+ * @param annotationProperties
+ * @returns The command properties to send with the actual annotation command
+ * See IssueCommandProperties: https://github.com/actions/runner/blob/main/src/Runner.Worker/ActionCommandManager.cs#L646
+ */
+function toCommandProperties(annotationProperties) {
+    if (!Object.keys(annotationProperties).length) {
+        return {};
+    }
+    return {
+        title: annotationProperties.title,
+        line: annotationProperties.startLine,
+        endLine: annotationProperties.endLine,
+        col: annotationProperties.startColumn,
+        endColumn: annotationProperties.endColumn
+    };
+}
+exports.toCommandProperties = toCommandProperties;
 //# sourceMappingURL=utils.js.map
 
 /***/ }),
@@ -7005,7 +7035,7 @@ function normalizeLinkText(url) {
  *   highlight: function (str, lang) {
  *     if (lang && hljs.getLanguage(lang)) {
  *       try {
- *         return hljs.highlight(lang, str, true).value;
+ *         return hljs.highlight(str, { language: lang, ignoreIllegals: true }).value;
  *       } catch (__) {}
  *     }
  *
@@ -7025,7 +7055,7 @@ function normalizeLinkText(url) {
  *     if (lang && hljs.getLanguage(lang)) {
  *       try {
  *         return '<pre class="hljs"><code>' +
- *                hljs.highlight(lang, str, true).value +
+ *                hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
  *                '</code></pre>';
  *       } catch (__) {}
  *     }
@@ -7426,9 +7456,9 @@ var _rules = [
   [ 'hr',         __nccwpck_require__(3514),         [ 'paragraph', 'reference', 'blockquote', 'list' ] ],
   [ 'list',       __nccwpck_require__(2050),       [ 'paragraph', 'reference', 'blockquote' ] ],
   [ 'reference',  __nccwpck_require__(2235) ],
+  [ 'html_block', __nccwpck_require__(725), [ 'paragraph', 'reference', 'blockquote' ] ],
   [ 'heading',    __nccwpck_require__(2702),    [ 'paragraph', 'reference', 'blockquote' ] ],
   [ 'lheading',   __nccwpck_require__(3551) ],
-  [ 'html_block', __nccwpck_require__(725), [ 'paragraph', 'reference', 'blockquote' ] ],
   [ 'paragraph',  __nccwpck_require__(9450) ]
 ];
 
@@ -8295,6 +8325,8 @@ Renderer.prototype.renderInlineAsText = function (tokens, options, env) {
       result += tokens[i].content;
     } else if (tokens[i].type === 'image') {
       result += this.renderInlineAsText(tokens[i].children, options, env);
+    } else if (tokens[i].type === 'softbreak') {
+      result += '\n';
     }
   }
 
@@ -9021,7 +9053,7 @@ module.exports = function code(state, startLine, endLine/*, silent*/) {
   state.line = last;
 
   token         = state.push('code_block', 'code', 0);
-  token.content = state.getLines(startLine, last, 4 + state.blkIndent, true);
+  token.content = state.getLines(startLine, last, 4 + state.blkIndent, false) + '\n';
   token.map     = [ startLine, state.line ];
 
   return true;
@@ -9268,7 +9300,7 @@ var HTML_OPEN_CLOSE_TAG_RE = __nccwpck_require__(6537)/* .HTML_OPEN_CLOSE_TAG_RE
 // last argument defines whether it can terminate a paragraph or not
 //
 var HTML_SEQUENCES = [
-  [ /^<(script|pre|style)(?=(\s|>|$))/i, /<\/(script|pre|style)>/i, true ],
+  [ /^<(script|pre|style|textarea)(?=(\s|>|$))/i, /<\/(script|pre|style|textarea)>/i, true ],
   [ /^<!--/,        /-->/,   true ],
   [ /^<\?/,         /\?>/,   true ],
   [ /^<![A-Z]/,     />/,     true ],
@@ -9592,7 +9624,7 @@ module.exports = function list(state, startLine, endLine, silent) {
   if ((posAfterMarker = skipOrderedListMarker(state, startLine)) >= 0) {
     isOrdered = true;
     start = state.bMarks[startLine] + state.tShift[startLine];
-    markerValue = Number(state.src.substr(start, posAfterMarker - start - 1));
+    markerValue = Number(state.src.slice(start, posAfterMarker - 1));
 
     // If we're starting a new ordered list right after
     // a paragraph, it should start with 1.
@@ -9685,6 +9717,9 @@ module.exports = function list(state, startLine, endLine, silent) {
     token        = state.push('list_item_open', 'li', 1);
     token.markup = String.fromCharCode(markerCharCode);
     token.map    = itemLines = [ startLine, 0 ];
+    if (isOrdered) {
+      token.info = state.src.slice(start, posAfterMarker - 1);
+    }
 
     // change current state, then restore it after parser subcall
     oldTight = state.tight;
@@ -9761,6 +9796,7 @@ module.exports = function list(state, startLine, endLine, silent) {
     if (isOrdered) {
       posAfterMarker = skipOrderedListMarker(state, nextLine);
       if (posAfterMarker < 0) { break; }
+      start = state.bMarks[nextLine] + state.tShift[nextLine];
     } else {
       posAfterMarker = skipBulletListMarker(state, nextLine);
       if (posAfterMarker < 0) { break; }
@@ -10356,7 +10392,7 @@ function escapedSplit(str) {
 module.exports = function table(state, startLine, endLine, silent) {
   var ch, lineText, pos, i, l, nextLine, columns, columnCount, token,
       aligns, t, tableLines, tbodyLines, oldParentType, terminate,
-      terminatorRules;
+      terminatorRules, firstCh, secondCh;
 
   // should have at least two lines
   if (startLine + 2 > endLine) { return false; }
@@ -10375,8 +10411,19 @@ module.exports = function table(state, startLine, endLine, silent) {
   pos = state.bMarks[nextLine] + state.tShift[nextLine];
   if (pos >= state.eMarks[nextLine]) { return false; }
 
-  ch = state.src.charCodeAt(pos++);
-  if (ch !== 0x7C/* | */ && ch !== 0x2D/* - */ && ch !== 0x3A/* : */) { return false; }
+  firstCh = state.src.charCodeAt(pos++);
+  if (firstCh !== 0x7C/* | */ && firstCh !== 0x2D/* - */ && firstCh !== 0x3A/* : */) { return false; }
+
+  if (pos >= state.eMarks[nextLine]) { return false; }
+
+  secondCh = state.src.charCodeAt(pos++);
+  if (secondCh !== 0x7C/* | */ && secondCh !== 0x2D/* - */ && secondCh !== 0x3A/* : */ && !isSpace(secondCh)) {
+    return false;
+  }
+
+  // if first character is '-', then second character must not be a space
+  // (due to parsing ambiguity with list)
+  if (firstCh === 0x2D/* - */ && isSpace(secondCh)) { return false; }
 
   while (pos < state.eMarks[nextLine]) {
     ch = state.src.charCodeAt(pos);
@@ -11265,12 +11312,14 @@ function processDelimiters(state, delimiters) {
     if (!closer.close) continue;
 
     // Previously calculated lower bounds (previous fails)
-    // for each marker and each delimiter length modulo 3.
+    // for each marker, each delimiter length modulo 3,
+    // and for whether this closer can be an opener;
+    // https://github.com/commonmark/cmark/commit/34250e12ccebdc6372b8b49c44fab57c72443460
     if (!openersBottom.hasOwnProperty(closer.marker)) {
-      openersBottom[closer.marker] = [ -1, -1, -1 ];
+      openersBottom[closer.marker] = [ -1, -1, -1, -1, -1, -1 ];
     }
 
-    minOpenerIdx = openersBottom[closer.marker][closer.length % 3];
+    minOpenerIdx = openersBottom[closer.marker][(closer.open ? 3 : 0) + (closer.length % 3)];
 
     openerIdx = closerIdx - closer.jump - 1;
 
@@ -11331,7 +11380,7 @@ function processDelimiters(state, delimiters) {
       // See details here:
       // https://github.com/commonmark/cmark/issues/178#issuecomment-270417442
       //
-      openersBottom[closer.marker][(closer.length || 0) % 3] = newMinOpenerIdx;
+      openersBottom[closer.marker][(closer.open ? 3 : 0) + ((closer.length || 0) % 3)] = newMinOpenerIdx;
     }
   }
 }
@@ -12573,7 +12622,11 @@ function Token(type, tag, nesting) {
   /**
    * Token#info -> String
    *
-   * fence infostring
+   * Additional information:
+   *
+   * - Info string for "fence" tokens
+   * - The value "auto" for autolink "link_open" and "link_close" tokens
+   * - The string value of the item marker for ordered-list "list_item_open" tokens
    **/
   this.info     = '';
 
@@ -12768,7 +12821,6 @@ const dynamicRequire = (typeof require === "undefined") ? require : /* c8 ignore
 // Capture native require implementation for dynamic loading of modules
 
 // Requires
-const fs = __nccwpck_require__(5747).promises;
 const path = __nccwpck_require__(5622);
 const globby = __nccwpck_require__(3398);
 const markdownlintLibrary = __nccwpck_require__(3611);
@@ -12781,7 +12833,7 @@ const resolveAndRequire = __nccwpck_require__(3924);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.1.3";
+const packageVersion = "0.3.1";
 const libraryName = "markdownlint";
 const libraryVersion = markdownlintLibrary.getVersion();
 const dotOnlySubstitute = "*.{md,markdown}";
@@ -12803,12 +12855,12 @@ const negateGlob = (glob) => `!${glob}`;
 const posixPath = (p) => p.split(path.sep).join(path.posix.sep);
 
 // Read a JSON(C) or YAML file and return the object
-const readConfig = (dir, name, otherwise) => {
+const readConfig = (fs, dir, name, otherwise) => {
   const file = path.posix.join(dir, name);
-  return () => fs.access(file).
+  return () => fs.promises.access(file).
     then(
       // @ts-ignore
-      () => markdownlintReadConfig(file, [ jsoncParse, yamlParse ]),
+      () => markdownlintReadConfig(file, [ jsoncParse, yamlParse ], fs),
       otherwise
     );
 };
@@ -12839,19 +12891,23 @@ const requireIdsAndParams = (dir, idsAndParams, noRequire) => {
 };
 
 // Require a JS file and return the exported object
-const requireConfig = (dir, name, noRequire) => {
-  const file = path.posix.join(dir, name);
-  // eslint-disable-next-line prefer-promise-reject-errors
-  return () => (noRequire ? Promise.reject() : fs.access(file)).
+const requireConfig = (fs, dir, name, noRequire) => (
+  () => (noRequire
+    // eslint-disable-next-line prefer-promise-reject-errors
+    ? Promise.reject()
+    : fs.promises.access(path.posix.join(dir, name))
+  ).
     then(
       () => requireResolve(dir, `./${name}`),
       noop
-    );
-};
+    )
+);
 
 // Process command-line arguments and return glob patterns
 const processArgv = (argv) => {
-  const globPatterns = argv.map((glob) => glob.replace(/^#/u, "!"));
+  const globPatterns = (argv || []).map(
+    (glob) => glob.replace(/^#/u, "!").replace(/\\(?![$()*+?[\]^])/gu, "/")
+  );
   if ((globPatterns.length === 1) && (globPatterns[0] === ".")) {
     // Substitute a more reasonable pattern
     globPatterns[0] = dotOnlySubstitute;
@@ -12888,11 +12944,11 @@ Configuration via:
 - .markdownlint.js
 
 Cross-platform compatibility:
-- UNIX and Windows shells expand globs according to different rules, so quoting glob arguments is recommended
-- Shells that expand globs do not support negated patterns (!node_modules), so quoting negated globs is required
-- Some Windows shells do not handle single-quoted (') arguments correctly, so double-quotes (") are recommended
-- Some UNIX shells handle exclamation (!) in double-quotes specially, so hashtag (#) is recommended for negated globs
-- Some shells use backslash (\\) to escape special characters, so forward slash (/) is the recommended path separator
+- UNIX and Windows shells expand globs according to different rules; quoting arguments is recommended
+- Some Windows shells don't handle single-quoted (') arguments well; double-quote (") is recommended
+- Shells that expand globs do not support negated patterns (!node_modules); quoting is required here
+- Some UNIX shells parse exclamation (!) in double-quotes; hashtag (#) is recommended in these cases
+- The path separator is forward slash (/) on all platforms; backslash (\\) is automatically converted
 
 Therefore, the most compatible glob syntax for cross-platform support:
 $ ${name} "**/*.md" "#node_modules"`
@@ -12901,7 +12957,8 @@ $ ${name} "**/*.md" "#node_modules"`
 };
 
 // Get (creating if necessary) and process a directory's info object
-const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, noRequire, func) => {
+const getAndProcessDirInfo =
+(fs, tasks, dirToDirInfo, dir, noRequire, func) => {
   let dirInfo = dirToDirInfo[dir];
   if (!dirInfo) {
     dirInfo = {
@@ -12919,13 +12976,18 @@ const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, noRequire, func) => {
     const markdownlintCli2Yaml =
       path.posix.join(dir, ".markdownlint-cli2.yaml");
     tasks.push(
-      fs.access(markdownlintCli2Jsonc).
+      fs.promises.access(markdownlintCli2Jsonc).
         then(
-          () => fs.readFile(markdownlintCli2Jsonc, utf8).then(jsoncParse),
-          () => fs.access(markdownlintCli2Yaml).
+          () => fs.promises.
+            readFile(markdownlintCli2Jsonc, utf8).
+            then(jsoncParse),
+          () => fs.promises.access(markdownlintCli2Yaml).
             then(
-              () => fs.readFile(markdownlintCli2Yaml, utf8).then(yamlParse),
+              () => fs.promises.
+                readFile(markdownlintCli2Yaml, utf8).
+                then(yamlParse),
               requireConfig(
+                fs,
                 dir,
                 ".markdownlint-cli2.js",
                 noRequire
@@ -12940,18 +13002,23 @@ const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, noRequire, func) => {
     // Load markdownlint object(s)
     const readConfigs =
       readConfig(
+        fs,
         dir,
         ".markdownlint.jsonc",
         readConfig(
+          fs,
           dir,
           ".markdownlint.json",
           readConfig(
+            fs,
             dir,
             ".markdownlint.yaml",
             readConfig(
+              fs,
               dir,
               ".markdownlint.yml",
               requireConfig(
+                fs,
                 dir,
                 ".markdownlint.js",
                 noRequire
@@ -12974,11 +13041,18 @@ const getAndProcessDirInfo = (tasks, dirToDirInfo, dir, noRequire, func) => {
 };
 
 // Get base markdownlint-cli2 options object
-const getBaseOptions =
-async (baseDir, globPatterns, optionsDefault, fixDefault, noRequire) => {
+const getBaseOptions = async (
+  fs,
+  baseDir,
+  globPatterns,
+  optionsDefault,
+  fixDefault,
+  noGlobs,
+  noRequire
+) => {
   const tasks = [];
   const dirToDirInfo = {};
-  getAndProcessDirInfo(tasks, dirToDirInfo, baseDir, noRequire);
+  getAndProcessDirInfo(fs, tasks, dirToDirInfo, baseDir, noRequire);
   await Promise.all(tasks);
   // eslint-disable-next-line no-multi-assign
   const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions =
@@ -12987,12 +13061,15 @@ async (baseDir, globPatterns, optionsDefault, fixDefault, noRequire) => {
       dirToDirInfo[baseDir].markdownlintOptions
     );
 
-  // Append any globs specified in markdownlint-cli2 configuration
-  const globs = baseMarkdownlintOptions.globs || [];
-  appendToArray(globPatterns, globs);
+  if (!noGlobs) {
+    // Append any globs specified in markdownlint-cli2 configuration
+    const globs = baseMarkdownlintOptions.globs || [];
+    appendToArray(globPatterns, globs);
+  }
 
   // Pass base ignore globs as globby patterns (best performance)
   const ignorePatterns =
+    // eslint-disable-next-line unicorn/no-array-callback-reference
     (baseMarkdownlintOptions.ignores || []).map(negateGlob);
   appendToArray(globPatterns, ignorePatterns);
   delete baseMarkdownlintOptions.ignores;
@@ -13005,24 +13082,48 @@ async (baseDir, globPatterns, optionsDefault, fixDefault, noRequire) => {
 
 // Enumerate files from globs and build directory infos
 const enumerateFiles =
-async (baseDir, globPatterns, dirToDirInfo, noRequire) => {
+async (fs, baseDir, globPatterns, dirToDirInfo, noRequire) => {
   const tasks = [];
   const globbyOptions = {
     "absolute": true,
-    "cwd": baseDir
+    "cwd": baseDir,
+    "expandDirectories": false,
+    fs
   };
-  for await (const file of globby.stream(globPatterns, globbyOptions)) {
-    // @ts-ignore
+  // Manually expand directories to avoid globby call to dir-glob.sync
+  const expandedDirectories = await Promise.all(
+    globPatterns.map((globPattern) => {
+      const globPath = path.resolve(
+        baseDir,
+        globPattern[0] === "!" ? globPattern.slice(1) : globPattern
+      );
+      return fs.promises.stat(globPath).
+        then((stats) => (stats.isDirectory()
+          ? path.posix.join(globPattern, "**")
+          : globPattern)).
+        catch(() => globPattern);
+    })
+  );
+  // Process glob patterns
+  const files = await globby(expandedDirectories, globbyOptions);
+  for (const file of files) {
     const dir = path.posix.dirname(file);
-    getAndProcessDirInfo(tasks, dirToDirInfo, dir, noRequire, (dirInfo) => {
-      dirInfo.files.push(file);
-    });
+    getAndProcessDirInfo(
+      fs,
+      tasks,
+      dirToDirInfo,
+      dir,
+      noRequire,
+      (dirInfo) => {
+        dirInfo.files.push(file);
+      }
+    );
   }
   await Promise.all(tasks);
 };
 
 // Enumerate (possibly missing) parent directories and update directory infos
-const enumerateParents = async (baseDir, dirToDirInfo, noRequire) => {
+const enumerateParents = async (fs, baseDir, dirToDirInfo, noRequire) => {
   const tasks = [];
 
   // Create a lookup of baseDir and parents
@@ -13044,10 +13145,17 @@ const enumerateParents = async (baseDir, dirToDirInfo, noRequire) => {
     ) {
       lastDir = dir;
       lastDirInfo =
-        // eslint-disable-next-line no-loop-func
-        getAndProcessDirInfo(tasks, dirToDirInfo, dir, noRequire, (dirInfo) => {
-          lastDirInfo.parent = dirInfo;
-        });
+        getAndProcessDirInfo(
+          fs,
+          tasks,
+          dirToDirInfo,
+          dir,
+          noRequire,
+          // eslint-disable-next-line no-loop-func
+          (dirInfo) => {
+            lastDirInfo.parent = dirInfo;
+          }
+        );
     }
 
     // If dir not under baseDir, inject it as parent for configuration
@@ -13060,9 +13168,9 @@ const enumerateParents = async (baseDir, dirToDirInfo, noRequire) => {
 
 // Create directory info objects by enumerating file globs
 const createDirInfos =
-async (baseDir, globPatterns, dirToDirInfo, optionsOverride, noRequire) => {
-  await enumerateFiles(baseDir, globPatterns, dirToDirInfo, noRequire);
-  await enumerateParents(baseDir, dirToDirInfo, noRequire);
+async (fs, baseDir, globPatterns, dirToDirInfo, optionsOverride, noRequire) => {
+  await enumerateFiles(fs, baseDir, globPatterns, dirToDirInfo, noRequire);
+  await enumerateParents(fs, baseDir, dirToDirInfo, noRequire);
 
   // Merge file lists with identical configuration
   const dirs = Object.keys(dirToDirInfo);
@@ -13091,7 +13199,7 @@ async (baseDir, globPatterns, dirToDirInfo, optionsOverride, noRequire) => {
             noRequire
           );
         // Expand nested arrays (for packages that export multiple rules)
-        markdownlintOptions.customRules = [].concat(...customRules);
+        markdownlintOptions.customRules = customRules.flat();
       }
       if (markdownlintOptions && markdownlintOptions.markdownItPlugins) {
         markdownlintOptions.markdownItPlugins =
@@ -13169,33 +13277,35 @@ async (baseDir, globPatterns, dirToDirInfo, optionsOverride, noRequire) => {
 };
 
 // Lint files in groups by shared configuration
-const lintFiles = (dirInfos, fileContents) => {
+const lintFiles = (fs, dirInfos, fileContents) => {
   const tasks = [];
   // For each dirInfo
   for (const dirInfo of dirInfos) {
     const { dir, files, markdownlintConfig, markdownlintOptions } = dirInfo;
     // Filter file/string inputs to only those in the dirInfo
-    const filteredFileContents = {};
-    for (const file in fileContents) {
-      if (files.includes(file)) {
-        filteredFileContents[file] = fileContents[file];
-      }
-    }
-    let filteredFiles = files.filter(
-      (file) => fileContents[file] === undefined
-    );
+    let filesAfterIgnores = files;
     if (markdownlintOptions.ignores) {
+      // eslint-disable-next-line unicorn/no-array-callback-reference
       const ignores = markdownlintOptions.ignores.map(negateGlob);
       const micromatch = __nccwpck_require__(6228);
-      filteredFiles = micromatch(
+      filesAfterIgnores = micromatch(
         files.map((file) => path.posix.relative(dir, file)),
         ignores
       ).map((file) => path.posix.join(dir, file));
     }
+    const filteredFiles = filesAfterIgnores.filter(
+      (file) => fileContents[file] === undefined
+    );
+    const filteredStrings = {};
+    for (const file of filesAfterIgnores) {
+      if (fileContents[file] !== undefined) {
+        filteredStrings[file] = fileContents[file];
+      }
+    }
     // Create markdownlint options object
     const options = {
       "files": filteredFiles,
-      "strings": filteredFileContents,
+      "strings": filteredStrings,
       "config": markdownlintConfig || markdownlintOptions.config,
       "customRules": markdownlintOptions.customRules,
       "frontMatter": markdownlintOptions.frontMatter
@@ -13204,7 +13314,8 @@ const lintFiles = (dirInfos, fileContents) => {
       "handleRuleFailures": true,
       "markdownItPlugins": markdownlintOptions.markdownItPlugins,
       "noInlineConfig": Boolean(markdownlintOptions.noInlineConfig),
-      "resultVersion": 3
+      "resultVersion": 3,
+      fs
     };
     // Invoke markdownlint
     // @ts-ignore
@@ -13221,11 +13332,11 @@ const lintFiles = (dirInfos, fileContents) => {
           if (errorInfos.length > 0) {
             delete results[fileName];
             options.files.push(fileName);
-            subTasks.push(fs.readFile(fileName, utf8).
+            subTasks.push(fs.promises.readFile(fileName, utf8).
               then((original) => {
                 const fixed = markdownlintRuleHelpers.
                   applyFixes(original, errorInfos);
-                return fs.writeFile(fileName, fixed, utf8);
+                return fs.promises.writeFile(fileName, fixed, utf8);
               })
             );
           }
@@ -13309,10 +13420,12 @@ const main = async (params) => {
     fixDefault,
     fileContents,
     nonFileContents,
+    noGlobs,
     noRequire
   } = params;
   const logMessage = params.logMessage || noop;
   const logError = params.logError || noop;
+  const fs = params.fs || __nccwpck_require__(5747);
   const baseDirSystem =
     (directory && path.resolve(directory)) ||
     process.cwd();
@@ -13325,10 +13438,12 @@ const main = async (params) => {
   const globPatterns = processArgv(argv);
   const { baseMarkdownlintOptions, dirToDirInfo } =
     await getBaseOptions(
+      fs,
       baseDir,
       globPatterns,
       optionsDefault,
       fixDefault,
+      noGlobs,
       noRequire
     );
   if ((globPatterns.length === 0) && !nonFileContents) {
@@ -13357,6 +13472,7 @@ const main = async (params) => {
   // Create linting tasks
   const dirInfos =
     await createDirInfos(
+      fs,
       baseDir,
       globPatterns,
       dirToDirInfo,
@@ -13372,7 +13488,7 @@ const main = async (params) => {
     logMessage(`Linting: ${fileCount} file(s)`);
   }
   // Lint files
-  const lintResults = await lintFiles(dirInfos, resolvedFileContents);
+  const lintResults = await lintFiles(fs, dirInfos, resolvedFileContents);
   // Output summary
   const summary = createSummary(baseDir, lintResults);
   if (showProgress) {
@@ -13520,10 +13636,11 @@ module.exports.orderedListItemMarkerRe = /^[\s>]*0*(\d+)[.)]/;
 const emphasisMarkersRe = /[_*]/g;
 
 // Regular expression for inline links and shortcut reference links
-const linkRe = /\[(?:[^[\]]|\[[^\]]*\])*\](?:\(\S*\))?/g;
+const linkRe = /(\[(?:[^[\]]|\[[^\]]*\])*\])(\(\S*\)|\[\S*\])?/g;
+module.exports.linkRe = linkRe;
 
-// readFile options for reading with the UTF-8 encoding
-module.exports.utf8Encoding = "utf8";
+// Regular expression for link reference definition lines
+module.exports.linkReferenceRe = /^ {0,3}\[[^\]]+]:\s.*$/;
 
 // All punctuation characters (normal and full-width)
 const allPunctuation = ".,;:!?。，；：！？";
@@ -13793,14 +13910,14 @@ module.exports.forEachLine = function forEachLine(lineMetadata, handler) {
 };
 
 // Returns (nested) lists as a flat array (in order)
-module.exports.flattenLists = function flattenLists(params) {
+module.exports.flattenLists = function flattenLists(tokens) {
   const flattenedLists = [];
   const stack = [];
   let current = null;
   let nesting = 0;
   const nestingStack = [];
   let lastWithMap = { "map": [ 0, 1 ] };
-  params.tokens.forEach((token) => {
+  tokens.forEach((token) => {
     if (isMathBlock(token) && token.map[1]) {
       // markdown-it-texmath plugin does not account for math_block_end
       token.map[1]++;
@@ -14009,6 +14126,47 @@ module.exports.addErrorContext = function addErrorContext(
   }
   addError(onError, lineNumber, null, context, range, fixInfo);
 };
+
+/**
+ * Returns an array of code span ranges.
+ *
+ * @param {string[]} lines Lines to scan for code span ranges.
+ * @returns {number[][]} Array of ranges (line, index, length).
+ */
+module.exports.inlineCodeSpanRanges = (lines) => {
+  const exclusions = [];
+  forEachInlineCodeSpan(
+    lines.join("\n"),
+    (code, lineIndex, columnIndex) => {
+      const codeLines = code.split(newLineRe);
+      // eslint-disable-next-line unicorn/no-for-loop
+      for (let i = 0; i < codeLines.length; i++) {
+        exclusions.push(
+          [ lineIndex + i, columnIndex, codeLines[i].length ]
+        );
+        columnIndex = 0;
+      }
+    }
+  );
+  return exclusions;
+};
+
+/**
+ * Determines whether the specified range overlaps another range.
+ *
+ * @param {number[][]} ranges Array of ranges (line, index, length).
+ * @param {number} lineIndex Line index to check.
+ * @param {number} index Index to check.
+ * @param {number} length Length to check.
+ * @returns {boolean} True iff the specified range overlaps.
+ */
+module.exports.overlapsAnyRange = (ranges, lineIndex, index, length) => (
+  !ranges.every((span) => (
+    (lineIndex !== span[0]) ||
+    (index + length < span[1]) ||
+    (index > span[1] + span[2])
+  ))
+);
 
 // Returns a range object for a line by applying a RegExp
 module.exports.rangeFromRegExp = function rangeFromRegExp(line, regexp) {
@@ -14265,10 +14423,11 @@ module.exports.orderedListItemMarkerRe = /^[\s>]*0*(\d+)[.)]/;
 const emphasisMarkersRe = /[_*]/g;
 
 // Regular expression for inline links and shortcut reference links
-const linkRe = /\[(?:[^[\]]|\[[^\]]*\])*\](?:\(\S*\))?/g;
+const linkRe = /(\[(?:[^[\]]|\[[^\]]*\])*\])(\(\S*\)|\[\S*\])?/g;
+module.exports.linkRe = linkRe;
 
-// readFile options for reading with the UTF-8 encoding
-module.exports.utf8Encoding = "utf8";
+// Regular expression for link reference definition lines
+module.exports.linkReferenceRe = /^ {0,3}\[[^\]]+]:\s.*$/;
 
 // All punctuation characters (normal and full-width)
 const allPunctuation = ".,;:!?。，；：！？";
@@ -14538,14 +14697,14 @@ module.exports.forEachLine = function forEachLine(lineMetadata, handler) {
 };
 
 // Returns (nested) lists as a flat array (in order)
-module.exports.flattenLists = function flattenLists(params) {
+module.exports.flattenLists = function flattenLists(tokens) {
   const flattenedLists = [];
   const stack = [];
   let current = null;
   let nesting = 0;
   const nestingStack = [];
   let lastWithMap = { "map": [ 0, 1 ] };
-  params.tokens.forEach((token) => {
+  tokens.forEach((token) => {
     if (isMathBlock(token) && token.map[1]) {
       // markdown-it-texmath plugin does not account for math_block_end
       token.map[1]++;
@@ -14754,6 +14913,47 @@ module.exports.addErrorContext = function addErrorContext(
   }
   addError(onError, lineNumber, null, context, range, fixInfo);
 };
+
+/**
+ * Returns an array of code span ranges.
+ *
+ * @param {string[]} lines Lines to scan for code span ranges.
+ * @returns {number[][]} Array of ranges (line, index, length).
+ */
+module.exports.inlineCodeSpanRanges = (lines) => {
+  const exclusions = [];
+  forEachInlineCodeSpan(
+    lines.join("\n"),
+    (code, lineIndex, columnIndex) => {
+      const codeLines = code.split(newLineRe);
+      // eslint-disable-next-line unicorn/no-for-loop
+      for (let i = 0; i < codeLines.length; i++) {
+        exclusions.push(
+          [ lineIndex + i, columnIndex, codeLines[i].length ]
+        );
+        columnIndex = 0;
+      }
+    }
+  );
+  return exclusions;
+};
+
+/**
+ * Determines whether the specified range overlaps another range.
+ *
+ * @param {number[][]} ranges Array of ranges (line, index, length).
+ * @param {number} lineIndex Line index to check.
+ * @param {number} index Index to check.
+ * @param {number} length Length to check.
+ * @returns {boolean} True iff the specified range overlaps.
+ */
+module.exports.overlapsAnyRange = (ranges, lineIndex, index, length) => (
+  !ranges.every((span) => (
+    (lineIndex !== span[0]) ||
+    (index + length < span[1]) ||
+    (index > span[1] + span[2])
+  ))
+);
 
 // Returns a range object for a line by applying a RegExp
 module.exports.rangeFromRegExp = function rangeFromRegExp(line, regexp) {
@@ -14983,14 +15183,6 @@ module.exports.applyFixes = function applyFixes(input, errors) {
 
 
 
-let lineMetadata = null;
-module.exports.lineMetadata = (value) => {
-  if (value) {
-    lineMetadata = value;
-  }
-  return lineMetadata;
-};
-
 let flattenedLists = null;
 module.exports.flattenedLists = (value) => {
   if (value) {
@@ -14999,9 +15191,26 @@ module.exports.flattenedLists = (value) => {
   return flattenedLists;
 };
 
+let inlineCodeSpanRanges = null;
+module.exports.inlineCodeSpanRanges = (value) => {
+  if (value) {
+    inlineCodeSpanRanges = value;
+  }
+  return inlineCodeSpanRanges;
+};
+
+let lineMetadata = null;
+module.exports.lineMetadata = (value) => {
+  if (value) {
+    lineMetadata = value;
+  }
+  return lineMetadata;
+};
+
 module.exports.clear = () => {
-  lineMetadata = null;
   flattenedLists = null;
+  inlineCodeSpanRanges = null;
+  lineMetadata = null;
 };
 
 
@@ -15015,7 +15224,6 @@ module.exports.clear = () => {
 
 
 
-const fs = __nccwpck_require__(5747);
 const path = __nccwpck_require__(5622);
 const { promisify } = __nccwpck_require__(1669);
 const markdownIt = __nccwpck_require__(8561);
@@ -15203,7 +15411,7 @@ function annotateTokens(tokens, lines) {
       (token.type === "thead_open") ||
       (token.type === "tbody_open")
     ) {
-      tableMap = token.map.slice();
+      tableMap = [ ...token.map ];
     } else if (
       (token.type === "tr_close") &&
       tableMap
@@ -15216,7 +15424,7 @@ function annotateTokens(tokens, lines) {
       tableMap = null;
     }
     if (tableMap && !token.map) {
-      token.map = tableMap.slice();
+      token.map = [ ...tableMap ];
     }
     // Update token metadata
     if (token.map) {
@@ -15529,7 +15737,8 @@ function lintContent(
     frontMatterLines
   };
   cache.lineMetadata(helpers.getLineMetadata(params));
-  cache.flattenedLists(helpers.flattenLists(params));
+  cache.flattenedLists(helpers.flattenLists(params.tokens));
+  cache.inlineCodeSpanRanges(helpers.inlineCodeSpanRanges(params.lines));
   // Function to run for each rule
   const result = (resultVersion === 0) ? {} : [];
   // eslint-disable-next-line jsdoc/require-jsdoc
@@ -15697,6 +15906,7 @@ function lintContent(
  * @param {boolean} handleRuleFailures Whether to handle exceptions in rules.
  * @param {boolean} noInlineConfig Whether to allow inline configuration.
  * @param {number} resultVersion Version of the LintResults object to return.
+ * @param {Object} fs File system implementation.
  * @param {boolean} synchronous Whether to execute synchronously.
  * @param {Function} callback Callback (err, result) function.
  * @returns {void}
@@ -15710,6 +15920,7 @@ function lintFile(
   handleRuleFailures,
   noInlineConfig,
   resultVersion,
+  fs,
   synchronous,
   callback) {
   // eslint-disable-next-line jsdoc/require-jsdoc
@@ -15722,10 +15933,9 @@ function lintFile(
   }
   // Make a/synchronous call to read file
   if (synchronous) {
-    // @ts-ignore
-    lintContentWrapper(null, fs.readFileSync(file, helpers.utf8Encoding));
+    lintContentWrapper(null, fs.readFileSync(file, "utf8"));
   } else {
-    fs.readFile(file, helpers.utf8Encoding, lintContentWrapper);
+    fs.readFile(file, "utf8", lintContentWrapper);
   }
 }
 
@@ -15749,7 +15959,7 @@ function lintInput(options, synchronous, callback) {
   }
   let files = [];
   if (Array.isArray(options.files)) {
-    files = options.files.slice();
+    files = [ ...options.files ];
   } else if (options.files) {
     files = [ String(options.files) ];
   }
@@ -15768,6 +15978,7 @@ function lintInput(options, synchronous, callback) {
     // @ts-ignore
     md.use(...plugin);
   });
+  const fs = options.fs || __nccwpck_require__(5747);
   const results = newResults(ruleList);
   let done = false;
   // Linting of strings is always synchronous
@@ -15807,6 +16018,7 @@ function lintInput(options, synchronous, callback) {
         handleRuleFailures,
         noInlineConfig,
         resultVersion,
+        fs,
         synchronous,
         syncCallback
       );
@@ -15831,6 +16043,7 @@ function lintInput(options, synchronous, callback) {
         handleRuleFailures,
         noInlineConfig,
         resultVersion,
+        fs,
         synchronous,
         (err, result) => {
           concurrency--;
@@ -15941,17 +16154,47 @@ function parseConfiguration(name, content, parsers) {
  *
  * @param {string} configFile Configuration file name.
  * @param {string} referenceId Referenced identifier to resolve.
+ * @param {Object} fs File system implementation.
+ * @param {ResolveConfigExtendsCallback} [callback] Callback (err, result)
+ * function.
+ * @returns {void}
+ */
+function resolveConfigExtends(configFile, referenceId, fs, callback) {
+  const configFileDirname = path.dirname(configFile);
+  const resolvedExtendsFile = path.resolve(configFileDirname, referenceId);
+  fs.access(resolvedExtendsFile, (err) => {
+    if (err) {
+      // Not a file, try require.resolve
+      try {
+        return callback(null, dynamicRequire.resolve(
+          referenceId,
+          { "paths": [ configFileDirname ] }
+        ));
+      } catch {
+        // Unable to resolve, use resolvedExtendsFile
+      }
+    }
+    return callback(null, resolvedExtendsFile);
+  });
+}
+
+/**
+ * Resolve referenced "extends" path in a configuration file
+ * using path.resolve() with require.resolve() as a fallback.
+ *
+ * @param {string} configFile Configuration file name.
+ * @param {string} referenceId Referenced identifier to resolve.
+ * @param {Object} fs File system implementation.
  * @returns {string} Resolved path to file.
  */
-function resolveConfigExtends(configFile, referenceId) {
+function resolveConfigExtendsSync(configFile, referenceId, fs) {
   const configFileDirname = path.dirname(configFile);
   const resolvedExtendsFile = path.resolve(configFileDirname, referenceId);
   try {
-    if (fs.statSync(resolvedExtendsFile).isFile()) {
-      return resolvedExtendsFile;
-    }
+    fs.accessSync(resolvedExtendsFile);
+    return resolvedExtendsFile;
   } catch {
-    // If not a file or fs.statSync throws, try require.resolve
+    // Not a file, try require.resolve
   }
   try {
     return dynamicRequire.resolve(
@@ -15959,7 +16202,7 @@ function resolveConfigExtends(configFile, referenceId) {
       { "paths": [ configFileDirname ] }
     );
   } catch {
-    // If require.resolve throws, return resolvedExtendsFile
+    // Unable to resolve, return resolvedExtendsFile
   }
   return resolvedExtendsFile;
 }
@@ -15970,17 +16213,26 @@ function resolveConfigExtends(configFile, referenceId) {
  * @param {string} file Configuration file name.
  * @param {ConfigurationParser[] | ReadConfigCallback} parsers Parsing
  * function(s).
+ * @param {Object} [fs] File system implementation.
  * @param {ReadConfigCallback} [callback] Callback (err, result) function.
  * @returns {void}
  */
-function readConfig(file, parsers, callback) {
+function readConfig(file, parsers, fs, callback) {
   if (!callback) {
-    // @ts-ignore
-    callback = parsers;
-    parsers = null;
+    if (fs) {
+      callback = fs;
+      fs = null;
+    } else {
+      // @ts-ignore
+      callback = parsers;
+      parsers = null;
+    }
+  }
+  if (!fs) {
+    fs = __nccwpck_require__(5747);
   }
   // Read file
-  fs.readFile(file, helpers.utf8Encoding, (err, content) => {
+  fs.readFile(file, "utf8", (err, content) => {
     if (err) {
       return callback(err);
     }
@@ -15994,16 +16246,25 @@ function readConfig(file, parsers, callback) {
     const configExtends = config.extends;
     if (configExtends) {
       delete config.extends;
-      const resolvedExtends = resolveConfigExtends(file, configExtends);
-      return readConfig(resolvedExtends, parsers, (errr, extendsConfig) => {
-        if (errr) {
-          return callback(errr);
-        }
-        return callback(null, {
-          ...extendsConfig,
-          ...config
-        });
-      });
+      return resolveConfigExtends(
+        file,
+        configExtends,
+        fs,
+        (_, resolvedExtends) => readConfig(
+          resolvedExtends,
+          parsers,
+          fs,
+          (errr, extendsConfig) => {
+            if (errr) {
+              return callback(errr);
+            }
+            return callback(null, {
+              ...extendsConfig,
+              ...config
+            });
+          }
+        )
+      );
     }
     return callback(null, config);
   });
@@ -16016,11 +16277,12 @@ const readConfigPromisify = promisify && promisify(readConfig);
  *
  * @param {string} file Configuration file name.
  * @param {ConfigurationParser[]} [parsers] Parsing function(s).
+ * @param {Object} [fs] File system implementation.
  * @returns {Promise<Configuration>} Configuration object.
  */
-function readConfigPromise(file, parsers) {
+function readConfigPromise(file, parsers, fs) {
   // @ts-ignore
-  return readConfigPromisify(file, parsers);
+  return readConfigPromisify(file, parsers, fs);
 }
 
 /**
@@ -16028,12 +16290,16 @@ function readConfigPromise(file, parsers) {
  *
  * @param {string} file Configuration file name.
  * @param {ConfigurationParser[]} [parsers] Parsing function(s).
+ * @param {Object} [fs] File system implementation.
  * @returns {Configuration} Configuration object.
+ * @throws An Error if processing fails.
  */
-function readConfigSync(file, parsers) {
+function readConfigSync(file, parsers, fs) {
+  if (!fs) {
+    fs = __nccwpck_require__(5747);
+  }
   // Read file
-  // @ts-ignore
-  const content = fs.readFileSync(file, helpers.utf8Encoding);
+  const content = fs.readFileSync(file, "utf8");
   // Try to parse file
   const { config, message } = parseConfiguration(file, content, parsers);
   if (!config) {
@@ -16043,9 +16309,9 @@ function readConfigSync(file, parsers) {
   const configExtends = config.extends;
   if (configExtends) {
     delete config.extends;
-    const resolvedExtends = resolveConfigExtends(file, configExtends);
+    const resolvedExtends = resolveConfigExtendsSync(file, configExtends, fs);
     return {
-      ...readConfigSync(resolvedExtends, parsers),
+      ...readConfigSync(resolvedExtends, parsers, fs),
       ...config
     };
   }
@@ -16168,6 +16434,7 @@ module.exports = markdownlint;
  * @property {boolean} [noInlineConfig] True to ignore HTML directives.
  * @property {number} [resultVersion] Results object version.
  * @property {Plugin[]} [markdownItPlugins] Additional plugins.
+ * @property {Object} [fs] File system implementation.
  */
 
 /**
@@ -16209,13 +16476,14 @@ module.exports = markdownlint;
  * Fix information.
  *
  * @typedef {Object} FixInfo
+ * @property {number} [lineNumber] Line number (1-based).
  * @property {number} [editColumn] Column of the fix (1-based).
  * @property {number} [deleteCount] Count of characters to delete.
  * @property {string} [insertText] Text to insert (after deleting).
  */
 
 /**
- * Called with the result of the lint operation.
+ * Called with the result of the lint function.
  *
  * @callback LintCallback
  * @param {Error | null} err Error object or null.
@@ -16245,11 +16513,20 @@ module.exports = markdownlint;
  */
 
 /**
- * Called with the result of the readConfig operation.
+ * Called with the result of the readConfig function.
  *
  * @callback ReadConfigCallback
  * @param {Error | null} err Error object or null.
  * @param {Configuration} [config] Configuration object.
+ * @returns {void}
+ */
+
+/**
+ * Called with the result of the resolveConfigExtends function.
+ *
+ * @callback ResolveConfigExtendsCallback
+ * @param {Error | null} err Error object or null.
+ * @param {string} [path] Resolved path to file.
  * @returns {void}
  */
 
@@ -16731,6 +17008,10 @@ module.exports = {
   "function": function MD010(params, onError) {
     const codeBlocks = params.config.code_blocks;
     const includeCodeBlocks = (codeBlocks === undefined) ? true : !!codeBlocks;
+    const spacesPerTab = params.config.spaces_per_tab;
+    const spaceMultiplier = (spacesPerTab === undefined) ?
+      1 :
+      Math.max(0, Number(spacesPerTab));
     forEachLine(lineMetadata(), (line, lineIndex, inCode) => {
       if (!inCode || includeCodeBlocks) {
         let match = null;
@@ -16746,7 +17027,7 @@ module.exports = {
             {
               "editColumn": column,
               "deleteCount": length,
-              "insertText": "".padEnd(length)
+              "insertText": "".padEnd(length * spaceMultiplier)
             });
         }
       }
@@ -16765,40 +17046,44 @@ module.exports = {
 
 
 
-const { addError, forEachInlineChild, unescapeMarkdown } =
-  __nccwpck_require__(2935);
+const { addError, forEachLine, overlapsAnyRange } = __nccwpck_require__(2935);
+const { inlineCodeSpanRanges, lineMetadata } = __nccwpck_require__(3266);
 
-const reversedLinkRe = /\(([^)]+)\)\[([^\]^][^\]]*)]/g;
+const reversedLinkRe =
+  /(^|[^\\])\(([^)]+)\)\[([^\]^][^\]]*)](?!\()/g;
 
 module.exports = {
   "names": [ "MD011", "no-reversed-links" ],
   "description": "Reversed link syntax",
   "tags": [ "links" ],
   "function": function MD011(params, onError) {
-    forEachInlineChild(params, "text", (token) => {
-      const { lineNumber, content } = token;
-      let match = null;
-      while ((match = reversedLinkRe.exec(content)) !== null) {
-        const [ reversedLink, linkText, linkDestination ] = match;
-        const line = params.lines[lineNumber - 1];
-        const column = unescapeMarkdown(line).indexOf(reversedLink) + 1;
-        const length = reversedLink.length;
-        const range = column ? [ column, length ] : null;
-        const fixInfo = column ?
-          {
-            "editColumn": column,
-            "deleteCount": length,
-            "insertText": `[${linkText}](${linkDestination})`
-          } :
-          null;
-        addError(
-          onError,
-          lineNumber,
-          reversedLink,
-          null,
-          range,
-          fixInfo
-        );
+    const exclusions = inlineCodeSpanRanges();
+    forEachLine(lineMetadata(), (line, lineIndex, inCode, onFence) => {
+      if (!inCode && !onFence) {
+        let match = null;
+        while ((match = reversedLinkRe.exec(line)) !== null) {
+          const [ reversedLink, preChar, linkText, linkDestination ] = match;
+          const index = match.index + preChar.length;
+          const length = match[0].length - preChar.length;
+          if (
+            !linkText.endsWith("\\") &&
+            !linkDestination.endsWith("\\") &&
+            !overlapsAnyRange(exclusions, lineIndex, index, length)
+          ) {
+            addError(
+              onError,
+              lineIndex + 1,
+              reversedLink.slice(preChar.length),
+              null,
+              [ index + 1, length ],
+              {
+                "editColumn": index + 1,
+                "deleteCount": length,
+                "insertText": `[${linkText}](${linkDestination})`
+              }
+            );
+          }
+        }
       }
     });
   }
@@ -18128,11 +18413,23 @@ module.exports = {
       lineMetadata(),
       (line, lineIndex, inCode, onFence, inTable, inItem, onBreak, inMath) => {
         const onItemStart = (inItem === 1);
-        if (inCode || inTable || onBreak || onItemStart || isBlankLine(line)) {
+        if (
+          inCode ||
+          onFence ||
+          inTable ||
+          onBreak ||
+          onItemStart ||
+          isBlankLine(line)
+        ) {
           // Emphasis resets when leaving a block
           resetRunTracking();
         }
-        if (inCode || onBreak || inMath) {
+        if (
+          inCode ||
+          onFence ||
+          onBreak ||
+          inMath
+        ) {
           // Emphasis has no meaning here
           return;
         }
@@ -18524,8 +18821,11 @@ module.exports = {
           const actual = levels[heading.tag] + " " + content;
           const expected = getExpected();
           if (expected === "*") {
-            matchAny = true;
-            getExpected();
+            const nextExpected = getExpected();
+            if (nextExpected.toLowerCase() !== actual.toLowerCase()) {
+              matchAny = true;
+              i--;
+            }
           } else if (expected === "+") {
             matchAny = true;
           } else if (expected.toLowerCase() === actual.toLowerCase()) {
@@ -18539,9 +18839,11 @@ module.exports = {
           }
         }
       });
+      const extraHeadings = requiredHeadings.length - i;
       if (
         !hasError &&
-        (i < requiredHeadings.length) &&
+        ((extraHeadings > 1) ||
+          ((extraHeadings === 1) && (requiredHeadings[i] !== "*"))) &&
         (anyHeadings || !requiredHeadings.every((heading) => heading === "*"))
       ) {
         addErrorContext(onError, params.lines.length,
@@ -18562,11 +18864,9 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, bareUrlRe, escapeForRegExp, filterTokens,
-  forEachInlineChild, newLineRe } = __nccwpck_require__(2935);
-
-const startNonWordRe = /^\W/;
-const endNonWordRe = /\W$/;
+const { addErrorDetailIf, bareUrlRe, escapeForRegExp, forEachLine,
+  overlapsAnyRange, linkRe, linkReferenceRe } = __nccwpck_require__(2935);
+const { inlineCodeSpanRanges, lineMetadata } = __nccwpck_require__(3266);
 
 module.exports = {
   "names": [ "MD044", "proper-names" ],
@@ -18575,81 +18875,66 @@ module.exports = {
   "function": function MD044(params, onError) {
     let names = params.config.names;
     names = Array.isArray(names) ? names : [];
+    names.sort((a, b) => (b.length - a.length) || a.localeCompare(b));
     const codeBlocks = params.config.code_blocks;
     const includeCodeBlocks = (codeBlocks === undefined) ? true : !!codeBlocks;
-    // Text of automatic hyperlinks is implicitly a URL
-    const autolinkText = new Set();
-    filterTokens(params, "inline", (token) => {
-      let inAutoLink = false;
-      token.children.forEach((child) => {
-        const { info, type } = child;
-        if ((type === "link_open") && (info === "auto")) {
-          inAutoLink = true;
-        } else if (type === "link_close") {
-          inAutoLink = false;
-        } else if ((type === "text") && inAutoLink) {
-          autolinkText.add(child);
+    const exclusions = [];
+    forEachLine(lineMetadata(), (line, lineIndex) => {
+      if (linkReferenceRe.test(line)) {
+        exclusions.push([ lineIndex, 0, line.length ]);
+      } else {
+        let match = null;
+        while ((match = bareUrlRe.exec(line)) !== null) {
+          exclusions.push([ lineIndex, match.index, match[0].length ]);
+        }
+        while ((match = linkRe.exec(line)) !== null) {
+          const [ , text, destination ] = match;
+          if (destination) {
+            exclusions.push(
+              [ lineIndex, match.index + text.length, destination.length ]
+            );
+          }
+        }
+      }
+    });
+    if (!includeCodeBlocks) {
+      exclusions.push(...inlineCodeSpanRanges());
+    }
+    for (const name of names) {
+      const escapedName = escapeForRegExp(name);
+      const startNamePattern = /^\W/.test(name) ? "" : "\\b_*";
+      const endNamePattern = /\W$/.test(name) ? "" : "_*\\b";
+      const namePattern =
+        `(${startNamePattern})(${escapedName})${endNamePattern}`;
+      const nameRe = new RegExp(namePattern, "gi");
+      forEachLine(lineMetadata(), (line, lineIndex, inCode, onFence) => {
+        if (includeCodeBlocks || (!inCode && !onFence)) {
+          let match = null;
+          while ((match = nameRe.exec(line)) !== null) {
+            const [ , leftMatch, nameMatch ] = match;
+            const index = match.index + leftMatch.length;
+            const length = nameMatch.length;
+            if (!overlapsAnyRange(exclusions, lineIndex, index, length)) {
+              addErrorDetailIf(
+                onError,
+                lineIndex + 1,
+                name,
+                nameMatch,
+                null,
+                null,
+                [ index + 1, length ],
+                {
+                  "editColumn": index + 1,
+                  "deleteCount": length,
+                  "insertText": name
+                }
+              );
+            }
+            exclusions.push([ lineIndex, index, length ]);
+          }
         }
       });
-    });
-    // For each proper name...
-    names.forEach((name) => {
-      const escapedName = escapeForRegExp(name);
-      const startNamePattern = startNonWordRe.test(name) ? "" : "\\S*\\b";
-      const endNamePattern = endNonWordRe.test(name) ? "" : "\\b\\S*";
-      const namePattern =
-        `(${startNamePattern})(${escapedName})(${endNamePattern})`;
-      const anyNameRe = new RegExp(namePattern, "gi");
-      // eslint-disable-next-line jsdoc/require-jsdoc
-      function forToken(token) {
-        if (!autolinkText.has(token)) {
-          const fenceOffset = (token.type === "fence") ? 1 : 0;
-          token.content.split(newLineRe).forEach((line, index) => {
-            let match = null;
-            while ((match = anyNameRe.exec(line)) !== null) {
-              const [ fullMatch, leftMatch, nameMatch, rightMatch ] = match;
-              if (fullMatch.search(bareUrlRe) === -1) {
-                const wordMatch = fullMatch
-                  .replace(new RegExp(`^\\W{0,${leftMatch.length}}`), "")
-                  .replace(new RegExp(`\\W{0,${rightMatch.length}}$`), "");
-                if (!names.includes(wordMatch)) {
-                  const lineNumber = token.lineNumber + index + fenceOffset;
-                  const fullLine = params.lines[lineNumber - 1];
-                  const matchLength = wordMatch.length;
-                  const matchIndex = fullLine.indexOf(wordMatch);
-                  const range = (matchIndex === -1) ?
-                    null :
-                    [ matchIndex + 1, matchLength ];
-                  const fixInfo = (matchIndex === -1) ?
-                    null :
-                    {
-                      "editColumn": matchIndex + 1,
-                      "deleteCount": matchLength,
-                      "insertText": name
-                    };
-                  addErrorDetailIf(
-                    onError,
-                    lineNumber,
-                    name,
-                    nameMatch,
-                    null,
-                    null,
-                    range,
-                    fixInfo
-                  );
-                }
-              }
-            }
-          });
-        }
-      }
-      forEachInlineChild(params, "text", forToken);
-      if (includeCodeBlocks) {
-        forEachInlineChild(params, "code_inline", forToken);
-        filterTokens(params, "code_block", forToken);
-        filterTokens(params, "fence", forToken);
-      }
-    });
+    }
   }
 };
 
@@ -29465,7 +29750,7 @@ module.exports = JSON.parse('{"Aacute":"Á","aacute":"á","Abreve":"Ă","abreve"
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"markdownlint-cli2","version":"0.1.3","description":"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library","author":{"name":"David Anson","url":"https://dlaa.me/"},"license":"MIT","main":"markdownlint-cli2.js","bin":{"markdownlint-cli2":"markdownlint-cli2.js","markdownlint-cli2-fix":"markdownlint-cli2-fix.js"},"homepage":"https://github.com/DavidAnson/markdownlint-cli2","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint-cli2.git"},"bugs":"https://github.com/DavidAnson/markdownlint-cli2/issues","scripts":{"ci":"npm-run-all --continue-on-error --parallel test-cover lint","lint":"eslint --max-warnings 0 .","lint-watch":"git ls-files | entr npm run lint","test":"ava test/append-to-array-test.js test/markdownlint-cli2-test.js test/markdownlint-cli2-test-exec.js test/markdownlint-cli2-test-main.js test/merge-options-test.js test/resolve-and-require-test.js","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-watch":"git ls-files | entr npm run test"},"engines":{"node":">=10.17.0"},"files":["append-to-array.js","markdownlint-cli2.js","markdownlint-cli2-fix.js","merge-options.js","resolve-and-require.js"],"dependencies":{"globby":"~11.0.3","markdownlint":"~0.23.1","markdownlint-cli2-formatter-default":"^0.0.2","markdownlint-rule-helpers":"~0.14.0","micromatch":"~4.0.2","strip-json-comments":"~3.1.1","yaml":"~1.10.2"},"devDependencies":{"@iktakahiro/markdown-it-katex":"~4.0.1","ava":"~3.15.0","c8":"~7.7.0","cpy":"~8.1.2","del":"~6.0.0","eslint":"~7.23.0","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~29.0.0","execa":"~5.0.0","markdown-it-emoji":"~2.0.0","markdown-it-for-inline":"~0.1.1","markdownlint-cli2-formatter-json":"^0.0.4","markdownlint-cli2-formatter-junit":"^0.0.3","markdownlint-cli2-formatter-pretty":"^0.0.2","markdownlint-cli2-formatter-summarize":"^0.0.3","markdownlint-rule-titlecase":"~0.1.0","npm-run-all":"~4.1.5"},"keywords":["markdown","lint","cli","md","CommonMark","markdownlint"]}');
+module.exports = JSON.parse('{"name":"markdownlint-cli2","version":"0.3.1","description":"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library","author":{"name":"David Anson","url":"https://dlaa.me/"},"license":"MIT","main":"markdownlint-cli2.js","bin":{"markdownlint-cli2":"markdownlint-cli2.js","markdownlint-cli2-fix":"markdownlint-cli2-fix.js"},"homepage":"https://github.com/DavidAnson/markdownlint-cli2","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint-cli2.git"},"bugs":"https://github.com/DavidAnson/markdownlint-cli2/issues","scripts":{"build-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker build -t davidanson/markdownlint-cli2:$VERSION -f docker/Dockerfile .","ci":"npm-run-all --continue-on-error --parallel test-cover lint","lint":"eslint --max-warnings 0 .","lint-dockerfile":"docker run --rm -i hadolint/hadolint:latest-alpine < docker/Dockerfile","lint-watch":"git ls-files | entr npm run lint","publish-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker buildx build --platform linux/arm64,linux/amd64 -t davidanson/markdownlint-cli2:$VERSION -t davidanson/markdownlint-cli2:latest -f docker/Dockerfile --push .","test":"ava test/append-to-array-test.js test/fs-mock-test.js test/markdownlint-cli2-test.js test/markdownlint-cli2-test-exec.js test/markdownlint-cli2-test-fs.js test/markdownlint-cli2-test-main.js test/merge-options-test.js test/resolve-and-require-test.js","test-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:$VERSION \\"*.md\\"","test-docker-hub-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker image rm davidanson/markdownlint-cli2:$VERSION davidanson/markdownlint-cli2:latest || true && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:$VERSION \\"*.md\\" && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:latest \\"*.md\\"","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-watch":"git ls-files | entr npm run test"},"engines":{"node":">=12"},"files":["append-to-array.js","markdownlint-cli2.js","markdownlint-cli2-fix.js","merge-options.js","resolve-and-require.js"],"dependencies":{"globby":"~11.0.4","markdownlint":"~0.24.0","markdownlint-cli2-formatter-default":"^0.0.2","markdownlint-rule-helpers":"~0.15.0","micromatch":"~4.0.4","strip-json-comments":"~3.1.1","yaml":"~1.10.2"},"devDependencies":{"@iktakahiro/markdown-it-katex":"~4.0.1","ava":"~3.15.0","c8":"~7.8.0","cpy":"~8.1.2","del":"~6.0.0","eslint":"~7.32.0","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~35.0.0","execa":"~5.1.1","markdown-it-emoji":"~2.0.0","markdown-it-for-inline":"~0.1.1","markdownlint-cli2-formatter-json":"^0.0.4","markdownlint-cli2-formatter-junit":"^0.0.3","markdownlint-cli2-formatter-pretty":"^0.0.2","markdownlint-cli2-formatter-summarize":"^0.0.3","markdownlint-rule-titlecase":"~0.1.0","npm-run-all":"~4.1.5"},"keywords":["markdown","lint","cli","md","CommonMark","markdownlint"]}');
 
 /***/ }),
 
@@ -29473,7 +29758,7 @@ module.exports = JSON.parse('{"name":"markdownlint-cli2","version":"0.1.3","desc
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"markdownlint","version":"0.23.1","description":"A Node.js style checker and lint tool for Markdown/CommonMark files.","main":"lib/markdownlint.js","types":"lib/markdownlint.d.ts","author":"David Anson (https://dlaa.me/)","license":"MIT","homepage":"https://github.com/DavidAnson/markdownlint","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint.git"},"bugs":"https://github.com/DavidAnson/markdownlint/issues","scripts":{"build-config":"npm run build-config-schema && npm run build-config-example","build-config-example":"node schema/build-config-example.js","build-config-schema":"node schema/build-config-schema.js","build-declaration":"tsc --allowJs --declaration --emitDeclarationOnly --resolveJsonModule lib/markdownlint.js && rimraf \'lib/{c,md,r}*.d.ts\' \'helpers/*.d.ts\'","build-demo":"cpy node_modules/markdown-it/dist/markdown-it.min.js demo && cd demo && rimraf markdownlint-browser.* && webpack --no-stats","build-example":"npm install --no-save --ignore-scripts grunt grunt-cli gulp through2","ci":"npm-run-all --continue-on-error --parallel test-cover lint declaration build-config build-demo && git diff --exit-code","clean-test-repos":"rimraf test-repos","clone-test-repos":"mkdir test-repos && cd test-repos && git clone https://github.com/eslint/eslint eslint-eslint --depth 1 --no-tags --quiet && git clone https://github.com/mkdocs/mkdocs mkdocs-mkdocs --depth 1 --no-tags --quiet && git clone https://github.com/pi-hole/docs pi-hole-docs --depth 1 --no-tags --quiet","clone-test-repos-large":"npm run clone-test-repos && cd test-repos && git clone https://github.com/dotnet/docs dotnet-docs --depth 1 --no-tags --quiet","declaration":"npm run build-declaration && npm run test-declaration","example":"cd example && node standalone.js && grunt markdownlint --force && gulp markdownlint","lint":"eslint --max-warnings 0 .","lint-test-repos":"ava --timeout=5m test/markdownlint-test-repos.js","test":"ava test/markdownlint-test.js test/markdownlint-test-custom-rules.js test/markdownlint-test-helpers.js test/markdownlint-test-result-object.js test/markdownlint-test-scenarios.js","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-declaration":"cd example/typescript && tsc && node type-check.js","test-extra":"ava --timeout=5m test/markdownlint-test-extra.js"},"engines":{"node":">=10"},"dependencies":{"markdown-it":"12.0.4"},"devDependencies":{"ava":"~3.15.0","c8":"~7.5.0","cpy-cli":"~3.1.1","eslint":"~7.19.0","eslint-plugin-jsdoc":"~31.6.0","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~27.0.0","globby":"~11.0.2","js-yaml":"~4.0.0","markdown-it-for-inline":"~0.1.1","markdown-it-sub":"~1.0.0","markdown-it-sup":"~1.0.0","markdown-it-texmath":"~0.8.0","markdownlint-rule-helpers":"~0.13.0","npm-run-all":"~4.1.5","rimraf":"~3.0.2","strip-json-comments":"~3.1.1","toml":"~3.0.0","ts-loader":"~8.0.15","tv4":"~1.3.0","typescript":"~4.1.3","webpack":"~5.21.1","webpack-cli":"~4.5.0"},"keywords":["markdown","lint","md","CommonMark","markdownlint"]}');
+module.exports = JSON.parse('{"name":"markdownlint","version":"0.24.0","description":"A Node.js style checker and lint tool for Markdown/CommonMark files.","main":"lib/markdownlint.js","types":"lib/markdownlint.d.ts","author":"David Anson (https://dlaa.me/)","license":"MIT","homepage":"https://github.com/DavidAnson/markdownlint","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint.git"},"bugs":"https://github.com/DavidAnson/markdownlint/issues","scripts":{"build-config":"npm run build-config-schema && npm run build-config-example","build-config-example":"node schema/build-config-example.js","build-config-schema":"node schema/build-config-schema.js","build-declaration":"tsc --allowJs --declaration --emitDeclarationOnly --resolveJsonModule lib/markdownlint.js && rimraf \'lib/{c,md,r}*.d.ts\' \'helpers/*.d.ts\'","build-demo":"cpy node_modules/markdown-it/dist/markdown-it.min.js demo && cd demo && rimraf markdownlint-browser.* && webpack --no-stats","build-example":"npm install --no-save --ignore-scripts grunt grunt-cli gulp through2","ci":"npm-run-all --continue-on-error --parallel test-cover lint declaration build-config build-demo && git diff --exit-code","clean-test-repos":"rimraf test-repos","clone-test-repos-dotnet-docs":"cd test-repos && git clone https://github.com/dotnet/docs dotnet-docs --depth 1 --no-tags --quiet","clone-test-repos-eslint-eslint":"cd test-repos && git clone https://github.com/eslint/eslint eslint-eslint --depth 1 --no-tags --quiet","clone-test-repos-mkdocs-mkdocs":"cd test-repos && git clone https://github.com/mkdocs/mkdocs mkdocs-mkdocs --depth 1 --no-tags --quiet","clone-test-repos-mochajs-mocha":"cd test-repos && git clone https://github.com/mochajs/mocha mochajs-mocha --depth 1 --no-tags --quiet","clone-test-repos-pi-hole-docs":"cd test-repos && git clone https://github.com/pi-hole/docs pi-hole-docs --depth 1 --no-tags --quiet","clone-test-repos-v8-v8-dev":"cd test-repos && git clone https://github.com/v8/v8.dev v8-v8-dev --depth 1 --no-tags --quiet","clone-test-repos-webhintio-hint":"cd test-repos && git clone https://github.com/webhintio/hint webhintio-hint --depth 1 --no-tags --quiet","clone-test-repos-webpack-webpack-js-org":"cd test-repos && git clone https://github.com/webpack/webpack.js.org webpack-webpack-js-org --depth 1 --no-tags --quiet","clone-test-repos":"mkdir test-repos && cd test-repos && npm run clone-test-repos-eslint-eslint && npm run clone-test-repos-mkdocs-mkdocs && npm run clone-test-repos-mochajs-mocha && npm run clone-test-repos-pi-hole-docs && npm run clone-test-repos-webhintio-hint && npm run clone-test-repos-webpack-webpack-js-org","clone-test-repos-large":"npm run clone-test-repos && cd test-repos && npm run clone-test-repos-dotnet-docs && npm run clone-test-repos-v8-v8-dev","declaration":"npm run build-declaration && npm run test-declaration","example":"cd example && node standalone.js && grunt markdownlint --force && gulp markdownlint","lint":"eslint --max-warnings 0 .","lint-test-repos":"ava --timeout=5m test/markdownlint-test-repos.js","test":"ava test/markdownlint-test.js test/markdownlint-test-custom-rules.js test/markdownlint-test-helpers.js test/markdownlint-test-result-object.js test/markdownlint-test-scenarios.js","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-declaration":"cd example/typescript && tsc && node type-check.js","test-extra":"ava --timeout=5m test/markdownlint-test-extra.js"},"engines":{"node":">=10"},"dependencies":{"markdown-it":"12.2.0"},"devDependencies":{"ava":"~3.15.0","c8":"~7.8.0","cpy-cli":"~3.1.1","eslint":"~7.32.0","eslint-plugin-jsdoc":"~36.0.7","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~35.0.0","globby":"~11.0.4","js-yaml":"~4.1.0","markdown-it-for-inline":"~0.1.1","markdown-it-sub":"~1.0.0","markdown-it-sup":"~1.0.0","markdown-it-texmath":"~0.9.1","markdownlint-rule-helpers":"~0.14.0","npm-run-all":"~4.1.5","rimraf":"~3.0.2","strip-json-comments":"~3.1.1","toml":"~3.0.0","ts-loader":"~9.2.5","tv4":"~1.3.0","typescript":"~4.3.5","webpack":"~5.51.1","webpack-cli":"~4.8.0"},"keywords":["markdown","lint","md","CommonMark","markdownlint"]}');
 
 /***/ }),
 
