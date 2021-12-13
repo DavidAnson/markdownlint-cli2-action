@@ -46,6 +46,13 @@ To lint specific Markdown files in a project:
       docs/*.md
 ```
 
+To prevent linting issues from failing the workflow run:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v4
+  continue-on-error: true
+```
+
 See [`example.yml`][example-yml] for a simple GitHub workflow that uses
 `markdownlint-cli2-action`.
 
