@@ -32,7 +32,7 @@ To lint all Markdown files in a project:
 ```yaml
 - uses: DavidAnson/markdownlint-cli2-action@v4
   with:
-    globs: **/*.md
+    globs: "**/*.md"
 ```
 
 To lint specific Markdown files in a project:
