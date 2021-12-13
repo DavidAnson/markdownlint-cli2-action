@@ -1,8 +1,15 @@
 # markdownlint-cli2-action
 
-A GitHub Action to run the [`markdownlint-cli2`][markdownlint-cli2] tool
+> A GitHub Action to run the [`markdownlint-cli2`][markdownlint-cli2] tool
 for linting [Markdown][markdown]/[CommonMark][commonmark] files with
 [`markdownlint`][markdownlint]
+
+`markdownlint-cli2` has extensive support for configuring options and
+disabling or customizing `markdownlint` rules. See the
+[`markdownlint-cli2` README][markdownlint-cli2] for more information.
+`markdownlint` includes a wide variety of rules for analyzing and improving
+Markdown content. See the [`markdownlint` README][markdownlint] for more
+information. 
 
 ## Inputs
 
