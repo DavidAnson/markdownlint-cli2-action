@@ -9,7 +9,7 @@ disabling or customizing `markdownlint` rules. See the
 [`markdownlint-cli2` README][markdownlint-cli2] for more information.
 `markdownlint` includes a wide variety of rules for analyzing and improving
 Markdown content. See the [`markdownlint` README][markdownlint] for more
-information. 
+information.
 
 ## Inputs
 
