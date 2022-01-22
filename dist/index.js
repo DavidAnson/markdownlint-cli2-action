@@ -27,7 +27,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.issue = exports.issueCommand = void 0;
-const os = __importStar(__nccwpck_require__(2087));
+const os = __importStar(__nccwpck_require__(2037));
 const utils_1 = __nccwpck_require__(5278);
 /**
  * Commands
@@ -134,12 +134,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getState = exports.saveState = exports.group = exports.endGroup = exports.startGroup = exports.info = exports.notice = exports.warning = exports.error = exports.debug = exports.isDebug = exports.setFailed = exports.setCommandEcho = exports.setOutput = exports.getBooleanInput = exports.getMultilineInput = exports.getInput = exports.addPath = exports.setSecret = exports.exportVariable = exports.ExitCode = void 0;
+exports.getIDToken = exports.getState = exports.saveState = exports.group = exports.endGroup = exports.startGroup = exports.info = exports.notice = exports.warning = exports.error = exports.debug = exports.isDebug = exports.setFailed = exports.setCommandEcho = exports.setOutput = exports.getBooleanInput = exports.getMultilineInput = exports.getInput = exports.addPath = exports.setSecret = exports.exportVariable = exports.ExitCode = void 0;
 const command_1 = __nccwpck_require__(7351);
 const file_command_1 = __nccwpck_require__(717);
 const utils_1 = __nccwpck_require__(5278);
-const os = __importStar(__nccwpck_require__(2087));
-const path = __importStar(__nccwpck_require__(5622));
+const os = __importStar(__nccwpck_require__(2037));
+const path = __importStar(__nccwpck_require__(1017));
+const oidc_utils_1 = __nccwpck_require__(8041);
 /**
  * The code to exit an action
  */
@@ -408,6 +409,12 @@ function getState(name) {
     return process.env[`STATE_${name}`] || '';
 }
 exports.getState = getState;
+function getIDToken(aud) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield oidc_utils_1.OidcClient.getIDToken(aud);
+    });
+}
+exports.getIDToken = getIDToken;
 //# sourceMappingURL=core.js.map
 
 /***/ }),
@@ -441,8 +448,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.issueCommand = void 0;
 // We use any as a valid input type
 /* eslint-disable @typescript-eslint/no-explicit-any */
-const fs = __importStar(__nccwpck_require__(5747));
-const os = __importStar(__nccwpck_require__(2087));
+const fs = __importStar(__nccwpck_require__(7147));
+const os = __importStar(__nccwpck_require__(2037));
 const utils_1 = __nccwpck_require__(5278);
 function issueCommand(command, message) {
     const filePath = process.env[`GITHUB_${command}`];
@@ -458,6 +465,90 @@ function issueCommand(command, message) {
 }
 exports.issueCommand = issueCommand;
 //# sourceMappingURL=file-command.js.map
+
+/***/ }),
+
+/***/ 8041:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OidcClient = void 0;
+const http_client_1 = __nccwpck_require__(9925);
+const auth_1 = __nccwpck_require__(3702);
+const core_1 = __nccwpck_require__(2186);
+class OidcClient {
+    static createHttpClient(allowRetry = true, maxRetry = 10) {
+        const requestOptions = {
+            allowRetries: allowRetry,
+            maxRetries: maxRetry
+        };
+        return new http_client_1.HttpClient('actions/oidc-client', [new auth_1.BearerCredentialHandler(OidcClient.getRequestToken())], requestOptions);
+    }
+    static getRequestToken() {
+        const token = process.env['ACTIONS_ID_TOKEN_REQUEST_TOKEN'];
+        if (!token) {
+            throw new Error('Unable to get ACTIONS_ID_TOKEN_REQUEST_TOKEN env variable');
+        }
+        return token;
+    }
+    static getIDTokenUrl() {
+        const runtimeUrl = process.env['ACTIONS_ID_TOKEN_REQUEST_URL'];
+        if (!runtimeUrl) {
+            throw new Error('Unable to get ACTIONS_ID_TOKEN_REQUEST_URL env variable');
+        }
+        return runtimeUrl;
+    }
+    static getCall(id_token_url) {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            const httpclient = OidcClient.createHttpClient();
+            const res = yield httpclient
+                .getJson(id_token_url)
+                .catch(error => {
+                throw new Error(`Failed to get ID Token. \n 
+        Error Code : ${error.statusCode}\n 
+        Error Message: ${error.result.message}`);
+            });
+            const id_token = (_a = res.result) === null || _a === void 0 ? void 0 : _a.value;
+            if (!id_token) {
+                throw new Error('Response json body do not have ID Token field');
+            }
+            return id_token;
+        });
+    }
+    static getIDToken(audience) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // New ID Token is requested from action service
+                let id_token_url = OidcClient.getIDTokenUrl();
+                if (audience) {
+                    const encodedAudience = encodeURIComponent(audience);
+                    id_token_url = `${id_token_url}&audience=${encodedAudience}`;
+                }
+                core_1.debug(`ID token url is ${id_token_url}`);
+                const id_token = yield OidcClient.getCall(id_token_url);
+                core_1.setSecret(id_token);
+                return id_token;
+            }
+            catch (error) {
+                throw new Error(`Error message: ${error.message}`);
+            }
+        });
+    }
+}
+exports.OidcClient = OidcClient;
+//# sourceMappingURL=oidc-utils.js.map
 
 /***/ }),
 
@@ -496,6 +587,7 @@ function toCommandProperties(annotationProperties) {
     }
     return {
         title: annotationProperties.title,
+        file: annotationProperties.file,
         line: annotationProperties.startLine,
         endLine: annotationProperties.endLine,
         col: annotationProperties.startColumn,
@@ -507,6 +599,682 @@ exports.toCommandProperties = toCommandProperties;
 
 /***/ }),
 
+/***/ 3702:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+class BasicCredentialHandler {
+    constructor(username, password) {
+        this.username = username;
+        this.password = password;
+    }
+    prepareRequest(options) {
+        options.headers['Authorization'] =
+            'Basic ' +
+                Buffer.from(this.username + ':' + this.password).toString('base64');
+    }
+    // This handler cannot handle 401
+    canHandleAuthentication(response) {
+        return false;
+    }
+    handleAuthentication(httpClient, requestInfo, objs) {
+        return null;
+    }
+}
+exports.BasicCredentialHandler = BasicCredentialHandler;
+class BearerCredentialHandler {
+    constructor(token) {
+        this.token = token;
+    }
+    // currently implements pre-authorization
+    // TODO: support preAuth = false where it hooks on 401
+    prepareRequest(options) {
+        options.headers['Authorization'] = 'Bearer ' + this.token;
+    }
+    // This handler cannot handle 401
+    canHandleAuthentication(response) {
+        return false;
+    }
+    handleAuthentication(httpClient, requestInfo, objs) {
+        return null;
+    }
+}
+exports.BearerCredentialHandler = BearerCredentialHandler;
+class PersonalAccessTokenCredentialHandler {
+    constructor(token) {
+        this.token = token;
+    }
+    // currently implements pre-authorization
+    // TODO: support preAuth = false where it hooks on 401
+    prepareRequest(options) {
+        options.headers['Authorization'] =
+            'Basic ' + Buffer.from('PAT:' + this.token).toString('base64');
+    }
+    // This handler cannot handle 401
+    canHandleAuthentication(response) {
+        return false;
+    }
+    handleAuthentication(httpClient, requestInfo, objs) {
+        return null;
+    }
+}
+exports.PersonalAccessTokenCredentialHandler = PersonalAccessTokenCredentialHandler;
+
+
+/***/ }),
+
+/***/ 9925:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const http = __nccwpck_require__(3685);
+const https = __nccwpck_require__(5687);
+const pm = __nccwpck_require__(6443);
+let tunnel;
+var HttpCodes;
+(function (HttpCodes) {
+    HttpCodes[HttpCodes["OK"] = 200] = "OK";
+    HttpCodes[HttpCodes["MultipleChoices"] = 300] = "MultipleChoices";
+    HttpCodes[HttpCodes["MovedPermanently"] = 301] = "MovedPermanently";
+    HttpCodes[HttpCodes["ResourceMoved"] = 302] = "ResourceMoved";
+    HttpCodes[HttpCodes["SeeOther"] = 303] = "SeeOther";
+    HttpCodes[HttpCodes["NotModified"] = 304] = "NotModified";
+    HttpCodes[HttpCodes["UseProxy"] = 305] = "UseProxy";
+    HttpCodes[HttpCodes["SwitchProxy"] = 306] = "SwitchProxy";
+    HttpCodes[HttpCodes["TemporaryRedirect"] = 307] = "TemporaryRedirect";
+    HttpCodes[HttpCodes["PermanentRedirect"] = 308] = "PermanentRedirect";
+    HttpCodes[HttpCodes["BadRequest"] = 400] = "BadRequest";
+    HttpCodes[HttpCodes["Unauthorized"] = 401] = "Unauthorized";
+    HttpCodes[HttpCodes["PaymentRequired"] = 402] = "PaymentRequired";
+    HttpCodes[HttpCodes["Forbidden"] = 403] = "Forbidden";
+    HttpCodes[HttpCodes["NotFound"] = 404] = "NotFound";
+    HttpCodes[HttpCodes["MethodNotAllowed"] = 405] = "MethodNotAllowed";
+    HttpCodes[HttpCodes["NotAcceptable"] = 406] = "NotAcceptable";
+    HttpCodes[HttpCodes["ProxyAuthenticationRequired"] = 407] = "ProxyAuthenticationRequired";
+    HttpCodes[HttpCodes["RequestTimeout"] = 408] = "RequestTimeout";
+    HttpCodes[HttpCodes["Conflict"] = 409] = "Conflict";
+    HttpCodes[HttpCodes["Gone"] = 410] = "Gone";
+    HttpCodes[HttpCodes["TooManyRequests"] = 429] = "TooManyRequests";
+    HttpCodes[HttpCodes["InternalServerError"] = 500] = "InternalServerError";
+    HttpCodes[HttpCodes["NotImplemented"] = 501] = "NotImplemented";
+    HttpCodes[HttpCodes["BadGateway"] = 502] = "BadGateway";
+    HttpCodes[HttpCodes["ServiceUnavailable"] = 503] = "ServiceUnavailable";
+    HttpCodes[HttpCodes["GatewayTimeout"] = 504] = "GatewayTimeout";
+})(HttpCodes = exports.HttpCodes || (exports.HttpCodes = {}));
+var Headers;
+(function (Headers) {
+    Headers["Accept"] = "accept";
+    Headers["ContentType"] = "content-type";
+})(Headers = exports.Headers || (exports.Headers = {}));
+var MediaTypes;
+(function (MediaTypes) {
+    MediaTypes["ApplicationJson"] = "application/json";
+})(MediaTypes = exports.MediaTypes || (exports.MediaTypes = {}));
+/**
+ * Returns the proxy URL, depending upon the supplied url and proxy environment variables.
+ * @param serverUrl  The server URL where the request will be sent. For example, https://api.github.com
+ */
+function getProxyUrl(serverUrl) {
+    let proxyUrl = pm.getProxyUrl(new URL(serverUrl));
+    return proxyUrl ? proxyUrl.href : '';
+}
+exports.getProxyUrl = getProxyUrl;
+const HttpRedirectCodes = [
+    HttpCodes.MovedPermanently,
+    HttpCodes.ResourceMoved,
+    HttpCodes.SeeOther,
+    HttpCodes.TemporaryRedirect,
+    HttpCodes.PermanentRedirect
+];
+const HttpResponseRetryCodes = [
+    HttpCodes.BadGateway,
+    HttpCodes.ServiceUnavailable,
+    HttpCodes.GatewayTimeout
+];
+const RetryableHttpVerbs = ['OPTIONS', 'GET', 'DELETE', 'HEAD'];
+const ExponentialBackoffCeiling = 10;
+const ExponentialBackoffTimeSlice = 5;
+class HttpClientError extends Error {
+    constructor(message, statusCode) {
+        super(message);
+        this.name = 'HttpClientError';
+        this.statusCode = statusCode;
+        Object.setPrototypeOf(this, HttpClientError.prototype);
+    }
+}
+exports.HttpClientError = HttpClientError;
+class HttpClientResponse {
+    constructor(message) {
+        this.message = message;
+    }
+    readBody() {
+        return new Promise(async (resolve, reject) => {
+            let output = Buffer.alloc(0);
+            this.message.on('data', (chunk) => {
+                output = Buffer.concat([output, chunk]);
+            });
+            this.message.on('end', () => {
+                resolve(output.toString());
+            });
+        });
+    }
+}
+exports.HttpClientResponse = HttpClientResponse;
+function isHttps(requestUrl) {
+    let parsedUrl = new URL(requestUrl);
+    return parsedUrl.protocol === 'https:';
+}
+exports.isHttps = isHttps;
+class HttpClient {
+    constructor(userAgent, handlers, requestOptions) {
+        this._ignoreSslError = false;
+        this._allowRedirects = true;
+        this._allowRedirectDowngrade = false;
+        this._maxRedirects = 50;
+        this._allowRetries = false;
+        this._maxRetries = 1;
+        this._keepAlive = false;
+        this._disposed = false;
+        this.userAgent = userAgent;
+        this.handlers = handlers || [];
+        this.requestOptions = requestOptions;
+        if (requestOptions) {
+            if (requestOptions.ignoreSslError != null) {
+                this._ignoreSslError = requestOptions.ignoreSslError;
+            }
+            this._socketTimeout = requestOptions.socketTimeout;
+            if (requestOptions.allowRedirects != null) {
+                this._allowRedirects = requestOptions.allowRedirects;
+            }
+            if (requestOptions.allowRedirectDowngrade != null) {
+                this._allowRedirectDowngrade = requestOptions.allowRedirectDowngrade;
+            }
+            if (requestOptions.maxRedirects != null) {
+                this._maxRedirects = Math.max(requestOptions.maxRedirects, 0);
+            }
+            if (requestOptions.keepAlive != null) {
+                this._keepAlive = requestOptions.keepAlive;
+            }
+            if (requestOptions.allowRetries != null) {
+                this._allowRetries = requestOptions.allowRetries;
+            }
+            if (requestOptions.maxRetries != null) {
+                this._maxRetries = requestOptions.maxRetries;
+            }
+        }
+    }
+    options(requestUrl, additionalHeaders) {
+        return this.request('OPTIONS', requestUrl, null, additionalHeaders || {});
+    }
+    get(requestUrl, additionalHeaders) {
+        return this.request('GET', requestUrl, null, additionalHeaders || {});
+    }
+    del(requestUrl, additionalHeaders) {
+        return this.request('DELETE', requestUrl, null, additionalHeaders || {});
+    }
+    post(requestUrl, data, additionalHeaders) {
+        return this.request('POST', requestUrl, data, additionalHeaders || {});
+    }
+    patch(requestUrl, data, additionalHeaders) {
+        return this.request('PATCH', requestUrl, data, additionalHeaders || {});
+    }
+    put(requestUrl, data, additionalHeaders) {
+        return this.request('PUT', requestUrl, data, additionalHeaders || {});
+    }
+    head(requestUrl, additionalHeaders) {
+        return this.request('HEAD', requestUrl, null, additionalHeaders || {});
+    }
+    sendStream(verb, requestUrl, stream, additionalHeaders) {
+        return this.request(verb, requestUrl, stream, additionalHeaders);
+    }
+    /**
+     * Gets a typed object from an endpoint
+     * Be aware that not found returns a null.  Other errors (4xx, 5xx) reject the promise
+     */
+    async getJson(requestUrl, additionalHeaders = {}) {
+        additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+        let res = await this.get(requestUrl, additionalHeaders);
+        return this._processResponse(res, this.requestOptions);
+    }
+    async postJson(requestUrl, obj, additionalHeaders = {}) {
+        let data = JSON.stringify(obj, null, 2);
+        additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+        additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+        let res = await this.post(requestUrl, data, additionalHeaders);
+        return this._processResponse(res, this.requestOptions);
+    }
+    async putJson(requestUrl, obj, additionalHeaders = {}) {
+        let data = JSON.stringify(obj, null, 2);
+        additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+        additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+        let res = await this.put(requestUrl, data, additionalHeaders);
+        return this._processResponse(res, this.requestOptions);
+    }
+    async patchJson(requestUrl, obj, additionalHeaders = {}) {
+        let data = JSON.stringify(obj, null, 2);
+        additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+        additionalHeaders[Headers.ContentType] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.ContentType, MediaTypes.ApplicationJson);
+        let res = await this.patch(requestUrl, data, additionalHeaders);
+        return this._processResponse(res, this.requestOptions);
+    }
+    /**
+     * Makes a raw http request.
+     * All other methods such as get, post, patch, and request ultimately call this.
+     * Prefer get, del, post and patch
+     */
+    async request(verb, requestUrl, data, headers) {
+        if (this._disposed) {
+            throw new Error('Client has already been disposed.');
+        }
+        let parsedUrl = new URL(requestUrl);
+        let info = this._prepareRequest(verb, parsedUrl, headers);
+        // Only perform retries on reads since writes may not be idempotent.
+        let maxTries = this._allowRetries && RetryableHttpVerbs.indexOf(verb) != -1
+            ? this._maxRetries + 1
+            : 1;
+        let numTries = 0;
+        let response;
+        while (numTries < maxTries) {
+            response = await this.requestRaw(info, data);
+            // Check if it's an authentication challenge
+            if (response &&
+                response.message &&
+                response.message.statusCode === HttpCodes.Unauthorized) {
+                let authenticationHandler;
+                for (let i = 0; i < this.handlers.length; i++) {
+                    if (this.handlers[i].canHandleAuthentication(response)) {
+                        authenticationHandler = this.handlers[i];
+                        break;
+                    }
+                }
+                if (authenticationHandler) {
+                    return authenticationHandler.handleAuthentication(this, info, data);
+                }
+                else {
+                    // We have received an unauthorized response but have no handlers to handle it.
+                    // Let the response return to the caller.
+                    return response;
+                }
+            }
+            let redirectsRemaining = this._maxRedirects;
+            while (HttpRedirectCodes.indexOf(response.message.statusCode) != -1 &&
+                this._allowRedirects &&
+                redirectsRemaining > 0) {
+                const redirectUrl = response.message.headers['location'];
+                if (!redirectUrl) {
+                    // if there's no location to redirect to, we won't
+                    break;
+                }
+                let parsedRedirectUrl = new URL(redirectUrl);
+                if (parsedUrl.protocol == 'https:' &&
+                    parsedUrl.protocol != parsedRedirectUrl.protocol &&
+                    !this._allowRedirectDowngrade) {
+                    throw new Error('Redirect from HTTPS to HTTP protocol. This downgrade is not allowed for security reasons. If you want to allow this behavior, set the allowRedirectDowngrade option to true.');
+                }
+                // we need to finish reading the response before reassigning response
+                // which will leak the open socket.
+                await response.readBody();
+                // strip authorization header if redirected to a different hostname
+                if (parsedRedirectUrl.hostname !== parsedUrl.hostname) {
+                    for (let header in headers) {
+                        // header names are case insensitive
+                        if (header.toLowerCase() === 'authorization') {
+                            delete headers[header];
+                        }
+                    }
+                }
+                // let's make the request with the new redirectUrl
+                info = this._prepareRequest(verb, parsedRedirectUrl, headers);
+                response = await this.requestRaw(info, data);
+                redirectsRemaining--;
+            }
+            if (HttpResponseRetryCodes.indexOf(response.message.statusCode) == -1) {
+                // If not a retry code, return immediately instead of retrying
+                return response;
+            }
+            numTries += 1;
+            if (numTries < maxTries) {
+                await response.readBody();
+                await this._performExponentialBackoff(numTries);
+            }
+        }
+        return response;
+    }
+    /**
+     * Needs to be called if keepAlive is set to true in request options.
+     */
+    dispose() {
+        if (this._agent) {
+            this._agent.destroy();
+        }
+        this._disposed = true;
+    }
+    /**
+     * Raw request.
+     * @param info
+     * @param data
+     */
+    requestRaw(info, data) {
+        return new Promise((resolve, reject) => {
+            let callbackForResult = function (err, res) {
+                if (err) {
+                    reject(err);
+                }
+                resolve(res);
+            };
+            this.requestRawWithCallback(info, data, callbackForResult);
+        });
+    }
+    /**
+     * Raw request with callback.
+     * @param info
+     * @param data
+     * @param onResult
+     */
+    requestRawWithCallback(info, data, onResult) {
+        let socket;
+        if (typeof data === 'string') {
+            info.options.headers['Content-Length'] = Buffer.byteLength(data, 'utf8');
+        }
+        let callbackCalled = false;
+        let handleResult = (err, res) => {
+            if (!callbackCalled) {
+                callbackCalled = true;
+                onResult(err, res);
+            }
+        };
+        let req = info.httpModule.request(info.options, (msg) => {
+            let res = new HttpClientResponse(msg);
+            handleResult(null, res);
+        });
+        req.on('socket', sock => {
+            socket = sock;
+        });
+        // If we ever get disconnected, we want the socket to timeout eventually
+        req.setTimeout(this._socketTimeout || 3 * 60000, () => {
+            if (socket) {
+                socket.end();
+            }
+            handleResult(new Error('Request timeout: ' + info.options.path), null);
+        });
+        req.on('error', function (err) {
+            // err has statusCode property
+            // res should have headers
+            handleResult(err, null);
+        });
+        if (data && typeof data === 'string') {
+            req.write(data, 'utf8');
+        }
+        if (data && typeof data !== 'string') {
+            data.on('close', function () {
+                req.end();
+            });
+            data.pipe(req);
+        }
+        else {
+            req.end();
+        }
+    }
+    /**
+     * Gets an http agent. This function is useful when you need an http agent that handles
+     * routing through a proxy server - depending upon the url and proxy environment variables.
+     * @param serverUrl  The server URL where the request will be sent. For example, https://api.github.com
+     */
+    getAgent(serverUrl) {
+        let parsedUrl = new URL(serverUrl);
+        return this._getAgent(parsedUrl);
+    }
+    _prepareRequest(method, requestUrl, headers) {
+        const info = {};
+        info.parsedUrl = requestUrl;
+        const usingSsl = info.parsedUrl.protocol === 'https:';
+        info.httpModule = usingSsl ? https : http;
+        const defaultPort = usingSsl ? 443 : 80;
+        info.options = {};
+        info.options.host = info.parsedUrl.hostname;
+        info.options.port = info.parsedUrl.port
+            ? parseInt(info.parsedUrl.port)
+            : defaultPort;
+        info.options.path =
+            (info.parsedUrl.pathname || '') + (info.parsedUrl.search || '');
+        info.options.method = method;
+        info.options.headers = this._mergeHeaders(headers);
+        if (this.userAgent != null) {
+            info.options.headers['user-agent'] = this.userAgent;
+        }
+        info.options.agent = this._getAgent(info.parsedUrl);
+        // gives handlers an opportunity to participate
+        if (this.handlers) {
+            this.handlers.forEach(handler => {
+                handler.prepareRequest(info.options);
+            });
+        }
+        return info;
+    }
+    _mergeHeaders(headers) {
+        const lowercaseKeys = obj => Object.keys(obj).reduce((c, k) => ((c[k.toLowerCase()] = obj[k]), c), {});
+        if (this.requestOptions && this.requestOptions.headers) {
+            return Object.assign({}, lowercaseKeys(this.requestOptions.headers), lowercaseKeys(headers));
+        }
+        return lowercaseKeys(headers || {});
+    }
+    _getExistingOrDefaultHeader(additionalHeaders, header, _default) {
+        const lowercaseKeys = obj => Object.keys(obj).reduce((c, k) => ((c[k.toLowerCase()] = obj[k]), c), {});
+        let clientHeader;
+        if (this.requestOptions && this.requestOptions.headers) {
+            clientHeader = lowercaseKeys(this.requestOptions.headers)[header];
+        }
+        return additionalHeaders[header] || clientHeader || _default;
+    }
+    _getAgent(parsedUrl) {
+        let agent;
+        let proxyUrl = pm.getProxyUrl(parsedUrl);
+        let useProxy = proxyUrl && proxyUrl.hostname;
+        if (this._keepAlive && useProxy) {
+            agent = this._proxyAgent;
+        }
+        if (this._keepAlive && !useProxy) {
+            agent = this._agent;
+        }
+        // if agent is already assigned use that agent.
+        if (!!agent) {
+            return agent;
+        }
+        const usingSsl = parsedUrl.protocol === 'https:';
+        let maxSockets = 100;
+        if (!!this.requestOptions) {
+            maxSockets = this.requestOptions.maxSockets || http.globalAgent.maxSockets;
+        }
+        if (useProxy) {
+            // If using proxy, need tunnel
+            if (!tunnel) {
+                tunnel = __nccwpck_require__(4294);
+            }
+            const agentOptions = {
+                maxSockets: maxSockets,
+                keepAlive: this._keepAlive,
+                proxy: {
+                    ...((proxyUrl.username || proxyUrl.password) && {
+                        proxyAuth: `${proxyUrl.username}:${proxyUrl.password}`
+                    }),
+                    host: proxyUrl.hostname,
+                    port: proxyUrl.port
+                }
+            };
+            let tunnelAgent;
+            const overHttps = proxyUrl.protocol === 'https:';
+            if (usingSsl) {
+                tunnelAgent = overHttps ? tunnel.httpsOverHttps : tunnel.httpsOverHttp;
+            }
+            else {
+                tunnelAgent = overHttps ? tunnel.httpOverHttps : tunnel.httpOverHttp;
+            }
+            agent = tunnelAgent(agentOptions);
+            this._proxyAgent = agent;
+        }
+        // if reusing agent across request and tunneling agent isn't assigned create a new agent
+        if (this._keepAlive && !agent) {
+            const options = { keepAlive: this._keepAlive, maxSockets: maxSockets };
+            agent = usingSsl ? new https.Agent(options) : new http.Agent(options);
+            this._agent = agent;
+        }
+        // if not using private agent and tunnel agent isn't setup then use global agent
+        if (!agent) {
+            agent = usingSsl ? https.globalAgent : http.globalAgent;
+        }
+        if (usingSsl && this._ignoreSslError) {
+            // we don't want to set NODE_TLS_REJECT_UNAUTHORIZED=0 since that will affect request for entire process
+            // http.RequestOptions doesn't expose a way to modify RequestOptions.agent.options
+            // we have to cast it to any and change it directly
+            agent.options = Object.assign(agent.options || {}, {
+                rejectUnauthorized: false
+            });
+        }
+        return agent;
+    }
+    _performExponentialBackoff(retryNumber) {
+        retryNumber = Math.min(ExponentialBackoffCeiling, retryNumber);
+        const ms = ExponentialBackoffTimeSlice * Math.pow(2, retryNumber);
+        return new Promise(resolve => setTimeout(() => resolve(), ms));
+    }
+    static dateTimeDeserializer(key, value) {
+        if (typeof value === 'string') {
+            let a = new Date(value);
+            if (!isNaN(a.valueOf())) {
+                return a;
+            }
+        }
+        return value;
+    }
+    async _processResponse(res, options) {
+        return new Promise(async (resolve, reject) => {
+            const statusCode = res.message.statusCode;
+            const response = {
+                statusCode: statusCode,
+                result: null,
+                headers: {}
+            };
+            // not found leads to null obj returned
+            if (statusCode == HttpCodes.NotFound) {
+                resolve(response);
+            }
+            let obj;
+            let contents;
+            // get the result from the body
+            try {
+                contents = await res.readBody();
+                if (contents && contents.length > 0) {
+                    if (options && options.deserializeDates) {
+                        obj = JSON.parse(contents, HttpClient.dateTimeDeserializer);
+                    }
+                    else {
+                        obj = JSON.parse(contents);
+                    }
+                    response.result = obj;
+                }
+                response.headers = res.message.headers;
+            }
+            catch (err) {
+                // Invalid resource (contents not json);  leaving result obj null
+            }
+            // note that 3xx redirects are handled by the http layer.
+            if (statusCode > 299) {
+                let msg;
+                // if exception/error in body, attempt to get better error
+                if (obj && obj.message) {
+                    msg = obj.message;
+                }
+                else if (contents && contents.length > 0) {
+                    // it may be the case that the exception is in the body message as string
+                    msg = contents;
+                }
+                else {
+                    msg = 'Failed request: (' + statusCode + ')';
+                }
+                let err = new HttpClientError(msg, statusCode);
+                err.result = response.result;
+                reject(err);
+            }
+            else {
+                resolve(response);
+            }
+        });
+    }
+}
+exports.HttpClient = HttpClient;
+
+
+/***/ }),
+
+/***/ 6443:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+function getProxyUrl(reqUrl) {
+    let usingSsl = reqUrl.protocol === 'https:';
+    let proxyUrl;
+    if (checkBypass(reqUrl)) {
+        return proxyUrl;
+    }
+    let proxyVar;
+    if (usingSsl) {
+        proxyVar = process.env['https_proxy'] || process.env['HTTPS_PROXY'];
+    }
+    else {
+        proxyVar = process.env['http_proxy'] || process.env['HTTP_PROXY'];
+    }
+    if (proxyVar) {
+        proxyUrl = new URL(proxyVar);
+    }
+    return proxyUrl;
+}
+exports.getProxyUrl = getProxyUrl;
+function checkBypass(reqUrl) {
+    if (!reqUrl.hostname) {
+        return false;
+    }
+    let noProxy = process.env['no_proxy'] || process.env['NO_PROXY'] || '';
+    if (!noProxy) {
+        return false;
+    }
+    // Determine the request port
+    let reqPort;
+    if (reqUrl.port) {
+        reqPort = Number(reqUrl.port);
+    }
+    else if (reqUrl.protocol === 'http:') {
+        reqPort = 80;
+    }
+    else if (reqUrl.protocol === 'https:') {
+        reqPort = 443;
+    }
+    // Format the request hostname and hostname with port
+    let upperReqHosts = [reqUrl.hostname.toUpperCase()];
+    if (typeof reqPort === 'number') {
+        upperReqHosts.push(`${upperReqHosts[0]}:${reqPort}`);
+    }
+    // Compare request host against noproxy
+    for (let upperNoProxyItem of noProxy
+        .split(',')
+        .map(x => x.trim().toUpperCase())
+        .filter(x => x)) {
+        if (upperReqHosts.some(x => x === upperNoProxyItem)) {
+            return true;
+        }
+    }
+    return false;
+}
+exports.checkBypass = checkBypass;
+
+
+/***/ }),
+
 /***/ 3803:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -514,7 +1282,7 @@ exports.toCommandProperties = toCommandProperties;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.createFileSystemAdapter = exports.FILE_SYSTEM_ADAPTER = void 0;
-const fs = __nccwpck_require__(5747);
+const fs = __nccwpck_require__(7147);
 exports.FILE_SYSTEM_ADAPTER = {
     lstat: fs.lstat,
     stat: fs.stat,
@@ -794,7 +1562,7 @@ exports.readdir = readdir;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const fsStat = __nccwpck_require__(109);
 const fs = __nccwpck_require__(3803);
 class Settings {
@@ -815,7 +1583,7 @@ class Settings {
         return option !== null && option !== void 0 ? option : value;
     }
 }
-exports.default = Settings;
+exports["default"] = Settings;
 
 
 /***/ }),
@@ -867,7 +1635,7 @@ exports.fs = fs;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.createFileSystemAdapter = exports.FILE_SYSTEM_ADAPTER = void 0;
-const fs = __nccwpck_require__(5747);
+const fs = __nccwpck_require__(7147);
 exports.FILE_SYSTEM_ADAPTER = {
     lstat: fs.lstat,
     stat: fs.stat,
@@ -1013,7 +1781,7 @@ class Settings {
         return option !== null && option !== void 0 ? option : value;
     }
 }
-exports.default = Settings;
+exports["default"] = Settings;
 
 
 /***/ }),
@@ -1066,7 +1834,7 @@ function getSettings(settingsOrOptions = {}) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const async_1 = __nccwpck_require__(5732);
+const async_1 = __nccwpck_require__(7664);
 class AsyncProvider {
     constructor(_root, _settings) {
         this._root = _root;
@@ -1087,7 +1855,7 @@ class AsyncProvider {
         this._reader.read();
     }
 }
-exports.default = AsyncProvider;
+exports["default"] = AsyncProvider;
 function callFailureCallback(callback, error) {
     callback(error);
 }
@@ -1104,8 +1872,8 @@ function callSuccessCallback(callback, entries) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const stream_1 = __nccwpck_require__(2413);
-const async_1 = __nccwpck_require__(5732);
+const stream_1 = __nccwpck_require__(2781);
+const async_1 = __nccwpck_require__(7664);
 class StreamProvider {
     constructor(_root, _settings) {
         this._root = _root;
@@ -1135,7 +1903,7 @@ class StreamProvider {
         return this._stream;
     }
 }
-exports.default = StreamProvider;
+exports["default"] = StreamProvider;
 
 
 /***/ }),
@@ -1157,18 +1925,18 @@ class SyncProvider {
         return this._reader.read();
     }
 }
-exports.default = SyncProvider;
+exports["default"] = SyncProvider;
 
 
 /***/ }),
 
-/***/ 5732:
+/***/ 7664:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const events_1 = __nccwpck_require__(8614);
+const events_1 = __nccwpck_require__(2361);
 const fsScandir = __nccwpck_require__(5667);
 const fastq = __nccwpck_require__(7340);
 const common = __nccwpck_require__(7988);
@@ -1262,7 +2030,7 @@ class AsyncReader extends reader_1.default {
         this._emitter.emit('entry', entry);
     }
 }
-exports.default = AsyncReader;
+exports["default"] = AsyncReader;
 
 
 /***/ }),
@@ -1320,7 +2088,7 @@ class Reader {
         this._root = common.replacePathSegmentSeparator(_root, _settings.pathSegmentSeparator);
     }
 }
-exports.default = Reader;
+exports["default"] = Reader;
 
 
 /***/ }),
@@ -1387,7 +2155,7 @@ class SyncReader extends reader_1.default {
         this._storage.push(entry);
     }
 }
-exports.default = SyncReader;
+exports["default"] = SyncReader;
 
 
 /***/ }),
@@ -1398,7 +2166,7 @@ exports.default = SyncReader;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const fsScandir = __nccwpck_require__(5667);
 class Settings {
     constructor(_options = {}) {
@@ -1421,20 +2189,7 @@ class Settings {
         return option !== null && option !== void 0 ? option : value;
     }
 }
-exports.default = Settings;
-
-
-/***/ }),
-
-/***/ 9600:
-/***/ ((module) => {
-
-"use strict";
-
-
-module.exports = (...arguments_) => {
-	return [...new Set([].concat(...arguments_))];
-};
+exports["default"] = Settings;
 
 
 /***/ }),
@@ -1682,7 +2437,7 @@ module.exports = compile;
 
 /***/ }),
 
-/***/ 8774:
+/***/ 4600:
 /***/ ((module) => {
 
 "use strict";
@@ -1896,7 +2651,7 @@ const {
   CHAR_SINGLE_QUOTE, /* ' */
   CHAR_NO_BREAK_SPACE,
   CHAR_ZERO_WIDTH_NOBREAK_SPACE
-} = __nccwpck_require__(8774);
+} = __nccwpck_require__(4600);
 
 /**
  * parse
@@ -2374,7 +3129,7 @@ exports.flatten = (...args) => {
 
 "use strict";
 
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const pathType = __nccwpck_require__(3433);
 
 const getExtensions = extensions => extensions.length > 1 ? `{${extensions.join(',')}}` : extensions[0];
@@ -2447,6 +3202,56 @@ module.exports.sync = (input, options) => {
 	const globs = [].concat(input).map(x => pathType.isDirectorySync(getPath(x, options.cwd)) ? getGlob(x, options) : x);
 
 	return [].concat.apply([], globs); // eslint-disable-line prefer-spread
+};
+
+
+/***/ }),
+
+/***/ 4460:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+var isGlob = __nccwpck_require__(4466);
+var pathPosixDirname = (__nccwpck_require__(1017).posix.dirname);
+var isWin32 = (__nccwpck_require__(2037).platform)() === 'win32';
+
+var slash = '/';
+var backslash = /\\/g;
+var enclosure = /[\{\[].*[\}\]]$/;
+var globby = /(^|[^\\])([\{\[]|\([^\)]+$)/;
+var escaped = /\\([\!\*\?\|\[\]\(\)\{\}])/g;
+
+/**
+ * @param {string} str
+ * @param {Object} opts
+ * @param {boolean} [opts.flipBackslashes=true]
+ * @returns {string}
+ */
+module.exports = function globParent(str, opts) {
+  var options = Object.assign({ flipBackslashes: true }, opts);
+
+  // flip windows path separators
+  if (options.flipBackslashes && isWin32 && str.indexOf(slash) < 0) {
+    str = str.replace(backslash, slash);
+  }
+
+  // special case for strings ending in enclosure containing path separator
+  if (enclosure.test(str)) {
+    str += slash;
+  }
+
+  // preserves full path in case of trailing path separator
+  str += 'a';
+
+  // remove path parts that are globby
+  do {
+    str = pathPosixDirname(str);
+  } while (isGlob(str) || globby.test(str));
+
+  // remove escape chars and return result
+  return str.replace(escaped, '$1');
 };
 
 
@@ -2676,7 +3481,7 @@ class ProviderAsync extends provider_1.default {
         return this._reader.static(task.patterns, options);
     }
 }
-exports.default = ProviderAsync;
+exports["default"] = ProviderAsync;
 
 
 /***/ }),
@@ -2746,7 +3551,7 @@ class DeepFilter {
         return !utils.pattern.matchAny(entryPath, patternsRe);
     }
 }
-exports.default = DeepFilter;
+exports["default"] = DeepFilter;
 
 
 /***/ }),
@@ -2814,7 +3619,7 @@ class EntryFilter {
         return utils.pattern.matchAny(filepath, patternsRe) || utils.pattern.matchAny(filepath + '/', patternsRe);
     }
 }
-exports.default = EntryFilter;
+exports["default"] = EntryFilter;
 
 
 /***/ }),
@@ -2837,7 +3642,7 @@ class ErrorFilter {
         return utils.errno.isEnoentCodeError(error) || this._settings.suppressErrors;
     }
 }
-exports.default = ErrorFilter;
+exports["default"] = ErrorFilter;
 
 
 /***/ }),
@@ -2895,7 +3700,7 @@ class Matcher {
         return utils.array.splitWhen(segments, (segment) => segment.dynamic && utils.pattern.hasGlobStar(segment.pattern));
     }
 }
-exports.default = Matcher;
+exports["default"] = Matcher;
 
 
 /***/ }),
@@ -2941,7 +3746,7 @@ class PartialMatcher extends matcher_1.default {
         return false;
     }
 }
-exports.default = PartialMatcher;
+exports["default"] = PartialMatcher;
 
 
 /***/ }),
@@ -2952,7 +3757,7 @@ exports.default = PartialMatcher;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const deep_1 = __nccwpck_require__(6983);
 const entry_1 = __nccwpck_require__(1343);
 const error_1 = __nccwpck_require__(6654);
@@ -2997,7 +3802,7 @@ class Provider {
         };
     }
 }
-exports.default = Provider;
+exports["default"] = Provider;
 
 
 /***/ }),
@@ -3008,7 +3813,7 @@ exports.default = Provider;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const stream_1 = __nccwpck_require__(2413);
+const stream_1 = __nccwpck_require__(2781);
 const stream_2 = __nccwpck_require__(2083);
 const provider_1 = __nccwpck_require__(257);
 class ProviderStream extends provider_1.default {
@@ -3036,7 +3841,7 @@ class ProviderStream extends provider_1.default {
         return this._reader.static(task.patterns, options);
     }
 }
-exports.default = ProviderStream;
+exports["default"] = ProviderStream;
 
 
 /***/ }),
@@ -3067,7 +3872,7 @@ class ProviderSync extends provider_1.default {
         return this._reader.static(task.patterns, options);
     }
 }
-exports.default = ProviderSync;
+exports["default"] = ProviderSync;
 
 
 /***/ }),
@@ -3101,7 +3906,7 @@ class EntryTransformer {
         return Object.assign(Object.assign({}, entry), { path: filepath });
     }
 }
-exports.default = EntryTransformer;
+exports["default"] = EntryTransformer;
 
 
 /***/ }),
@@ -3112,7 +3917,7 @@ exports.default = EntryTransformer;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const fsStat = __nccwpck_require__(109);
 const utils = __nccwpck_require__(5444);
 class Reader {
@@ -3142,7 +3947,7 @@ class Reader {
         return !utils.errno.isEnoentCodeError(error) && !this._settings.suppressErrors;
     }
 }
-exports.default = Reader;
+exports["default"] = Reader;
 
 
 /***/ }),
@@ -3153,7 +3958,7 @@ exports.default = Reader;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const stream_1 = __nccwpck_require__(2413);
+const stream_1 = __nccwpck_require__(2781);
 const fsStat = __nccwpck_require__(109);
 const fsWalk = __nccwpck_require__(6026);
 const reader_1 = __nccwpck_require__(5582);
@@ -3205,7 +4010,7 @@ class ReaderStream extends reader_1.default {
         });
     }
 }
-exports.default = ReaderStream;
+exports["default"] = ReaderStream;
 
 
 /***/ }),
@@ -3256,7 +4061,7 @@ class ReaderSync extends reader_1.default {
         return this._statSync(filepath, this._fsStatSettings);
     }
 }
-exports.default = ReaderSync;
+exports["default"] = ReaderSync;
 
 
 /***/ }),
@@ -3268,8 +4073,8 @@ exports.default = ReaderSync;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DEFAULT_FILE_SYSTEM_ADAPTER = void 0;
-const fs = __nccwpck_require__(5747);
-const os = __nccwpck_require__(2087);
+const fs = __nccwpck_require__(7147);
+const os = __nccwpck_require__(2037);
 /**
  * The `os.cpus` method can return zero. We expect the number of cores to be greater than zero.
  * https://github.com/nodejs/node/blob/7faeddf23a98c53896f8b574a6e66589e8fb1eb8/lib/os.js#L106-L107
@@ -3321,7 +4126,7 @@ class Settings {
         return Object.assign(Object.assign({}, exports.DEFAULT_FILE_SYSTEM_ADAPTER), methods);
     }
 }
-exports.default = Settings;
+exports["default"] = Settings;
 
 
 /***/ }),
@@ -3430,7 +4235,7 @@ exports.string = string;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.removeLeadingDotSegment = exports.escape = exports.makeAbsolute = exports.unixify = void 0;
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const LEADING_DOT_SEGMENT_CHARACTERS_COUNT = 2; // ./ or .\\
 const UNESCAPED_GLOB_SYMBOLS_RE = /(\\?)([()*?[\]{|}]|^!|[!+@](?=\())/g;
 /**
@@ -3471,8 +4276,8 @@ exports.removeLeadingDotSegment = removeLeadingDotSegment;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.matchAny = exports.convertPatternsToRe = exports.makeRe = exports.getPatternParts = exports.expandBraceExpansion = exports.expandPatternsWithBraceExpansion = exports.isAffectDepthOfReadingPattern = exports.endsWithSlashGlobStar = exports.hasGlobStar = exports.getBaseDirectory = exports.isPatternRelatedToParentDirectory = exports.getPatternsOutsideCurrentDirectory = exports.getPatternsInsideCurrentDirectory = exports.getPositivePatterns = exports.getNegativePatterns = exports.isPositivePattern = exports.isNegativePattern = exports.convertToNegativePattern = exports.convertToPositivePattern = exports.isDynamicPattern = exports.isStaticPattern = void 0;
-const path = __nccwpck_require__(5622);
-const globParent = __nccwpck_require__(4655);
+const path = __nccwpck_require__(1017);
+const globParent = __nccwpck_require__(4460);
 const micromatch = __nccwpck_require__(6228);
 const GLOBSTAR = '**';
 const ESCAPE_SYMBOL = '\\';
@@ -3989,7 +4794,7 @@ module.exports.promise = queueAsPromised
 
 
 
-const util = __nccwpck_require__(1669);
+const util = __nccwpck_require__(3837);
 const toRegexRange = __nccwpck_require__(1861);
 
 const isObject = val => val !== null && typeof val === 'object' && !Array.isArray(val);
@@ -4233,374 +5038,7 @@ module.exports = fill;
 
 /***/ }),
 
-/***/ 4655:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var isGlob = __nccwpck_require__(4466);
-var pathPosixDirname = __nccwpck_require__(5622).posix.dirname;
-var isWin32 = __nccwpck_require__(2087).platform() === 'win32';
-
-var slash = '/';
-var backslash = /\\/g;
-var enclosure = /[\{\[].*[\}\]]$/;
-var globby = /(^|[^\\])([\{\[]|\([^\)]+$)/;
-var escaped = /\\([\!\*\?\|\[\]\(\)\{\}])/g;
-
-/**
- * @param {string} str
- * @param {Object} opts
- * @param {boolean} [opts.flipBackslashes=true]
- * @returns {string}
- */
-module.exports = function globParent(str, opts) {
-  var options = Object.assign({ flipBackslashes: true }, opts);
-
-  // flip windows path separators
-  if (options.flipBackslashes && isWin32 && str.indexOf(slash) < 0) {
-    str = str.replace(backslash, slash);
-  }
-
-  // special case for strings ending in enclosure containing path separator
-  if (enclosure.test(str)) {
-    str += slash;
-  }
-
-  // preserves full path in case of trailing path separator
-  str += 'a';
-
-  // remove path parts that are globby
-  do {
-    str = pathPosixDirname(str);
-  } while (isGlob(str) || globby.test(str));
-
-  // remove escape chars and return result
-  return str.replace(escaped, '$1');
-};
-
-
-/***/ }),
-
-/***/ 9038:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-const {promisify} = __nccwpck_require__(1669);
-const fs = __nccwpck_require__(5747);
-const path = __nccwpck_require__(5622);
-const fastGlob = __nccwpck_require__(3664);
-const gitIgnore = __nccwpck_require__(2069);
-const slash = __nccwpck_require__(4111);
-
-const DEFAULT_IGNORE = [
-	'**/node_modules/**',
-	'**/flow-typed/**',
-	'**/coverage/**',
-	'**/.git'
-];
-
-const readFileP = promisify(fs.readFile);
-
-const mapGitIgnorePatternTo = base => ignore => {
-	if (ignore.startsWith('!')) {
-		return '!' + path.posix.join(base, ignore.slice(1));
-	}
-
-	return path.posix.join(base, ignore);
-};
-
-const parseGitIgnore = (content, options) => {
-	const base = slash(path.relative(options.cwd, path.dirname(options.fileName)));
-
-	return content
-		.split(/\r?\n/)
-		.filter(Boolean)
-		.filter(line => !line.startsWith('#'))
-		.map(mapGitIgnorePatternTo(base));
-};
-
-const reduceIgnore = files => {
-	const ignores = gitIgnore();
-	for (const file of files) {
-		ignores.add(parseGitIgnore(file.content, {
-			cwd: file.cwd,
-			fileName: file.filePath
-		}));
-	}
-
-	return ignores;
-};
-
-const ensureAbsolutePathForCwd = (cwd, p) => {
-	cwd = slash(cwd);
-	if (path.isAbsolute(p)) {
-		if (slash(p).startsWith(cwd)) {
-			return p;
-		}
-
-		throw new Error(`Path ${p} is not in cwd ${cwd}`);
-	}
-
-	return path.join(cwd, p);
-};
-
-const getIsIgnoredPredecate = (ignores, cwd) => {
-	return p => ignores.ignores(slash(path.relative(cwd, ensureAbsolutePathForCwd(cwd, p.path || p))));
-};
-
-const getFile = async (file, cwd) => {
-	const filePath = path.join(cwd, file);
-	const content = await readFileP(filePath, 'utf8');
-
-	return {
-		cwd,
-		filePath,
-		content
-	};
-};
-
-const getFileSync = (file, cwd) => {
-	const filePath = path.join(cwd, file);
-	const content = fs.readFileSync(filePath, 'utf8');
-
-	return {
-		cwd,
-		filePath,
-		content
-	};
-};
-
-const normalizeOptions = ({
-	ignore = [],
-	cwd = slash(process.cwd())
-} = {}) => {
-	return {ignore, cwd};
-};
-
-module.exports = async options => {
-	options = normalizeOptions(options);
-
-	const paths = await fastGlob('**/.gitignore', {
-		ignore: DEFAULT_IGNORE.concat(options.ignore),
-		cwd: options.cwd
-	});
-
-	const files = await Promise.all(paths.map(file => getFile(file, options.cwd)));
-	const ignores = reduceIgnore(files);
-
-	return getIsIgnoredPredecate(ignores, options.cwd);
-};
-
-module.exports.sync = options => {
-	options = normalizeOptions(options);
-
-	const paths = fastGlob.sync('**/.gitignore', {
-		ignore: DEFAULT_IGNORE.concat(options.ignore),
-		cwd: options.cwd
-	});
-
-	const files = paths.map(file => getFileSync(file, options.cwd));
-	const ignores = reduceIgnore(files);
-
-	return getIsIgnoredPredecate(ignores, options.cwd);
-};
-
-
-/***/ }),
-
-/***/ 3398:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-const fs = __nccwpck_require__(5747);
-const arrayUnion = __nccwpck_require__(9600);
-const merge2 = __nccwpck_require__(2578);
-const fastGlob = __nccwpck_require__(3664);
-const dirGlob = __nccwpck_require__(2738);
-const gitignore = __nccwpck_require__(9038);
-const {FilterStream, UniqueStream} = __nccwpck_require__(2408);
-
-const DEFAULT_FILTER = () => false;
-
-const isNegative = pattern => pattern[0] === '!';
-
-const assertPatternsInput = patterns => {
-	if (!patterns.every(pattern => typeof pattern === 'string')) {
-		throw new TypeError('Patterns must be a string or an array of strings');
-	}
-};
-
-const checkCwdOption = (options = {}) => {
-	if (!options.cwd) {
-		return;
-	}
-
-	let stat;
-	try {
-		stat = fs.statSync(options.cwd);
-	} catch {
-		return;
-	}
-
-	if (!stat.isDirectory()) {
-		throw new Error('The `cwd` option must be a path to a directory');
-	}
-};
-
-const getPathString = p => p.stats instanceof fs.Stats ? p.path : p;
-
-const generateGlobTasks = (patterns, taskOptions) => {
-	patterns = arrayUnion([].concat(patterns));
-	assertPatternsInput(patterns);
-	checkCwdOption(taskOptions);
-
-	const globTasks = [];
-
-	taskOptions = {
-		ignore: [],
-		expandDirectories: true,
-		...taskOptions
-	};
-
-	for (const [index, pattern] of patterns.entries()) {
-		if (isNegative(pattern)) {
-			continue;
-		}
-
-		const ignore = patterns
-			.slice(index)
-			.filter(pattern => isNegative(pattern))
-			.map(pattern => pattern.slice(1));
-
-		const options = {
-			...taskOptions,
-			ignore: taskOptions.ignore.concat(ignore)
-		};
-
-		globTasks.push({pattern, options});
-	}
-
-	return globTasks;
-};
-
-const globDirs = (task, fn) => {
-	let options = {};
-	if (task.options.cwd) {
-		options.cwd = task.options.cwd;
-	}
-
-	if (Array.isArray(task.options.expandDirectories)) {
-		options = {
-			...options,
-			files: task.options.expandDirectories
-		};
-	} else if (typeof task.options.expandDirectories === 'object') {
-		options = {
-			...options,
-			...task.options.expandDirectories
-		};
-	}
-
-	return fn(task.pattern, options);
-};
-
-const getPattern = (task, fn) => task.options.expandDirectories ? globDirs(task, fn) : [task.pattern];
-
-const getFilterSync = options => {
-	return options && options.gitignore ?
-		gitignore.sync({cwd: options.cwd, ignore: options.ignore}) :
-		DEFAULT_FILTER;
-};
-
-const globToTask = task => glob => {
-	const {options} = task;
-	if (options.ignore && Array.isArray(options.ignore) && options.expandDirectories) {
-		options.ignore = dirGlob.sync(options.ignore);
-	}
-
-	return {
-		pattern: glob,
-		options
-	};
-};
-
-module.exports = async (patterns, options) => {
-	const globTasks = generateGlobTasks(patterns, options);
-
-	const getFilter = async () => {
-		return options && options.gitignore ?
-			gitignore({cwd: options.cwd, ignore: options.ignore}) :
-			DEFAULT_FILTER;
-	};
-
-	const getTasks = async () => {
-		const tasks = await Promise.all(globTasks.map(async task => {
-			const globs = await getPattern(task, dirGlob);
-			return Promise.all(globs.map(globToTask(task)));
-		}));
-
-		return arrayUnion(...tasks);
-	};
-
-	const [filter, tasks] = await Promise.all([getFilter(), getTasks()]);
-	const paths = await Promise.all(tasks.map(task => fastGlob(task.pattern, task.options)));
-
-	return arrayUnion(...paths).filter(path_ => !filter(getPathString(path_)));
-};
-
-module.exports.sync = (patterns, options) => {
-	const globTasks = generateGlobTasks(patterns, options);
-
-	const tasks = [];
-	for (const task of globTasks) {
-		const newTask = getPattern(task, dirGlob.sync).map(globToTask(task));
-		tasks.push(...newTask);
-	}
-
-	const filter = getFilterSync(options);
-
-	let matches = [];
-	for (const task of tasks) {
-		matches = arrayUnion(matches, fastGlob.sync(task.pattern, task.options));
-	}
-
-	return matches.filter(path_ => !filter(path_));
-};
-
-module.exports.stream = (patterns, options) => {
-	const globTasks = generateGlobTasks(patterns, options);
-
-	const tasks = [];
-	for (const task of globTasks) {
-		const newTask = getPattern(task, dirGlob.sync).map(globToTask(task));
-		tasks.push(...newTask);
-	}
-
-	const filter = getFilterSync(options);
-	const filterStream = new FilterStream(p => !filter(p));
-	const uniqueStream = new UniqueStream();
-
-	return merge2(tasks.map(task => fastGlob.stream(task.pattern, task.options)))
-		.pipe(filterStream)
-		.pipe(uniqueStream);
-};
-
-module.exports.generateGlobTasks = generateGlobTasks;
-
-module.exports.hasMagic = (patterns, options) => []
-	.concat(patterns)
-	.some(pattern => fastGlob.isDynamicPattern(pattern, options));
-
-module.exports.gitignore = gitignore;
-
-
-/***/ }),
-
-/***/ 2069:
+/***/ 4777:
 /***/ ((module) => {
 
 // A simple implementation of make-array
@@ -5206,60 +5644,6 @@ if (
     REGIX_IS_WINDOWS_PATH_ABSOLUTE.test(path)
     || isNotRelative(path)
 }
-
-
-/***/ }),
-
-/***/ 2408:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-const {Transform} = __nccwpck_require__(2413);
-
-class ObjectTransform extends Transform {
-	constructor() {
-		super({
-			objectMode: true
-		});
-	}
-}
-
-class FilterStream extends ObjectTransform {
-	constructor(filter) {
-		super();
-		this._filter = filter;
-	}
-
-	_transform(data, encoding, callback) {
-		if (this._filter(data)) {
-			this.push(data);
-		}
-
-		callback();
-	}
-}
-
-class UniqueStream extends ObjectTransform {
-	constructor() {
-		super();
-		this._pushed = new Set();
-	}
-
-	_transform(data, encoding, callback) {
-		if (!this._pushed.has(data)) {
-			this.push(data);
-			this._pushed.add(data);
-		}
-
-		callback();
-	}
-}
-
-module.exports = {
-	FilterStream,
-	UniqueStream
-};
 
 
 /***/ }),
@@ -6129,10 +6513,10 @@ module.exports = function (opts) {
   var re = {};
 
   // Use direct extract instead of `regenerate` to reduse browserified size
-  re.src_Any = __nccwpck_require__(703).source;
-  re.src_Cc  = __nccwpck_require__(4338).source;
-  re.src_Z   = __nccwpck_require__(8810).source;
-  re.src_P   = __nccwpck_require__(8019).source;
+  re.src_Any = (__nccwpck_require__(703).source);
+  re.src_Cc  = (__nccwpck_require__(4338).source);
+  re.src_Z   = (__nccwpck_require__(8810).source);
+  re.src_P   = (__nccwpck_require__(8019).source);
 
   // \p{\Z\P\Cc\CF} (white spaces + control + format + punctuation)
   re.src_ZPCc = [ re.src_Z, re.src_P, re.src_Cc ].join('|');
@@ -6328,7 +6712,7 @@ module.exports = __nccwpck_require__(4949);
 
 
 /*eslint quotes:0*/
-module.exports = __nccwpck_require__(4007);
+module.exports = __nccwpck_require__(9323);
 
 
 /***/ }),
@@ -6796,7 +7180,7 @@ exports.parseLinkTitle = __nccwpck_require__(3085);
 
 
 
-var unescapeAll = __nccwpck_require__(506).unescapeAll;
+var unescapeAll = (__nccwpck_require__(506).unescapeAll);
 
 
 module.exports = function parseLinkDestination(str, pos, max) {
@@ -6942,7 +7326,7 @@ module.exports = function parseLinkLabel(state, start, disableNested) {
 
 
 
-var unescapeAll = __nccwpck_require__(506).unescapeAll;
+var unescapeAll = (__nccwpck_require__(506).unescapeAll);
 
 
 module.exports = function parseLinkTitle(str, pos, max) {
@@ -7013,7 +7397,7 @@ var ParserBlock  = __nccwpck_require__(8007);
 var ParserInline = __nccwpck_require__(6031);
 var LinkifyIt    = __nccwpck_require__(6786);
 var mdurl        = __nccwpck_require__(114);
-var punycode     = __nccwpck_require__(4213);
+var punycode     = __nccwpck_require__(5477);
 
 
 var config = {
@@ -7611,7 +7995,7 @@ var _rules = [
   [ 'hr',         __nccwpck_require__(3514),         [ 'paragraph', 'reference', 'blockquote', 'list' ] ],
   [ 'list',       __nccwpck_require__(2050),       [ 'paragraph', 'reference', 'blockquote' ] ],
   [ 'reference',  __nccwpck_require__(2235) ],
-  [ 'html_block', __nccwpck_require__(725), [ 'paragraph', 'reference', 'blockquote' ] ],
+  [ 'html_block', __nccwpck_require__(5732), [ 'paragraph', 'reference', 'blockquote' ] ],
   [ 'heading',    __nccwpck_require__(2702),    [ 'paragraph', 'reference', 'blockquote' ] ],
   [ 'lheading',   __nccwpck_require__(3551) ],
   [ 'paragraph',  __nccwpck_require__(9450) ]
@@ -7802,11 +8186,11 @@ var Ruler           = __nccwpck_require__(2093);
 
 var _rules = [
   [ 'text',            __nccwpck_require__(1117) ],
-  [ 'newline',         __nccwpck_require__(9810) ],
+  [ 'newline',         __nccwpck_require__(8774) ],
   [ 'escape',          __nccwpck_require__(1836) ],
   [ 'backticks',       __nccwpck_require__(8520) ],
-  [ 'strikethrough',   __nccwpck_require__(3015)/* .tokenize */ .w ],
-  [ 'emphasis',        __nccwpck_require__(1677)/* .tokenize */ .w ],
+  [ 'strikethrough',   (__nccwpck_require__(3015)/* .tokenize */ .w) ],
+  [ 'emphasis',        (__nccwpck_require__(1677)/* .tokenize */ .w) ],
   [ 'link',            __nccwpck_require__(8798) ],
   [ 'image',           __nccwpck_require__(9998) ],
   [ 'autolink',        __nccwpck_require__(3939) ],
@@ -7816,8 +8200,8 @@ var _rules = [
 
 var _rules2 = [
   [ 'balance_pairs',   __nccwpck_require__(9418) ],
-  [ 'strikethrough',   __nccwpck_require__(3015)/* .postProcess */ .g ],
-  [ 'emphasis',        __nccwpck_require__(1677)/* .postProcess */ .g ],
+  [ 'strikethrough',   (__nccwpck_require__(3015)/* .postProcess */ .g) ],
+  [ 'emphasis',        (__nccwpck_require__(1677)/* .postProcess */ .g) ],
   [ 'text_collapse',   __nccwpck_require__(2333) ]
 ];
 
@@ -8188,9 +8572,9 @@ module.exports = {
 
 
 
-var assign          = __nccwpck_require__(506).assign;
-var unescapeAll     = __nccwpck_require__(506).unescapeAll;
-var escapeHtml      = __nccwpck_require__(506).escapeHtml;
+var assign          = (__nccwpck_require__(506).assign);
+var unescapeAll     = (__nccwpck_require__(506).unescapeAll);
+var escapeHtml      = (__nccwpck_require__(506).escapeHtml);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -8437,7 +8821,7 @@ Renderer.prototype.renderToken = function renderToken(tokens, idx, options) {
 
 /**
  * Renderer.renderInline(tokens, options, env) -> String
- * - tokens (Array): list on block tokens to renter
+ * - tokens (Array): list on block tokens to render
  * - options (Object): params of parser instance
  * - env (Object): additional data from parsed input (references, for example)
  *
@@ -8464,7 +8848,7 @@ Renderer.prototype.renderInline = function (tokens, options, env) {
 
 /** internal
  * Renderer.renderInlineAsText(tokens, options, env) -> String
- * - tokens (Array): list on block tokens to renter
+ * - tokens (Array): list on block tokens to render
  * - options (Object): params of parser instance
  * - env (Object): additional data from parsed input (references, for example)
  *
@@ -8491,7 +8875,7 @@ Renderer.prototype.renderInlineAsText = function (tokens, options, env) {
 
 /**
  * Renderer.render(tokens, options, env) -> String
- * - tokens (Array): list on block tokens to renter
+ * - tokens (Array): list on block tokens to render
  * - options (Object): params of parser instance
  * - env (Object): additional data from parsed input (references, for example)
  *
@@ -8891,7 +9275,7 @@ module.exports = Ruler;
 
 
 
-var isSpace = __nccwpck_require__(506).isSpace;
+var isSpace = (__nccwpck_require__(506).isSpace);
 
 
 module.exports = function blockquote(state, startLine, endLine, silent) {
@@ -9331,7 +9715,7 @@ module.exports = function fence(state, startLine, endLine, silent) {
 
 
 
-var isSpace = __nccwpck_require__(506).isSpace;
+var isSpace = (__nccwpck_require__(506).isSpace);
 
 
 module.exports = function heading(state, startLine, endLine, silent) {
@@ -9394,7 +9778,7 @@ module.exports = function heading(state, startLine, endLine, silent) {
 
 
 
-var isSpace = __nccwpck_require__(506).isSpace;
+var isSpace = (__nccwpck_require__(506).isSpace);
 
 
 module.exports = function hr(state, startLine, endLine, silent) {
@@ -9439,7 +9823,7 @@ module.exports = function hr(state, startLine, endLine, silent) {
 
 /***/ }),
 
-/***/ 725:
+/***/ 5732:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -9449,7 +9833,7 @@ module.exports = function hr(state, startLine, endLine, silent) {
 
 
 var block_names = __nccwpck_require__(9035);
-var HTML_OPEN_CLOSE_TAG_RE = __nccwpck_require__(6537)/* .HTML_OPEN_CLOSE_TAG_RE */ .q;
+var HTML_OPEN_CLOSE_TAG_RE = (__nccwpck_require__(6537)/* .HTML_OPEN_CLOSE_TAG_RE */ .q);
 
 // An array of opening and corresponding closing sequences for html tags,
 // last argument defines whether it can terminate a paragraph or not
@@ -9620,7 +10004,7 @@ module.exports = function lheading(state, startLine, endLine/*, silent*/) {
 
 
 
-var isSpace = __nccwpck_require__(506).isSpace;
+var isSpace = (__nccwpck_require__(506).isSpace);
 
 
 // Search `[-+*][\n ]`, returns next pos after marker on success
@@ -9770,7 +10154,7 @@ module.exports = function list(state, startLine, endLine, silent) {
     // This code can fail if plugins use blkIndent as well as lists,
     // but I hope the spec gets fixed long before that happens.
     //
-    if (state.tShift[startLine] >= state.blkIndent) {
+    if (state.sCount[startLine] >= state.blkIndent) {
       isTerminatingParagraph = true;
     }
   }
@@ -10051,8 +10435,8 @@ module.exports = function paragraph(state, startLine/*, endLine*/) {
 
 
 
-var normalizeReference   = __nccwpck_require__(506).normalizeReference;
-var isSpace              = __nccwpck_require__(506).isSpace;
+var normalizeReference   = (__nccwpck_require__(506).normalizeReference);
+var isSpace              = (__nccwpck_require__(506).isSpace);
 
 
 module.exports = function reference(state, startLine, _endLine, silent) {
@@ -10259,7 +10643,7 @@ module.exports = function reference(state, startLine, _endLine, silent) {
 
 
 var Token = __nccwpck_require__(8622);
-var isSpace = __nccwpck_require__(506).isSpace;
+var isSpace = (__nccwpck_require__(506).isSpace);
 
 
 function StateBlock(src, md, env, tokens) {
@@ -10497,7 +10881,7 @@ module.exports = StateBlock;
 
 
 
-var isSpace = __nccwpck_require__(506).isSpace;
+var isSpace = (__nccwpck_require__(506).isSpace);
 
 
 function getLine(state, line) {
@@ -10774,7 +11158,7 @@ module.exports = function inline(state) {
 
 
 
-var arrayReplaceAt = __nccwpck_require__(506).arrayReplaceAt;
+var arrayReplaceAt = (__nccwpck_require__(506).arrayReplaceAt);
 
 
 function isLinkOpen(str) {
@@ -11057,9 +11441,9 @@ module.exports = function replace(state) {
 
 
 
-var isWhiteSpace   = __nccwpck_require__(506).isWhiteSpace;
-var isPunctChar    = __nccwpck_require__(506).isPunctChar;
-var isMdAsciiPunct = __nccwpck_require__(506).isMdAsciiPunct;
+var isWhiteSpace   = (__nccwpck_require__(506).isWhiteSpace);
+var isPunctChar    = (__nccwpck_require__(506).isPunctChar);
+var isMdAsciiPunct = (__nccwpck_require__(506).isMdAsciiPunct);
 
 var QUOTE_TEST_RE = /['"]/;
 var QUOTE_RE = /['"]/g;
@@ -11455,8 +11839,27 @@ function processDelimiters(state, delimiters) {
       openersBottom = {},
       max = delimiters.length;
 
+  if (!max) return;
+
+  // headerIdx is the first delimiter of the current (where closer is) delimiter run
+  var headerIdx = 0;
+  var lastTokenIdx = -2; // needs any value lower than -1
+  var jumps = [];
+
   for (closerIdx = 0; closerIdx < max; closerIdx++) {
     closer = delimiters[closerIdx];
+
+    jumps.push(0);
+
+    // markers belong to same delimiter run if:
+    //  - they have adjacent tokens
+    //  - AND markers are the same
+    //
+    if (delimiters[headerIdx].marker !== closer.marker || lastTokenIdx !== closer.token - 1) {
+      headerIdx = closerIdx;
+    }
+
+    lastTokenIdx = closer.token;
 
     // Length is only used for emphasis-specific "rule of 3",
     // if it's not defined (in strikethrough or 3rd party plugins),
@@ -11476,14 +11879,11 @@ function processDelimiters(state, delimiters) {
 
     minOpenerIdx = openersBottom[closer.marker][(closer.open ? 3 : 0) + (closer.length % 3)];
 
-    openerIdx = closerIdx - closer.jump - 1;
-
-    // avoid crash if `closer.jump` is pointing outside of the array, see #742
-    if (openerIdx < -1) openerIdx = -1;
+    openerIdx = headerIdx - jumps[headerIdx] - 1;
 
     newMinOpenerIdx = openerIdx;
 
-    for (; openerIdx > minOpenerIdx; openerIdx -= opener.jump + 1) {
+    for (; openerIdx > minOpenerIdx; openerIdx -= jumps[openerIdx] + 1) {
       opener = delimiters[openerIdx];
 
       if (opener.marker !== closer.marker) continue;
@@ -11513,15 +11913,19 @@ function processDelimiters(state, delimiters) {
           // sure algorithm has linear complexity (see *_*_*_*_*_... case).
           //
           lastJump = openerIdx > 0 && !delimiters[openerIdx - 1].open ?
-            delimiters[openerIdx - 1].jump + 1 :
+            jumps[openerIdx - 1] + 1 :
             0;
 
-          closer.jump  = closerIdx - openerIdx + lastJump;
+          jumps[closerIdx] = closerIdx - openerIdx + lastJump;
+          jumps[openerIdx] = lastJump;
+
           closer.open  = false;
           opener.end   = closerIdx;
-          opener.jump  = lastJump;
           opener.close = false;
           newMinOpenerIdx = -1;
+          // treat next token as start of run,
+          // it optimizes skips in **<...>**a**<...>** pathological case
+          lastTokenIdx = -2;
           break;
         }
       }
@@ -11593,15 +11997,6 @@ module.exports.w = function emphasis(state, silent) {
       //
       length: scanned.length,
 
-      // An amount of characters before this one that's equivalent to
-      // current one. In plain English: if this delimiter does not open
-      // an emphasis, neither do previous `jump` characters.
-      //
-      // Used to skip sequences like "*****" in one step, for 1st asterisk
-      // value will be 0, for 2nd it's 1 and so on.
-      //
-      jump:   i,
-
       // A position of the token this delimiter corresponds to.
       //
       token:  state.tokens.length - 1,
@@ -11655,9 +12050,11 @@ function postProcess(state, delimiters) {
     //
     isStrong = i > 0 &&
                delimiters[i - 1].end === startDelim.end + 1 &&
+               // check that first two markers match and adjacent
+               delimiters[i - 1].marker === startDelim.marker &&
                delimiters[i - 1].token === startDelim.token - 1 &&
-               delimiters[startDelim.end + 1].token === endDelim.token + 1 &&
-               delimiters[i - 1].marker === startDelim.marker;
+               // check that last two markers are adjacent (we can safely assume they match)
+               delimiters[startDelim.end + 1].token === endDelim.token + 1;
 
     ch = String.fromCharCode(startDelim.marker);
 
@@ -11712,9 +12109,9 @@ module.exports.g = function emphasis(state) {
 
 
 var entities          = __nccwpck_require__(9220);
-var has               = __nccwpck_require__(506).has;
-var isValidEntityCode = __nccwpck_require__(506).isValidEntityCode;
-var fromCodePoint     = __nccwpck_require__(506).fromCodePoint;
+var has               = (__nccwpck_require__(506).has);
+var isValidEntityCode = (__nccwpck_require__(506).isValidEntityCode);
+var fromCodePoint     = (__nccwpck_require__(506).fromCodePoint);
 
 
 var DIGITAL_RE = /^&#((?:x[a-f0-9]{1,6}|[0-9]{1,7}));/i;
@@ -11767,7 +12164,7 @@ module.exports = function entity(state, silent) {
 
 
 
-var isSpace = __nccwpck_require__(506).isSpace;
+var isSpace = (__nccwpck_require__(506).isSpace);
 
 var ESCAPED = [];
 
@@ -11828,7 +12225,7 @@ module.exports = function escape(state, silent) {
 
 
 
-var HTML_TAG_RE = __nccwpck_require__(6537)/* .HTML_TAG_RE */ .n;
+var HTML_TAG_RE = (__nccwpck_require__(6537)/* .HTML_TAG_RE */ .n);
 
 
 function isLetter(ch) {
@@ -11882,8 +12279,8 @@ module.exports = function html_inline(state, silent) {
 
 
 
-var normalizeReference   = __nccwpck_require__(506).normalizeReference;
-var isSpace              = __nccwpck_require__(506).isSpace;
+var normalizeReference   = (__nccwpck_require__(506).normalizeReference);
+var isSpace              = (__nccwpck_require__(506).isSpace);
 
 
 module.exports = function image(state, silent) {
@@ -12042,8 +12439,8 @@ module.exports = function image(state, silent) {
 
 
 
-var normalizeReference   = __nccwpck_require__(506).normalizeReference;
-var isSpace              = __nccwpck_require__(506).isSpace;
+var normalizeReference   = (__nccwpck_require__(506).normalizeReference);
+var isSpace              = (__nccwpck_require__(506).isSpace);
 
 
 module.exports = function link(state, silent) {
@@ -12190,7 +12587,7 @@ module.exports = function link(state, silent) {
 
 /***/ }),
 
-/***/ 9810:
+/***/ 8774:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -12198,11 +12595,11 @@ module.exports = function link(state, silent) {
 
 
 
-var isSpace = __nccwpck_require__(506).isSpace;
+var isSpace = (__nccwpck_require__(506).isSpace);
 
 
 module.exports = function newline(state, silent) {
-  var pmax, max, pos = state.pos;
+  var pmax, max, ws, pos = state.pos;
 
   if (state.src.charCodeAt(pos) !== 0x0A/* \n */) { return false; }
 
@@ -12216,7 +12613,11 @@ module.exports = function newline(state, silent) {
   if (!silent) {
     if (pmax >= 0 && state.pending.charCodeAt(pmax) === 0x20) {
       if (pmax >= 1 && state.pending.charCodeAt(pmax - 1) === 0x20) {
-        state.pending = state.pending.replace(/ +$/, '');
+        // Find whitespaces tail of pending chars.
+        ws = pmax - 1;
+        while (ws >= 1 && state.pending.charCodeAt(ws - 1) === 0x20) ws--;
+
+        state.pending = state.pending.slice(0, ws);
         state.push('hardbreak', 'br', 0);
       } else {
         state.pending = state.pending.slice(0, -1);
@@ -12250,9 +12651,9 @@ module.exports = function newline(state, silent) {
 
 
 var Token          = __nccwpck_require__(8622);
-var isWhiteSpace   = __nccwpck_require__(506).isWhiteSpace;
-var isPunctChar    = __nccwpck_require__(506).isPunctChar;
-var isMdAsciiPunct = __nccwpck_require__(506).isMdAsciiPunct;
+var isWhiteSpace   = (__nccwpck_require__(506).isWhiteSpace);
+var isPunctChar    = (__nccwpck_require__(506).isPunctChar);
+var isMdAsciiPunct = (__nccwpck_require__(506).isMdAsciiPunct);
 
 
 function StateInline(src, md, env, outTokens) {
@@ -12441,7 +12842,6 @@ module.exports.w = function strikethrough(state, silent) {
     state.delimiters.push({
       marker: marker,
       length: 0,     // disable "rule of 3" length checks meant for emphasis
-      jump:   i / 2, // for `~~` 1 marker = 2 characters
       token:  state.tokens.length - 1,
       end:    -1,
       open:   scanned.can_open,
@@ -12928,863 +13328,13 @@ module.exports = outputFormatter;
 
 /***/ }),
 
-/***/ 3112:
-/***/ ((module) => {
-
-"use strict";
-// @ts-check
-
-
-
-const sliceSize = 1000;
-
-/**
- * Efficiently appends the source array to the destination array.
- * @param {Object[]} destination Destination Array.
- * @param {Object[]} source Source Array.
- * @returns void
- */
-const appendToArray = (destination, source) => {
-  // NOTE: destination.push(...source) throws "RangeError: Maximum call stack
-  // size exceeded" for sufficiently lengthy source arrays
-  let index = 0;
-  let slice = null;
-  while ((slice = source.slice(index, index + sliceSize)).length > 0) {
-    destination.push(...slice);
-    index += sliceSize;
-  }
-};
-
-appendToArray.sliceSize = sliceSize;
-module.exports = appendToArray;
-
-
-/***/ }),
-
-/***/ 9202:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-// @ts-check
-
-
-
-// @ts-ignore
-// eslint-disable-next-line camelcase, max-len, no-inline-comments, no-undef
-const dynamicRequire = (typeof require === "undefined") ? require : /* c8 ignore next */ eval("require");
-// Capture native require implementation for dynamic loading of modules
-
-// Requires
-const path = __nccwpck_require__(5622);
-const globby = __nccwpck_require__(3398);
-const markdownlintLibrary = __nccwpck_require__(3611);
-const { markdownlint, "readConfig": markdownlintReadConfig } =
-  markdownlintLibrary.promises;
-const markdownlintRuleHelpers = __nccwpck_require__(2870);
-const appendToArray = __nccwpck_require__(3112);
-const mergeOptions = __nccwpck_require__(9307);
-const resolveAndRequire = __nccwpck_require__(3924);
-
-// Variables
-const packageName = "markdownlint-cli2";
-const packageVersion = "0.3.2";
-const libraryName = "markdownlint";
-const libraryVersion = markdownlintLibrary.getVersion();
-const dotOnlySubstitute = "*.{md,markdown}";
-const utf8 = "utf8";
-
-// No-op function
-const noop = () => null;
-
-// Parse JSONC text
-const jsoncParse = (text) => JSON.parse(__nccwpck_require__(2562)(text));
-
-// Parse YAML text
-const yamlParse = (text) => __nccwpck_require__(3552).parse(text);
-
-// Negate a glob
-const negateGlob = (glob) => `!${glob}`;
-
-// Return a posix path (even on Windows)
-const posixPath = (p) => p.split(path.sep).join(path.posix.sep);
-
-// Read a JSON(C) or YAML file and return the object
-const readConfig = (fs, dir, name, otherwise) => {
-  const file = path.posix.join(dir, name);
-  return () => fs.promises.access(file).
-    then(
-      // @ts-ignore
-      () => markdownlintReadConfig(file, [ jsoncParse, yamlParse ], fs),
-      otherwise
-    );
-};
-
-// Require a module ID with the specified directory in the path
-const requireResolve = (dir, id) => {
-  if (typeof id === "string") {
-    return resolveAndRequire(dynamicRequire, id, dir);
-  }
-  return id;
-};
-
-// Require an array of modules by ID
-const requireIds = (dir, ids, noRequire) => (
-  noRequire ? [] : ids.map((id) => requireResolve(dir, id))
-);
-
-// Require an array of modules by ID (preserving parameters)
-const requireIdsAndParams = (dir, idsAndParams, noRequire) => {
-  if (noRequire) {
-    return [];
-  }
-  const ids = idsAndParams.map((entry) => entry[0]);
-  const modules = requireIds(dir, ids);
-  const modulesAndParams = idsAndParams.
-    map((entry, i) => [ modules[i], ...entry.slice(1) ]);
-  return modulesAndParams;
-};
-
-// Require a JS file and return the exported object
-const requireConfig = (fs, dir, name, noRequire) => (
-  () => (noRequire
-    // eslint-disable-next-line prefer-promise-reject-errors
-    ? Promise.reject()
-    : fs.promises.access(path.posix.join(dir, name))
-  ).
-    then(
-      () => requireResolve(dir, `./${name}`),
-      noop
-    )
-);
-
-// Process command-line arguments and return glob patterns
-const processArgv = (argv) => {
-  const globPatterns = (argv || []).map(
-    (glob) => glob.replace(/^#/u, "!").replace(/\\(?![$()*+?[\]^])/gu, "/")
-  );
-  if ((globPatterns.length === 1) && (globPatterns[0] === ".")) {
-    // Substitute a more reasonable pattern
-    globPatterns[0] = dotOnlySubstitute;
-  }
-  return globPatterns;
-};
-
-// Show help if missing arguments
-const showHelp = (logMessage) => {
-  const { name, homepage } = __nccwpck_require__(9040);
-  /* eslint-disable max-len */
-  logMessage(`${homepage}
-
-Syntax: ${name} glob0 [glob1] [...] [globN]
-
-Glob expressions (from the globby library):
-- * matches any number of characters, but not /
-- ? matches a single character, but not /
-- ** matches any number of characters, including / (when it's the only thing in a path part)
-- {} allows for a comma-separated list of "or" expressions
-- ! or # at the beginning of a pattern negate the match
-
-Dot-only glob:
-- The command "${name} ." would lint every file in the current directory tree which is probably not intended
-- Instead, it is mapped to "${name} ${dotOnlySubstitute}" which lints all Markdown files in the current directory
-- To lint every file in the current directory tree, the command "${name} **" can be used instead
-
-Configuration via:
-- .markdownlint-cli2.jsonc
-- .markdownlint-cli2.yaml
-- .markdownlint-cli2.js
-- .markdownlint.jsonc or .markdownlint.json
-- .markdownlint.yaml or .markdownlint.yml
-- .markdownlint.js
-
-Cross-platform compatibility:
-- UNIX and Windows shells expand globs according to different rules; quoting arguments is recommended
-- Some Windows shells don't handle single-quoted (') arguments well; double-quote (") is recommended
-- Shells that expand globs do not support negated patterns (!node_modules); quoting is required here
-- Some UNIX shells parse exclamation (!) in double-quotes; hashtag (#) is recommended in these cases
-- The path separator is forward slash (/) on all platforms; backslash (\\) is automatically converted
-
-Therefore, the most compatible glob syntax for cross-platform support:
-$ ${name} "**/*.md" "#node_modules"`
-  );
-  /* eslint-enable max-len */
-};
-
-// Get (creating if necessary) and process a directory's info object
-const getAndProcessDirInfo =
-(fs, tasks, dirToDirInfo, dir, noRequire, func) => {
-  let dirInfo = dirToDirInfo[dir];
-  if (!dirInfo) {
-    dirInfo = {
-      dir,
-      "parent": null,
-      "files": [],
-      "markdownlintConfig": null,
-      "markdownlintOptions": null
-    };
-    dirToDirInfo[dir] = dirInfo;
-
-    // Load markdownlint-cli2 object(s)
-    const markdownlintCli2Jsonc =
-      path.posix.join(dir, ".markdownlint-cli2.jsonc");
-    const markdownlintCli2Yaml =
-      path.posix.join(dir, ".markdownlint-cli2.yaml");
-    tasks.push(
-      fs.promises.access(markdownlintCli2Jsonc).
-        then(
-          () => fs.promises.
-            readFile(markdownlintCli2Jsonc, utf8).
-            then(jsoncParse),
-          () => fs.promises.access(markdownlintCli2Yaml).
-            then(
-              () => fs.promises.
-                readFile(markdownlintCli2Yaml, utf8).
-                then(yamlParse),
-              requireConfig(
-                fs,
-                dir,
-                ".markdownlint-cli2.js",
-                noRequire
-              )
-            )
-        ).
-        then((options) => {
-          dirInfo.markdownlintOptions = options;
-        })
-    );
-
-    // Load markdownlint object(s)
-    const readConfigs =
-      readConfig(
-        fs,
-        dir,
-        ".markdownlint.jsonc",
-        readConfig(
-          fs,
-          dir,
-          ".markdownlint.json",
-          readConfig(
-            fs,
-            dir,
-            ".markdownlint.yaml",
-            readConfig(
-              fs,
-              dir,
-              ".markdownlint.yml",
-              requireConfig(
-                fs,
-                dir,
-                ".markdownlint.js",
-                noRequire
-              )
-            )
-          )
-        )
-      );
-    tasks.push(
-      readConfigs().
-        then((config) => {
-          dirInfo.markdownlintConfig = config;
-        })
-    );
-  }
-  if (func) {
-    func(dirInfo);
-  }
-  return dirInfo;
-};
-
-// Get base markdownlint-cli2 options object
-const getBaseOptions = async (
-  fs,
-  baseDir,
-  globPatterns,
-  optionsDefault,
-  fixDefault,
-  noGlobs,
-  noRequire
-) => {
-  const tasks = [];
-  const dirToDirInfo = {};
-  getAndProcessDirInfo(fs, tasks, dirToDirInfo, baseDir, noRequire);
-  await Promise.all(tasks);
-  // eslint-disable-next-line no-multi-assign
-  const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions =
-    mergeOptions(
-      mergeOptions(optionsDefault, { "fix": fixDefault }),
-      dirToDirInfo[baseDir].markdownlintOptions
-    );
-
-  if (!noGlobs) {
-    // Append any globs specified in markdownlint-cli2 configuration
-    const globs = baseMarkdownlintOptions.globs || [];
-    appendToArray(globPatterns, globs);
-  }
-
-  // Pass base ignore globs as globby patterns (best performance)
-  const ignorePatterns =
-    // eslint-disable-next-line unicorn/no-array-callback-reference
-    (baseMarkdownlintOptions.ignores || []).map(negateGlob);
-  appendToArray(globPatterns, ignorePatterns);
-
-  return {
-    baseMarkdownlintOptions,
-    dirToDirInfo
-  };
-};
-
-// Enumerate files from globs and build directory infos
-const enumerateFiles =
-async (fs, baseDir, globPatterns, dirToDirInfo, noErrors, noRequire) => {
-  const tasks = [];
-  const globbyOptions = {
-    "absolute": true,
-    "cwd": baseDir,
-    "expandDirectories": false,
-    fs
-  };
-  if (noErrors) {
-    globbyOptions.suppressErrors = true;
-  }
-  // Manually expand directories to avoid globby call to dir-glob.sync
-  const expandedDirectories = await Promise.all(
-    globPatterns.map((globPattern) => {
-      const globPath = path.posix.join(
-        baseDir,
-        globPattern[0] === "!" ? globPattern.slice(1) : globPattern
-      );
-      return fs.promises.stat(globPath).
-        then((stats) => (stats.isDirectory()
-          ? path.posix.join(globPattern, "**")
-          : globPattern)).
-        catch(() => globPattern);
-    })
-  );
-  // Process glob patterns
-  const files = await globby(expandedDirectories, globbyOptions);
-  for (const file of files) {
-    const dir = path.posix.dirname(file);
-    getAndProcessDirInfo(
-      fs,
-      tasks,
-      dirToDirInfo,
-      dir,
-      noRequire,
-      (dirInfo) => {
-        dirInfo.files.push(file);
-      }
-    );
-  }
-  await Promise.all(tasks);
-};
-
-// Enumerate (possibly missing) parent directories and update directory infos
-const enumerateParents = async (fs, baseDir, dirToDirInfo, noRequire) => {
-  const tasks = [];
-
-  // Create a lookup of baseDir and parents
-  const baseDirParents = {};
-  let baseDirParent = baseDir;
-  do {
-    baseDirParents[baseDirParent] = true;
-    baseDirParent = path.posix.dirname(baseDirParent);
-  } while (!baseDirParents[baseDirParent]);
-
-  // Visit parents of each dirInfo
-  for (let lastDirInfo of Object.values(dirToDirInfo)) {
-    let { dir } = lastDirInfo;
-    let lastDir = dir;
-    while (
-      !baseDirParents[dir] &&
-      (dir = path.posix.dirname(dir)) &&
-      (dir !== lastDir)
-    ) {
-      lastDir = dir;
-      lastDirInfo =
-        getAndProcessDirInfo(
-          fs,
-          tasks,
-          dirToDirInfo,
-          dir,
-          noRequire,
-          // eslint-disable-next-line no-loop-func
-          (dirInfo) => {
-            lastDirInfo.parent = dirInfo;
-          }
-        );
-    }
-
-    // If dir not under baseDir, inject it as parent for configuration
-    if (dir !== baseDir) {
-      dirToDirInfo[dir].parent = dirToDirInfo[baseDir];
-    }
-  }
-  await Promise.all(tasks);
-};
-
-// Create directory info objects by enumerating file globs
-const createDirInfos =
-// eslint-disable-next-line max-len
-async (fs, baseDir, globPatterns, dirToDirInfo, optionsOverride, noErrors, noRequire) => {
-  await enumerateFiles(
-    fs,
-    baseDir,
-    globPatterns,
-    dirToDirInfo,
-    noErrors,
-    noRequire
-  );
-  await enumerateParents(
-    fs,
-    baseDir,
-    dirToDirInfo,
-    noRequire
-  );
-
-  // Merge file lists with identical configuration
-  const dirs = Object.keys(dirToDirInfo);
-  dirs.sort((a, b) => b.length - a.length);
-  const dirInfos = [];
-  const noConfigDirInfo =
-    (dirInfo) => (
-      dirInfo.parent &&
-      !dirInfo.markdownlintConfig &&
-      !dirInfo.markdownlintOptions
-    );
-  for (const dir of dirs) {
-    const dirInfo = dirToDirInfo[dir];
-    if (noConfigDirInfo(dirInfo)) {
-      if (dirInfo.parent) {
-        appendToArray(dirInfo.parent.files, dirInfo.files);
-      }
-      dirToDirInfo[dir] = null;
-    } else {
-      const { markdownlintOptions } = dirInfo;
-      if (markdownlintOptions && markdownlintOptions.customRules) {
-        const customRules =
-          requireIds(
-            dir,
-            markdownlintOptions.customRules,
-            noRequire
-          );
-        // Expand nested arrays (for packages that export multiple rules)
-        markdownlintOptions.customRules = customRules.flat();
-      }
-      if (markdownlintOptions && markdownlintOptions.markdownItPlugins) {
-        markdownlintOptions.markdownItPlugins =
-          requireIdsAndParams(
-            dir,
-            markdownlintOptions.markdownItPlugins,
-            noRequire
-          );
-      }
-      dirInfos.push(dirInfo);
-    }
-  }
-  for (const dirInfo of dirInfos) {
-    while (dirInfo.parent && !dirToDirInfo[dirInfo.parent.dir]) {
-      dirInfo.parent = dirInfo.parent.parent;
-    }
-  }
-
-  // Verify dirInfos is simplified
-  // if (
-  //   dirInfos.filter(
-  //     (di) => di.parent && !dirInfos.includes(di.parent)
-  //   ).length > 0
-  // ) {
-  //   throw new Error("Extra parent");
-  // }
-  // if (
-  //   dirInfos.filter(
-  //     (di) => !di.parent && (di.dir !== baseDir)
-  //   ).length > 0
-  // ) {
-  //   throw new Error("Missing parent");
-  // }
-  // if (
-  //   dirInfos.filter(
-  //     (di) => di.parent &&
-  //       !((di.markdownlintConfig ? 1 : 0) ^ (di.markdownlintOptions ? 1 : 0))
-  //   ).length > 0
-  // ) {
-  //   throw new Error("Missing object");
-  // }
-  // if (dirInfos.filter((di) => di.dir === "/").length > 0) {
-  //   throw new Error("Includes root");
-  // }
-
-  // Merge configuration by inheritance
-  for (const dirInfo of dirInfos) {
-    let markdownlintOptions = dirInfo.markdownlintOptions || {};
-    let { markdownlintConfig } = dirInfo;
-    let parent = dirInfo;
-    // eslint-disable-next-line prefer-destructuring
-    while ((parent = parent.parent)) {
-      if (parent.markdownlintOptions) {
-        markdownlintOptions = mergeOptions(
-          parent.markdownlintOptions,
-          markdownlintOptions
-        );
-      }
-      if (
-        !markdownlintConfig &&
-        parent.markdownlintConfig &&
-        !markdownlintOptions.config
-      ) {
-        // eslint-disable-next-line prefer-destructuring
-        markdownlintConfig = parent.markdownlintConfig;
-      }
-    }
-    dirInfo.markdownlintOptions = mergeOptions(
-      markdownlintOptions,
-      optionsOverride
-    );
-    dirInfo.markdownlintConfig = markdownlintConfig;
-  }
-  return dirInfos;
-};
-
-// Lint files in groups by shared configuration
-const lintFiles = (fs, dirInfos, fileContents) => {
-  const tasks = [];
-  // For each dirInfo
-  for (const dirInfo of dirInfos) {
-    const { dir, files, markdownlintConfig, markdownlintOptions } = dirInfo;
-    // Filter file/string inputs to only those in the dirInfo
-    let filesAfterIgnores = files;
-    if (
-      markdownlintOptions.ignores &&
-      (markdownlintOptions.ignores.length > 0)
-    ) {
-      // eslint-disable-next-line unicorn/no-array-callback-reference
-      const ignores = markdownlintOptions.ignores.map(negateGlob);
-      const micromatch = __nccwpck_require__(6228);
-      filesAfterIgnores = micromatch(
-        files.map((file) => path.posix.relative(dir, file)),
-        ignores
-      ).map((file) => path.posix.join(dir, file));
-    }
-    const filteredFiles = filesAfterIgnores.filter(
-      (file) => fileContents[file] === undefined
-    );
-    const filteredStrings = {};
-    for (const file of filesAfterIgnores) {
-      if (fileContents[file] !== undefined) {
-        filteredStrings[file] = fileContents[file];
-      }
-    }
-    // Create markdownlint options object
-    const options = {
-      "files": filteredFiles,
-      "strings": filteredStrings,
-      "config": markdownlintConfig || markdownlintOptions.config,
-      "customRules": markdownlintOptions.customRules,
-      "frontMatter": markdownlintOptions.frontMatter
-        ? new RegExp(markdownlintOptions.frontMatter, "u")
-        : undefined,
-      "handleRuleFailures": true,
-      "markdownItPlugins": markdownlintOptions.markdownItPlugins,
-      "noInlineConfig": Boolean(markdownlintOptions.noInlineConfig),
-      "resultVersion": 3,
-      fs
-    };
-    // Invoke markdownlint
-    // @ts-ignore
-    let task = markdownlint(options);
-    // For any fixable errors, read file, apply fixes, and write it back
-    if (markdownlintOptions.fix) {
-      task = task.then((results) => {
-        options.files = [];
-        const subTasks = [];
-        const errorFiles = Object.keys(results);
-        for (const fileName of errorFiles) {
-          const errorInfos = results[fileName].
-            filter((errorInfo) => errorInfo.fixInfo);
-          if (errorInfos.length > 0) {
-            delete results[fileName];
-            options.files.push(fileName);
-            subTasks.push(fs.promises.readFile(fileName, utf8).
-              then((original) => {
-                const fixed = markdownlintRuleHelpers.
-                  applyFixes(original, errorInfos);
-                return fs.promises.writeFile(fileName, fixed, utf8);
-              })
-            );
-          }
-        }
-        return Promise.all(subTasks).
-          // @ts-ignore
-          then(() => markdownlint(options)).
-          then((fixResults) => ({
-            ...results,
-            ...fixResults
-          }));
-      });
-    }
-    // Queue tasks for this dirInfo
-    tasks.push(task);
-  }
-  // Return result of all tasks
-  return Promise.all(tasks);
-};
-
-// Create summary of results
-const createSummary = (baseDir, taskResults) => {
-  const summary = [];
-  let counter = 0;
-  for (const results of taskResults) {
-    for (const fileName in results) {
-      const errorInfos = results[fileName];
-      for (const errorInfo of errorInfos) {
-        const fileNameRelative = path.posix.relative(baseDir, fileName);
-        summary.push({
-          "fileName": fileNameRelative,
-          ...errorInfo,
-          counter
-        });
-        counter++;
-      }
-    }
-  }
-  summary.sort((a, b) => (
-    a.fileName.localeCompare(b.fileName) ||
-    (a.lineNumber - b.lineNumber) ||
-    a.ruleNames[0].localeCompare(b.ruleNames[0]) ||
-    (a.counter - b.counter)
-  ));
-  for (const result of summary) {
-    delete result.counter;
-  }
-  return summary;
-};
-
-// Output summary via formatters
-const outputSummary =
-  async (baseDir, summary, outputFormatters, logMessage, logError) => {
-    const errorsPresent = (summary.length > 0);
-    if (errorsPresent || outputFormatters) {
-      const formatterOptions = {
-        "directory": baseDir,
-        "results": summary,
-        logMessage,
-        logError
-      };
-      const formattersAndParams = outputFormatters
-        ? requireIdsAndParams(baseDir, outputFormatters)
-        : [ [ __nccwpck_require__(8552) ] ];
-      await Promise.all(formattersAndParams.map((formatterAndParams) => {
-        const [ formatter, ...formatterParams ] = formatterAndParams;
-        return formatter(formatterOptions, ...formatterParams);
-      }));
-    }
-    return errorsPresent;
-  };
-
-// Main function
-const main = async (params) => {
-  // Capture parameters
-  const {
-    directory,
-    argv,
-    optionsDefault,
-    optionsOverride,
-    fixDefault,
-    fileContents,
-    nonFileContents,
-    noErrors,
-    noGlobs,
-    noRequire
-  } = params;
-  const logMessage = params.logMessage || noop;
-  const logError = params.logError || noop;
-  const fs = params.fs || __nccwpck_require__(5747);
-  const baseDirSystem =
-    (directory && path.resolve(directory)) ||
-    process.cwd();
-  const baseDir = posixPath(baseDirSystem);
-  // Output banner
-  logMessage(
-    `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`
-  );
-  // Process arguments and get base options
-  const globPatterns = processArgv(argv);
-  const { baseMarkdownlintOptions, dirToDirInfo } =
-    await getBaseOptions(
-      fs,
-      baseDir,
-      globPatterns,
-      optionsDefault,
-      fixDefault,
-      noGlobs,
-      noRequire
-    );
-  if ((globPatterns.length === 0) && !nonFileContents) {
-    showHelp(logMessage);
-    return 1;
-  }
-  // Include any file overrides or non-file content
-  const resolvedFileContents = {};
-  for (const file in fileContents) {
-    const resolvedFile = posixPath(path.resolve(baseDirSystem, file));
-    resolvedFileContents[resolvedFile] =
-      fileContents[file];
-  }
-  for (const nonFile in nonFileContents) {
-    resolvedFileContents[nonFile] = nonFileContents[nonFile];
-  }
-  appendToArray(
-    dirToDirInfo[baseDir].files,
-    Object.keys(nonFileContents || {})
-  );
-  // Output finding status
-  const showProgress = !baseMarkdownlintOptions.noProgress;
-  if (showProgress) {
-    logMessage(`Finding: ${globPatterns.join(" ")}`);
-  }
-  // Create linting tasks
-  const dirInfos =
-    await createDirInfos(
-      fs,
-      baseDir,
-      globPatterns,
-      dirToDirInfo,
-      optionsOverride,
-      noErrors,
-      noRequire
-    );
-  // Output linting status
-  if (showProgress) {
-    let fileCount = 0;
-    for (const dirInfo of dirInfos) {
-      fileCount += dirInfo.files.length;
-    }
-    logMessage(`Linting: ${fileCount} file(s)`);
-  }
-  // Lint files
-  const lintResults = await lintFiles(fs, dirInfos, resolvedFileContents);
-  // Output summary
-  const summary = createSummary(baseDir, lintResults);
-  if (showProgress) {
-    logMessage(`Summary: ${summary.length} error(s)`);
-  }
-  const outputFormatters =
-    (optionsOverride && optionsOverride.outputFormatters) ||
-    baseMarkdownlintOptions.outputFormatters;
-  const errorsPresent = await outputSummary(
-    baseDir, summary, outputFormatters, logMessage, logError
-  );
-  // Return result
-  return errorsPresent ? 1 : 0;
-};
-
-// Run function
-const run = (overrides) => {
-  (async () => {
-    try {
-      const defaultParams = {
-        "argv": process.argv.slice(2),
-        "logMessage": console.log,
-        "logError": console.error
-      };
-      const params = {
-        ...defaultParams,
-        ...overrides
-      };
-      process.exitCode = await main(params);
-    } catch (error) {
-      console.error(error);
-      process.exitCode = 2;
-    }
-  })();
-};
-
-// Export functions
-module.exports = {
-  main,
-  run
-};
-
-// Run if invoked as a CLI
-// @ts-ignore
-if (false) {}
-
-
-/***/ }),
-
-/***/ 9307:
-/***/ ((module) => {
-
-"use strict";
-// @ts-check
-
-
-
-/**
- * Merges two options objects by combining config and replacing properties.
- * @param {Object} first First options object.
- * @param {Object} second Second options object.
- * @returns {Object} Merged options object.
- */
-const mergeOptions = (first, second) => {
-  const merged = {
-    ...first,
-    ...second
-  };
-  const firstConfig = first && first.config;
-  const secondConfig = second && second.config;
-  if (firstConfig || secondConfig) {
-    merged.config = {
-      ...firstConfig,
-      ...secondConfig
-    };
-  }
-  return merged;
-};
-
-module.exports = mergeOptions;
-
-
-/***/ }),
-
-/***/ 3924:
-/***/ ((module) => {
-
-"use strict";
-// @ts-check
-
-
-
-/**
- * Wrapper for calling Node's require.resolve/require with an additional path.
- *
- * @param {Object} req Node's require function (or equivalent).
- * @param {*} id Package identifier to require.
- * @param {*} dir Directory to include when resolving paths.
- * @returns {Object} Exported module content.
- */
-const resolveAndRequire = (req, id, dir) => {
-  const resolvePaths = req.resolve.paths ? req.resolve.paths("") : [];
-  const paths = [ dir, ...resolvePaths ];
-  const resolved = req.resolve(id, { paths });
-  return req(resolved);
-};
-
-module.exports = resolveAndRequire;
-
-
-/***/ }),
-
 /***/ 2870:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+/***/ ((module) => {
 
 "use strict";
 // @ts-check
 
 
-
-const os = __nccwpck_require__(2087);
 
 // Regular expression for matching common newline characters
 // See NEWLINES_RE in markdown-it/lib/rules_core/normalize.js
@@ -13845,12 +13395,20 @@ module.exports.isObject = function isObject(obj) {
 };
 
 // Returns true iff the input line is blank (no content)
-// Example: Contains nothing, whitespace, or comments
-const blankLineRe = />|(?:<!--.*?-->)/g;
+// Example: Contains nothing, whitespace, or comment (unclosed start/end okay)
 module.exports.isBlankLine = function isBlankLine(line) {
   // Call to String.replace follows best practices and is not a security check
   // False-positive for js/incomplete-multi-character-sanitization
-  return !line || !line.trim() || !line.replace(blankLineRe, "").trim();
+  return (
+    !line ||
+    !line.trim() ||
+    !line
+      .replace(/<!--.*?-->/g, "")
+      .replace(/<!--.*$/g, "")
+      .replace(/^.*-->/g, "")
+      .replace(/>/g, "")
+      .trim()
+  );
 };
 
 /**
@@ -13964,6 +13522,22 @@ module.exports.fencedCodeBlockStyleFor =
   };
 
 /**
+ * Return the string representation of a emphasis or strong markup character.
+ *
+ * @param {string} markup Emphasis or strong string.
+ * @returns {string} String representation.
+ */
+module.exports.emphasisOrStrongStyleFor =
+  function emphasisOrStrongStyleFor(markup) {
+    switch (markup[0]) {
+      case "*":
+        return "asterisk";
+      default:
+        return "underscore";
+    }
+  };
+
+/**
  * Return the number of characters of indent for a token.
  *
  * @param {Object} token MarkdownItToken instance.
@@ -14029,11 +13603,12 @@ module.exports.filterTokens = filterTokens;
  */
 function isMathBlock(token) {
   return (
-    (token.tag === "math") &&
+    ((token.tag === "$$") || (token.tag === "math")) &&
     token.type.startsWith("math_block") &&
     !token.type.endsWith("_end")
   );
 }
+module.exports.isMathBlock = isMathBlock;
 
 // Get line metadata array
 module.exports.getLineMetadata = function getLineMetadata(params) {
@@ -14075,14 +13650,20 @@ module.exports.getLineMetadata = function getLineMetadata(params) {
   return lineMetadata;
 };
 
-// Calls the provided function for each line (with context)
-module.exports.forEachLine = function forEachLine(lineMetadata, handler) {
+/**
+ * Calls the provided function for each line.
+ *
+ * @param {Object} lineMetadata Line metadata object.
+ * @param {Function} handler Function taking (line, lineIndex, inCode, onFence,
+ * inTable, inItem, inBreak, inMath).
+ * @returns {void}
+ */
+function forEachLine(lineMetadata, handler) {
   lineMetadata.forEach(function forMetadata(metadata) {
-    // Parameters:
-    // line, lineIndex, inCode, onFence, inTable, inItem, inBreak, inMath
     handler(...metadata);
   });
-};
+}
+module.exports.forEachLine = forEachLine;
 
 // Returns (nested) lists as a flat array (in order)
 module.exports.flattenLists = function flattenLists(tokens) {
@@ -14093,10 +13674,6 @@ module.exports.flattenLists = function flattenLists(tokens) {
   const nestingStack = [];
   let lastWithMap = { "map": [ 0, 1 ] };
   tokens.forEach((token) => {
-    if (isMathBlock(token) && token.map[1]) {
-      // markdown-it-texmath plugin does not account for math_block_end
-      token.map[1]++;
-    }
     if ((token.type === "bullet_list_open") ||
         (token.type === "ordered_list_open")) {
       // Save current context and start a new one
@@ -14168,7 +13745,8 @@ module.exports.forEachHeading = function forEachHeading(params, handler) {
  * Calls the provided function for each inline code span's content.
  *
  * @param {string} input Markdown content.
- * @param {Function} handler Callback function.
+ * @param {Function} handler Callback function taking (code, lineIndex,
+ * columnIndex, ticks).
  * @returns {void}
  */
 function forEachInlineCodeSpan(input, handler) {
@@ -14303,26 +13881,39 @@ module.exports.addErrorContext = function addErrorContext(
 };
 
 /**
- * Returns an array of code span ranges.
+ * Returns an array of code block and span content ranges.
  *
- * @param {string[]} lines Lines to scan for code span ranges.
- * @returns {number[][]} Array of ranges (line, index, length).
+ * @param {Object} params RuleParams instance.
+ * @param {Object} lineMetadata Line metadata object.
+ * @returns {number[][]} Array of ranges (lineIndex, columnIndex, length).
  */
-module.exports.inlineCodeSpanRanges = (lines) => {
+module.exports.codeBlockAndSpanRanges = (params, lineMetadata) => {
   const exclusions = [];
-  forEachInlineCodeSpan(
-    lines.join("\n"),
-    (code, lineIndex, columnIndex) => {
-      const codeLines = code.split(newLineRe);
-      // eslint-disable-next-line unicorn/no-for-loop
-      for (let i = 0; i < codeLines.length; i++) {
-        exclusions.push(
-          [ lineIndex + i, columnIndex, codeLines[i].length ]
-        );
-        columnIndex = 0;
-      }
+  // Add code block ranges (excludes fences)
+  forEachLine(lineMetadata, (line, lineIndex, inCode, onFence) => {
+    if (inCode && !onFence) {
+      exclusions.push([ lineIndex, 0, line.length ]);
     }
-  );
+  });
+  // Add code span ranges (excludes ticks)
+  filterTokens(params, "inline", (token) => {
+    if (token.children.some((child) => child.type === "code_inline")) {
+      const tokenLines = params.lines.slice(token.map[0], token.map[1]);
+      forEachInlineCodeSpan(
+        tokenLines.join("\n"),
+        (code, lineIndex, columnIndex) => {
+          const codeLines = code.split(newLineRe);
+          for (const [ i, line ] of codeLines.entries()) {
+            exclusions.push([
+              token.lineNumber - 1 + lineIndex + i,
+              i ? 0 : columnIndex,
+              line.length
+            ]);
+          }
+        }
+      );
+    }
+  });
   return exclusions;
 };
 
@@ -14378,6 +13969,18 @@ module.exports.frontMatterHasTitle =
 function emphasisMarkersInContent(params) {
   const { lines } = params;
   const byLine = new Array(lines.length);
+  // Search links
+  lines.forEach((tokenLine, tokenLineIndex) => {
+    const inLine = [];
+    let linkMatch = null;
+    while ((linkMatch = linkRe.exec(tokenLine))) {
+      let markerMatch = null;
+      while ((markerMatch = emphasisMarkersRe.exec(linkMatch[0]))) {
+        inLine.push(linkMatch.index + markerMatch.index);
+      }
+    }
+    byLine[tokenLineIndex] = inLine;
+  });
   // Search code spans
   filterTokens(params, "inline", (token) => {
     const { children, lineNumber, map } = token;
@@ -14388,29 +13991,17 @@ function emphasisMarkersInContent(params) {
         (code, lineIndex, column, tickCount) => {
           const codeLines = code.split(newLineRe);
           codeLines.forEach((codeLine, codeLineIndex) => {
+            const byLineIndex = lineNumber - 1 + lineIndex + codeLineIndex;
+            const inLine = byLine[byLineIndex];
+            const codeLineOffset = codeLineIndex ? 0 : column - 1 + tickCount;
             let match = null;
             while ((match = emphasisMarkersRe.exec(codeLine))) {
-              const byLineIndex = lineNumber - 1 + lineIndex + codeLineIndex;
-              const inLine = byLine[byLineIndex] || [];
-              const codeLineOffset = codeLineIndex ? 0 : column - 1 + tickCount;
               inLine.push(codeLineOffset + match.index);
-              byLine[byLineIndex] = inLine;
             }
+            byLine[byLineIndex] = inLine;
           });
         }
       );
-    }
-  });
-  // Search links
-  lines.forEach((tokenLine, tokenLineIndex) => {
-    let linkMatch = null;
-    while ((linkMatch = linkRe.exec(tokenLine))) {
-      let markerMatch = null;
-      while ((markerMatch = emphasisMarkersRe.exec(linkMatch[0]))) {
-        const inLine = byLine[tokenLineIndex] || [];
-        inLine.push(linkMatch.index + markerMatch.index);
-        byLine[tokenLineIndex] = inLine;
-      }
     }
   });
   return byLine;
@@ -14421,9 +14012,10 @@ module.exports.emphasisMarkersInContent = emphasisMarkersInContent;
  * Gets the most common line ending, falling back to the platform default.
  *
  * @param {string} input Markdown content to analyze.
+ * @param {string} [platform] Platform identifier (process.platform).
  * @returns {string} Preferred line ending.
  */
-function getPreferredLineEnding(input) {
+function getPreferredLineEnding(input, platform) {
   let cr = 0;
   let lf = 0;
   let crlf = 0;
@@ -14444,7 +14036,8 @@ function getPreferredLineEnding(input) {
   });
   let preferredLineEnding = null;
   if (!cr && !lf && !crlf) {
-    preferredLineEnding = os.EOL;
+    preferredLineEnding =
+      ((platform || process.platform) === "win32") ? "\r\n" : "\n";
   } else if ((lf >= crlf) && (lf >= cr)) {
     preferredLineEnding = "\n";
   } else if (crlf >= cr) {
@@ -14559,19 +14152,94 @@ module.exports.applyFixes = function applyFixes(input, errors) {
   // Return corrected input
   return lines.filter((line) => line !== null).join(lineEnding);
 };
+
+/**
+ * Gets the range and fixInfo values for reporting an error if the expected
+ * text is found on the specified line.
+ *
+ * @param {string[]} lines Lines of Markdown content.
+ * @param {number} lineIndex Line index to check.
+ * @param {string} search Text to search for.
+ * @param {string} replace Text to replace with.
+ * @returns {Object} Range and fixInfo wrapper.
+ */
+function getRangeAndFixInfoIfFound(lines, lineIndex, search, replace) {
+  let range = null;
+  let fixInfo = null;
+  const searchIndex = lines[lineIndex].indexOf(search);
+  if (searchIndex !== -1) {
+    const column = searchIndex + 1;
+    const length = search.length;
+    range = [ column, length ];
+    fixInfo = {
+      "editColumn": column,
+      "deleteCount": length,
+      "insertText": replace
+    };
+  }
+  return {
+    range,
+    fixInfo
+  };
+}
+module.exports.getRangeAndFixInfoIfFound = getRangeAndFixInfoIfFound;
+
+/**
+ * Gets the next (subsequent) child token if it is of the expected type.
+ *
+ * @param {Object} parentToken Parent token.
+ * @param {Object} childToken Child token basis.
+ * @param {string} nextType Token type of next token.
+ * @param {string} nextNextType Token type of next-next token.
+ * @returns {Object} Next token.
+ */
+function getNextChildToken(parentToken, childToken, nextType, nextNextType) {
+  const { children } = parentToken;
+  const index = children.indexOf(childToken);
+  if (
+    (index !== -1) &&
+    (children.length > index + 2) &&
+    (children[index + 1].type === nextType) &&
+    (children[index + 2].type === nextNextType)
+  ) {
+    return children[index + 1];
+  }
+  return null;
+}
+module.exports.getNextChildToken = getNextChildToken;
+
+/**
+ * Calls Object.freeze() on an object and its children.
+ *
+ * @param {Object} obj Object to deep freeze.
+ * @returns {Object} Object passed to the function.
+ */
+function deepFreeze(obj) {
+  const pending = [ obj ];
+  let current = null;
+  while ((current = pending.shift())) {
+    Object.freeze(current);
+    for (const name of Object.getOwnPropertyNames(current)) {
+      const value = current[name];
+      if (value && (typeof value === "object")) {
+        pending.push(value);
+      }
+    }
+  }
+  return obj;
+}
+module.exports.deepFreeze = deepFreeze;
 
 
 /***/ }),
 
 /***/ 2935:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+/***/ ((module) => {
 
 "use strict";
 // @ts-check
 
 
-
-const os = __nccwpck_require__(2087);
 
 // Regular expression for matching common newline characters
 // See NEWLINES_RE in markdown-it/lib/rules_core/normalize.js
@@ -14632,12 +14300,20 @@ module.exports.isObject = function isObject(obj) {
 };
 
 // Returns true iff the input line is blank (no content)
-// Example: Contains nothing, whitespace, or comments
-const blankLineRe = />|(?:<!--.*?-->)/g;
+// Example: Contains nothing, whitespace, or comment (unclosed start/end okay)
 module.exports.isBlankLine = function isBlankLine(line) {
   // Call to String.replace follows best practices and is not a security check
   // False-positive for js/incomplete-multi-character-sanitization
-  return !line || !line.trim() || !line.replace(blankLineRe, "").trim();
+  return (
+    !line ||
+    !line.trim() ||
+    !line
+      .replace(/<!--.*?-->/g, "")
+      .replace(/<!--.*$/g, "")
+      .replace(/^.*-->/g, "")
+      .replace(/>/g, "")
+      .trim()
+  );
 };
 
 /**
@@ -14751,6 +14427,22 @@ module.exports.fencedCodeBlockStyleFor =
   };
 
 /**
+ * Return the string representation of a emphasis or strong markup character.
+ *
+ * @param {string} markup Emphasis or strong string.
+ * @returns {string} String representation.
+ */
+module.exports.emphasisOrStrongStyleFor =
+  function emphasisOrStrongStyleFor(markup) {
+    switch (markup[0]) {
+      case "*":
+        return "asterisk";
+      default:
+        return "underscore";
+    }
+  };
+
+/**
  * Return the number of characters of indent for a token.
  *
  * @param {Object} token MarkdownItToken instance.
@@ -14816,11 +14508,12 @@ module.exports.filterTokens = filterTokens;
  */
 function isMathBlock(token) {
   return (
-    (token.tag === "math") &&
+    ((token.tag === "$$") || (token.tag === "math")) &&
     token.type.startsWith("math_block") &&
     !token.type.endsWith("_end")
   );
 }
+module.exports.isMathBlock = isMathBlock;
 
 // Get line metadata array
 module.exports.getLineMetadata = function getLineMetadata(params) {
@@ -14862,14 +14555,20 @@ module.exports.getLineMetadata = function getLineMetadata(params) {
   return lineMetadata;
 };
 
-// Calls the provided function for each line (with context)
-module.exports.forEachLine = function forEachLine(lineMetadata, handler) {
+/**
+ * Calls the provided function for each line.
+ *
+ * @param {Object} lineMetadata Line metadata object.
+ * @param {Function} handler Function taking (line, lineIndex, inCode, onFence,
+ * inTable, inItem, inBreak, inMath).
+ * @returns {void}
+ */
+function forEachLine(lineMetadata, handler) {
   lineMetadata.forEach(function forMetadata(metadata) {
-    // Parameters:
-    // line, lineIndex, inCode, onFence, inTable, inItem, inBreak, inMath
     handler(...metadata);
   });
-};
+}
+module.exports.forEachLine = forEachLine;
 
 // Returns (nested) lists as a flat array (in order)
 module.exports.flattenLists = function flattenLists(tokens) {
@@ -14880,10 +14579,6 @@ module.exports.flattenLists = function flattenLists(tokens) {
   const nestingStack = [];
   let lastWithMap = { "map": [ 0, 1 ] };
   tokens.forEach((token) => {
-    if (isMathBlock(token) && token.map[1]) {
-      // markdown-it-texmath plugin does not account for math_block_end
-      token.map[1]++;
-    }
     if ((token.type === "bullet_list_open") ||
         (token.type === "ordered_list_open")) {
       // Save current context and start a new one
@@ -14955,7 +14650,8 @@ module.exports.forEachHeading = function forEachHeading(params, handler) {
  * Calls the provided function for each inline code span's content.
  *
  * @param {string} input Markdown content.
- * @param {Function} handler Callback function.
+ * @param {Function} handler Callback function taking (code, lineIndex,
+ * columnIndex, ticks).
  * @returns {void}
  */
 function forEachInlineCodeSpan(input, handler) {
@@ -15090,26 +14786,39 @@ module.exports.addErrorContext = function addErrorContext(
 };
 
 /**
- * Returns an array of code span ranges.
+ * Returns an array of code block and span content ranges.
  *
- * @param {string[]} lines Lines to scan for code span ranges.
- * @returns {number[][]} Array of ranges (line, index, length).
+ * @param {Object} params RuleParams instance.
+ * @param {Object} lineMetadata Line metadata object.
+ * @returns {number[][]} Array of ranges (lineIndex, columnIndex, length).
  */
-module.exports.inlineCodeSpanRanges = (lines) => {
+module.exports.codeBlockAndSpanRanges = (params, lineMetadata) => {
   const exclusions = [];
-  forEachInlineCodeSpan(
-    lines.join("\n"),
-    (code, lineIndex, columnIndex) => {
-      const codeLines = code.split(newLineRe);
-      // eslint-disable-next-line unicorn/no-for-loop
-      for (let i = 0; i < codeLines.length; i++) {
-        exclusions.push(
-          [ lineIndex + i, columnIndex, codeLines[i].length ]
-        );
-        columnIndex = 0;
-      }
+  // Add code block ranges (excludes fences)
+  forEachLine(lineMetadata, (line, lineIndex, inCode, onFence) => {
+    if (inCode && !onFence) {
+      exclusions.push([ lineIndex, 0, line.length ]);
     }
-  );
+  });
+  // Add code span ranges (excludes ticks)
+  filterTokens(params, "inline", (token) => {
+    if (token.children.some((child) => child.type === "code_inline")) {
+      const tokenLines = params.lines.slice(token.map[0], token.map[1]);
+      forEachInlineCodeSpan(
+        tokenLines.join("\n"),
+        (code, lineIndex, columnIndex) => {
+          const codeLines = code.split(newLineRe);
+          for (const [ i, line ] of codeLines.entries()) {
+            exclusions.push([
+              token.lineNumber - 1 + lineIndex + i,
+              i ? 0 : columnIndex,
+              line.length
+            ]);
+          }
+        }
+      );
+    }
+  });
   return exclusions;
 };
 
@@ -15165,6 +14874,18 @@ module.exports.frontMatterHasTitle =
 function emphasisMarkersInContent(params) {
   const { lines } = params;
   const byLine = new Array(lines.length);
+  // Search links
+  lines.forEach((tokenLine, tokenLineIndex) => {
+    const inLine = [];
+    let linkMatch = null;
+    while ((linkMatch = linkRe.exec(tokenLine))) {
+      let markerMatch = null;
+      while ((markerMatch = emphasisMarkersRe.exec(linkMatch[0]))) {
+        inLine.push(linkMatch.index + markerMatch.index);
+      }
+    }
+    byLine[tokenLineIndex] = inLine;
+  });
   // Search code spans
   filterTokens(params, "inline", (token) => {
     const { children, lineNumber, map } = token;
@@ -15175,29 +14896,17 @@ function emphasisMarkersInContent(params) {
         (code, lineIndex, column, tickCount) => {
           const codeLines = code.split(newLineRe);
           codeLines.forEach((codeLine, codeLineIndex) => {
+            const byLineIndex = lineNumber - 1 + lineIndex + codeLineIndex;
+            const inLine = byLine[byLineIndex];
+            const codeLineOffset = codeLineIndex ? 0 : column - 1 + tickCount;
             let match = null;
             while ((match = emphasisMarkersRe.exec(codeLine))) {
-              const byLineIndex = lineNumber - 1 + lineIndex + codeLineIndex;
-              const inLine = byLine[byLineIndex] || [];
-              const codeLineOffset = codeLineIndex ? 0 : column - 1 + tickCount;
               inLine.push(codeLineOffset + match.index);
-              byLine[byLineIndex] = inLine;
             }
+            byLine[byLineIndex] = inLine;
           });
         }
       );
-    }
-  });
-  // Search links
-  lines.forEach((tokenLine, tokenLineIndex) => {
-    let linkMatch = null;
-    while ((linkMatch = linkRe.exec(tokenLine))) {
-      let markerMatch = null;
-      while ((markerMatch = emphasisMarkersRe.exec(linkMatch[0]))) {
-        const inLine = byLine[tokenLineIndex] || [];
-        inLine.push(linkMatch.index + markerMatch.index);
-        byLine[tokenLineIndex] = inLine;
-      }
     }
   });
   return byLine;
@@ -15208,9 +14917,10 @@ module.exports.emphasisMarkersInContent = emphasisMarkersInContent;
  * Gets the most common line ending, falling back to the platform default.
  *
  * @param {string} input Markdown content to analyze.
+ * @param {string} [platform] Platform identifier (process.platform).
  * @returns {string} Preferred line ending.
  */
-function getPreferredLineEnding(input) {
+function getPreferredLineEnding(input, platform) {
   let cr = 0;
   let lf = 0;
   let crlf = 0;
@@ -15231,7 +14941,8 @@ function getPreferredLineEnding(input) {
   });
   let preferredLineEnding = null;
   if (!cr && !lf && !crlf) {
-    preferredLineEnding = os.EOL;
+    preferredLineEnding =
+      ((platform || process.platform) === "win32") ? "\r\n" : "\n";
   } else if ((lf >= crlf) && (lf >= cr)) {
     preferredLineEnding = "\n";
   } else if (crlf >= cr) {
@@ -15346,6 +15057,83 @@ module.exports.applyFixes = function applyFixes(input, errors) {
   // Return corrected input
   return lines.filter((line) => line !== null).join(lineEnding);
 };
+
+/**
+ * Gets the range and fixInfo values for reporting an error if the expected
+ * text is found on the specified line.
+ *
+ * @param {string[]} lines Lines of Markdown content.
+ * @param {number} lineIndex Line index to check.
+ * @param {string} search Text to search for.
+ * @param {string} replace Text to replace with.
+ * @returns {Object} Range and fixInfo wrapper.
+ */
+function getRangeAndFixInfoIfFound(lines, lineIndex, search, replace) {
+  let range = null;
+  let fixInfo = null;
+  const searchIndex = lines[lineIndex].indexOf(search);
+  if (searchIndex !== -1) {
+    const column = searchIndex + 1;
+    const length = search.length;
+    range = [ column, length ];
+    fixInfo = {
+      "editColumn": column,
+      "deleteCount": length,
+      "insertText": replace
+    };
+  }
+  return {
+    range,
+    fixInfo
+  };
+}
+module.exports.getRangeAndFixInfoIfFound = getRangeAndFixInfoIfFound;
+
+/**
+ * Gets the next (subsequent) child token if it is of the expected type.
+ *
+ * @param {Object} parentToken Parent token.
+ * @param {Object} childToken Child token basis.
+ * @param {string} nextType Token type of next token.
+ * @param {string} nextNextType Token type of next-next token.
+ * @returns {Object} Next token.
+ */
+function getNextChildToken(parentToken, childToken, nextType, nextNextType) {
+  const { children } = parentToken;
+  const index = children.indexOf(childToken);
+  if (
+    (index !== -1) &&
+    (children.length > index + 2) &&
+    (children[index + 1].type === nextType) &&
+    (children[index + 2].type === nextNextType)
+  ) {
+    return children[index + 1];
+  }
+  return null;
+}
+module.exports.getNextChildToken = getNextChildToken;
+
+/**
+ * Calls Object.freeze() on an object and its children.
+ *
+ * @param {Object} obj Object to deep freeze.
+ * @returns {Object} Object passed to the function.
+ */
+function deepFreeze(obj) {
+  const pending = [ obj ];
+  let current = null;
+  while ((current = pending.shift())) {
+    Object.freeze(current);
+    for (const name of Object.getOwnPropertyNames(current)) {
+      const value = current[name];
+      if (value && (typeof value === "object")) {
+        pending.push(value);
+      }
+    }
+  }
+  return obj;
+}
+module.exports.deepFreeze = deepFreeze;
 
 
 /***/ }),
@@ -15358,20 +15146,20 @@ module.exports.applyFixes = function applyFixes(input, errors) {
 
 
 
+let codeBlockAndSpanRanges = null;
+module.exports.codeBlockAndSpanRanges = (value) => {
+  if (value) {
+    codeBlockAndSpanRanges = value;
+  }
+  return codeBlockAndSpanRanges;
+};
+
 let flattenedLists = null;
 module.exports.flattenedLists = (value) => {
   if (value) {
     flattenedLists = value;
   }
   return flattenedLists;
-};
-
-let inlineCodeSpanRanges = null;
-module.exports.inlineCodeSpanRanges = (value) => {
-  if (value) {
-    inlineCodeSpanRanges = value;
-  }
-  return inlineCodeSpanRanges;
 };
 
 let lineMetadata = null;
@@ -15383,10 +15171,25 @@ module.exports.lineMetadata = (value) => {
 };
 
 module.exports.clear = () => {
+  codeBlockAndSpanRanges = null;
   flattenedLists = null;
-  inlineCodeSpanRanges = null;
   lineMetadata = null;
 };
+
+
+/***/ }),
+
+/***/ 5039:
+/***/ ((module) => {
+
+"use strict";
+// @ts-check
+
+
+
+module.exports.deprecatedRuleNames = [ "MD002", "MD006" ];
+module.exports.homepage = "https://github.com/DavidAnson/markdownlint";
+module.exports.version = "0.25.1";
 
 
 /***/ }),
@@ -15399,9 +15202,10 @@ module.exports.clear = () => {
 
 
 
-const path = __nccwpck_require__(5622);
-const { promisify } = __nccwpck_require__(1669);
+const path = __nccwpck_require__(1017);
+const { promisify } = __nccwpck_require__(3837);
 const markdownIt = __nccwpck_require__(8561);
+const { deprecatedRuleNames } = __nccwpck_require__(5039);
 const rules = __nccwpck_require__(7494);
 const helpers = __nccwpck_require__(2935);
 const cache = __nccwpck_require__(3266);
@@ -15411,15 +15215,14 @@ const cache = __nccwpck_require__(3266);
 const dynamicRequire = (typeof require === "undefined") ? require : /* c8 ignore next */ eval("require");
 // Capture native require implementation for dynamic loading of modules
 
-const deprecatedRuleNames = [ "MD002", "MD006" ];
-
 /**
  * Validate the list of rules for structure and reuse.
  *
  * @param {Rule[]} ruleList List of rules.
+ * @param {boolean} synchronous Whether to execute synchronously.
  * @returns {string} Error message if validation fails.
  */
-function validateRuleList(ruleList) {
+function validateRuleList(ruleList, synchronous) {
   let result = null;
   if (ruleList.length === rules.length) {
     // No need to validate if only using built-in rules
@@ -15458,6 +15261,19 @@ function validateRuleList(ruleList) {
       (Object.getPrototypeOf(rule.information) !== URL.prototype)
     ) {
       result = newError("information");
+    }
+    if (
+      !result &&
+      (rule.asynchronous !== undefined) &&
+      (typeof rule.asynchronous !== "boolean")
+    ) {
+      result = newError("asynchronous");
+    }
+    if (!result && rule.asynchronous && synchronous) {
+      result = new Error(
+        "Custom rule " + rule.names.join("/") + " at index " + customIndex +
+        " is asynchronous and can not be used in a synchronous context."
+      );
     }
     if (!result) {
       rule.names.forEach(function forName(name) {
@@ -15579,27 +15395,21 @@ function removeFrontMatter(content, frontMatter) {
  * @returns {void}
  */
 function annotateTokens(tokens, lines) {
-  let tableMap = null;
+  let trMap = null;
   tokens.forEach(function forToken(token) {
-    // Handle missing maps for table head/body
-    if (
-      (token.type === "thead_open") ||
-      (token.type === "tbody_open")
-    ) {
-      tableMap = [ ...token.map ];
-    } else if (
-      (token.type === "tr_close") &&
-      tableMap
-    ) {
-      tableMap[0]++;
-    } else if (
-      (token.type === "thead_close") ||
-      (token.type === "tbody_close")
-    ) {
-      tableMap = null;
+    // Provide missing maps for table content
+    if (token.type === "tr_open") {
+      trMap = token.map;
+    } else if (token.type === "tr_close") {
+      trMap = null;
     }
-    if (tableMap && !token.map) {
-      token.map = [ ...tableMap ];
+    if (!token.map && trMap) {
+      token.map = [ ...trMap ];
+    }
+    // Adjust maps for math blocks
+    if (helpers.isMathBlock(token) && token.map[1]) {
+      // markdown-it-texmath plugin does not account for math_block_end
+      token.map[1]++;
     }
     // Update token metadata
     if (token.map) {
@@ -15732,8 +15542,7 @@ function getEnabledRulesPerLineNumber(
   const enabledRulesPerLineNumber = new Array(1 + frontMatterLines.length);
   // Helper functions
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function handleInlineConfig(perLine, forEachMatch, forEachLine) {
-    const input = perLine ? lines : [ lines.join("\n") ];
+  function handleInlineConfig(input, forEachMatch, forEachLine) {
     input.forEach((line, lineIndex) => {
       if (!noInlineConfig) {
         let match = null;
@@ -15764,6 +15573,7 @@ function getEnabledRulesPerLineNumber(
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
   function applyEnableDisable(action, parameter, state) {
+    state = { ...state };
     const enabled = (action.startsWith("ENABLE"));
     const items = parameter ?
       parameter.trim().toUpperCase().split(/\s+/) :
@@ -15773,40 +15583,42 @@ function getEnabledRulesPerLineNumber(
         state[ruleName] = enabled;
       });
     });
+    return state;
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
   function enableDisableFile(action, parameter) {
     if ((action === "ENABLE-FILE") || (action === "DISABLE-FILE")) {
-      applyEnableDisable(action, parameter, enabledRules);
+      enabledRules = applyEnableDisable(action, parameter, enabledRules);
     }
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
   function captureRestoreEnableDisable(action, parameter) {
     if (action === "CAPTURE") {
-      capturedRules = { ...enabledRules };
+      capturedRules = enabledRules;
     } else if (action === "RESTORE") {
-      enabledRules = { ...capturedRules };
+      enabledRules = capturedRules;
     } else if ((action === "ENABLE") || (action === "DISABLE")) {
-      enabledRules = { ...enabledRules };
-      applyEnableDisable(action, parameter, enabledRules);
+      enabledRules = applyEnableDisable(action, parameter, enabledRules);
     }
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
   function updateLineState() {
-    enabledRulesPerLineNumber.push({ ...enabledRules });
+    enabledRulesPerLineNumber.push(enabledRules);
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
   function disableNextLine(action, parameter, lineNumber) {
     if (action === "DISABLE-NEXT-LINE") {
-      applyEnableDisable(
-        action,
-        parameter,
-        enabledRulesPerLineNumber[lineNumber + 1] || {}
-      );
+      const nextLineNumber = frontMatterLines.length + lineNumber + 1;
+      enabledRulesPerLineNumber[nextLineNumber] =
+        applyEnableDisable(
+          action,
+          parameter,
+          enabledRulesPerLineNumber[nextLineNumber] || {}
+        );
     }
   }
   // Handle inline comments
-  handleInlineConfig(false, configureFile);
+  handleInlineConfig([ lines.join("\n") ], configureFile);
   const effectiveConfig = getEffectiveConfig(
     ruleList, config, aliasToRuleNames);
   ruleList.forEach((rule) => {
@@ -15815,46 +15627,14 @@ function getEnabledRulesPerLineNumber(
     enabledRules[ruleName] = !!effectiveConfig[ruleName];
   });
   capturedRules = enabledRules;
-  handleInlineConfig(true, enableDisableFile);
-  handleInlineConfig(true, captureRestoreEnableDisable, updateLineState);
-  handleInlineConfig(true, disableNextLine);
+  handleInlineConfig(lines, enableDisableFile);
+  handleInlineConfig(lines, captureRestoreEnableDisable, updateLineState);
+  handleInlineConfig(lines, disableNextLine);
   // Return results
   return {
     effectiveConfig,
     enabledRulesPerLineNumber
   };
-}
-
-/**
- * Compare function for Array.prototype.sort for ascending order of errors.
- *
- * @param {LintError} a First error.
- * @param {LintError} b Second error.
- * @returns {number} Positive value if a>b, negative value if b<a, 0 otherwise.
- */
-function lineNumberComparison(a, b) {
-  return a.lineNumber - b.lineNumber;
-}
-
-/**
- * Filter function to include everything.
- *
- * @returns {boolean} True.
- */
-function filterAllValues() {
-  return true;
-}
-
-/**
- * Function to return unique values from a sorted errors array.
- *
- * @param {LintError} value Error instance.
- * @param {number} index Index in array.
- * @param {LintError[]} array Array of errors.
- * @returns {boolean} Filter value.
- */
-function uniqueFilterForSortedErrors(value, index, array) {
-  return (index === 0) || (value.lineNumber > array[index - 1].lineNumber);
 }
 
 /**
@@ -15906,28 +15686,28 @@ function lintContent(
     );
   // Create parameters for rules
   const params = {
-    name,
-    tokens,
-    lines,
-    frontMatterLines
+    "name": helpers.deepFreeze(name),
+    "tokens": helpers.deepFreeze(tokens),
+    "lines": helpers.deepFreeze(lines),
+    "frontMatterLines": helpers.deepFreeze(frontMatterLines)
   };
   cache.lineMetadata(helpers.getLineMetadata(params));
   cache.flattenedLists(helpers.flattenLists(params.tokens));
-  cache.inlineCodeSpanRanges(helpers.inlineCodeSpanRanges(params.lines));
+  cache.codeBlockAndSpanRanges(
+    helpers.codeBlockAndSpanRanges(params, cache.lineMetadata())
+  );
   // Function to run for each rule
-  const result = (resultVersion === 0) ? {} : [];
+  let results = [];
   // eslint-disable-next-line jsdoc/require-jsdoc
   function forRule(rule) {
     // Configure rule
-    const ruleNameFriendly = rule.names[0];
-    const ruleName = ruleNameFriendly.toUpperCase();
+    const ruleName = rule.names[0].toUpperCase();
     params.config = effectiveConfig[ruleName];
     // eslint-disable-next-line jsdoc/require-jsdoc
     function throwError(property) {
       throw new Error(
         "Property '" + property + "' of onError parameter is incorrect.");
     }
-    const errors = [];
     // eslint-disable-next-line jsdoc/require-jsdoc
     function onError(errorInfo) {
       if (!errorInfo ||
@@ -15935,6 +15715,10 @@ function lintContent(
         (errorInfo.lineNumber < 1) ||
         (errorInfo.lineNumber > lines.length)) {
         throwError("lineNumber");
+      }
+      const lineNumber = errorInfo.lineNumber + frontMatterLines.length;
+      if (!enabledRulesPerLineNumber[lineNumber][ruleName]) {
+        return;
       }
       if (errorInfo.detail &&
         !helpers.isString(errorInfo.detail)) {
@@ -15946,12 +15730,12 @@ function lintContent(
       }
       if (errorInfo.range &&
         (!Array.isArray(errorInfo.range) ||
-         (errorInfo.range.length !== 2) ||
-         !helpers.isNumber(errorInfo.range[0]) ||
-         (errorInfo.range[0] < 1) ||
-         !helpers.isNumber(errorInfo.range[1]) ||
-         (errorInfo.range[1] < 1) ||
-         ((errorInfo.range[0] + errorInfo.range[1] - 1) >
+          (errorInfo.range.length !== 2) ||
+          !helpers.isNumber(errorInfo.range[0]) ||
+          (errorInfo.range[0] < 1) ||
+          !helpers.isNumber(errorInfo.range[1]) ||
+          (errorInfo.range[1] < 1) ||
+          ((errorInfo.range[0] + errorInfo.range[1] - 1) >
           lines[errorInfo.lineNumber - 1].length))) {
         throwError("range");
       }
@@ -15996,78 +15780,114 @@ function lintContent(
           cleanFixInfo.insertText = fixInfo.insertText;
         }
       }
-      errors.push({
-        "lineNumber": errorInfo.lineNumber + frontMatterLines.length,
-        "detail": errorInfo.detail || null,
-        "context": errorInfo.context || null,
-        "range": errorInfo.range ? [ ...errorInfo.range ] : null,
+      results.push({
+        lineNumber,
+        "ruleName": rule.names[0],
+        "ruleNames": rule.names,
+        "ruleDescription": rule.description,
+        "ruleInformation": rule.information ? rule.information.href : null,
+        "errorDetail": errorInfo.detail || null,
+        "errorContext": errorInfo.context || null,
+        "errorRange": errorInfo.range ? [ ...errorInfo.range ] : null,
         "fixInfo": fixInfo ? cleanFixInfo : null
       });
     }
-    // Call (possibly external) rule function
-    if (handleRuleFailures) {
-      try {
-        rule.function(params, onError);
-      } catch (error) {
-        onError({
-          "lineNumber": 1,
-          "detail": `This rule threw an exception: ${error.message}`
-        });
+    // Call (possibly external) rule function to report errors
+    const catchCallsOnError = (error) => onError({
+      "lineNumber": 1,
+      "detail": `This rule threw an exception: ${error.message || error}`
+    });
+    const invokeRuleFunction = () => rule.function(params, onError);
+    if (rule.asynchronous) {
+      // Asynchronous rule, ensure it returns a Promise
+      const ruleFunctionPromise =
+        Promise.resolve().then(invokeRuleFunction);
+      return handleRuleFailures ?
+        ruleFunctionPromise.catch(catchCallsOnError) :
+        ruleFunctionPromise;
+    }
+    // Synchronous rule
+    try {
+      invokeRuleFunction();
+    } catch (error) {
+      if (handleRuleFailures) {
+        catchCallsOnError(error);
+      } else {
+        throw error;
+      }
+    }
+    return null;
+  }
+  // eslint-disable-next-line jsdoc/require-jsdoc
+  function formatResults() {
+    // Sort results by rule name by line number
+    results.sort((a, b) => (
+      a.ruleName.localeCompare(b.ruleName) ||
+      a.lineNumber - b.lineNumber
+    ));
+    if (resultVersion < 3) {
+      // Remove fixInfo and multiple errors for the same rule and line number
+      const noPrevious = {
+        "ruleName": null,
+        "lineNumber": -1
+      };
+      results = results.filter((error, index, array) => {
+        delete error.fixInfo;
+        const previous = array[index - 1] || noPrevious;
+        return (
+          (error.ruleName !== previous.ruleName) ||
+          (error.lineNumber !== previous.lineNumber)
+        );
+      });
+    }
+    if (resultVersion === 0) {
+      // Return a dictionary of rule->[line numbers]
+      const dictionary = {};
+      for (const error of results) {
+        const ruleLines = dictionary[error.ruleName] || [];
+        ruleLines.push(error.lineNumber);
+        dictionary[error.ruleName] = ruleLines;
+      }
+      // @ts-ignore
+      results = dictionary;
+    } else if (resultVersion === 1) {
+      // Use ruleAlias instead of ruleNames
+      for (const error of results) {
+        error.ruleAlias = error.ruleNames[1] || error.ruleName;
+        delete error.ruleNames;
       }
     } else {
-      rule.function(params, onError);
-    }
-    // Record any errors (significant performance benefit from length check)
-    if (errors.length > 0) {
-      errors.sort(lineNumberComparison);
-      const filteredErrors = errors
-        .filter((resultVersion === 3) ?
-          filterAllValues :
-          uniqueFilterForSortedErrors)
-        .filter(function removeDisabledRules(error) {
-          return enabledRulesPerLineNumber[error.lineNumber][ruleName];
-        })
-        .map(function formatResults(error) {
-          if (resultVersion === 0) {
-            return error.lineNumber;
-          }
-          const errorObject = {};
-          errorObject.lineNumber = error.lineNumber;
-          if (resultVersion === 1) {
-            errorObject.ruleName = ruleNameFriendly;
-            errorObject.ruleAlias = rule.names[1] || rule.names[0];
-          } else {
-            errorObject.ruleNames = rule.names;
-          }
-          errorObject.ruleDescription = rule.description;
-          errorObject.ruleInformation =
-            rule.information ? rule.information.href : null;
-          errorObject.errorDetail = error.detail;
-          errorObject.errorContext = error.context;
-          errorObject.errorRange = error.range;
-          if (resultVersion === 3) {
-            errorObject.fixInfo = error.fixInfo;
-          }
-          return errorObject;
-        });
-      if (filteredErrors.length > 0) {
-        if (resultVersion === 0) {
-          result[ruleNameFriendly] = filteredErrors;
-        } else {
-          Array.prototype.push.apply(result, filteredErrors);
-        }
+      // resultVersion 2 or 3: Remove unwanted ruleName
+      for (const error of results) {
+        delete error.ruleName;
       }
     }
+    return results;
   }
   // Run all rules
+  const ruleListAsync = ruleList.filter((rule) => rule.asynchronous);
+  const ruleListSync = ruleList.filter((rule) => !rule.asynchronous);
+  const ruleListAsyncFirst = [
+    ...ruleListAsync,
+    ...ruleListSync
+  ];
+  const callbackSuccess = () => callback(null, formatResults());
+  const callbackError =
+    (error) => callback(error instanceof Error ? error : new Error(error));
   try {
-    ruleList.forEach(forRule);
+    const ruleResults = ruleListAsyncFirst.map(forRule);
+    if (ruleListAsync.length > 0) {
+      Promise.all(ruleResults.slice(0, ruleListAsync.length))
+        .then(callbackSuccess)
+        .catch(callbackError);
+    } else {
+      callbackSuccess();
+    }
   } catch (error) {
+    callbackError(error);
+  } finally {
     cache.clear();
-    return callback(error);
   }
-  cache.clear();
-  return callback(null, result);
 }
 
 /**
@@ -16128,7 +15948,7 @@ function lintInput(options, synchronous, callback) {
   callback = callback || function noop() {};
   // eslint-disable-next-line unicorn/prefer-spread
   const ruleList = rules.concat(options.customRules || []);
-  const ruleErr = validateRuleList(ruleList);
+  const ruleErr = validateRuleList(ruleList, synchronous);
   if (ruleErr) {
     return callback(ruleErr);
   }
@@ -16153,65 +15973,35 @@ function lintInput(options, synchronous, callback) {
     // @ts-ignore
     md.use(...plugin);
   });
-  const fs = options.fs || __nccwpck_require__(5747);
+  const fs = options.fs || __nccwpck_require__(7147);
   const results = newResults(ruleList);
   let done = false;
-  // Linting of strings is always synchronous
-  let syncItem = null;
-  // eslint-disable-next-line jsdoc/require-jsdoc
-  function syncCallback(err, result) {
-    if (err) {
-      done = true;
-      return callback(err);
-    }
-    results[syncItem] = result;
-    return null;
-  }
-  while (!done && (syncItem = stringsKeys.shift())) {
-    lintContent(
-      ruleList,
-      syncItem,
-      strings[syncItem] || "",
-      md,
-      config,
-      frontMatter,
-      handleRuleFailures,
-      noInlineConfig,
-      resultVersion,
-      syncCallback
-    );
-  }
-  if (synchronous) {
-    // Lint files synchronously
-    while (!done && (syncItem = files.shift())) {
-      lintFile(
-        ruleList,
-        syncItem,
-        md,
-        config,
-        frontMatter,
-        handleRuleFailures,
-        noInlineConfig,
-        resultVersion,
-        fs,
-        synchronous,
-        syncCallback
-      );
-    }
-    return done || callback(null, results);
-  }
-  // Lint files asynchronously
   let concurrency = 0;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function lintConcurrently() {
-    const asyncItem = files.shift();
+  function lintWorker() {
+    let currentItem = null;
+    // eslint-disable-next-line jsdoc/require-jsdoc
+    function lintWorkerCallback(err, result) {
+      concurrency--;
+      if (err) {
+        done = true;
+        return callback(err);
+      }
+      results[currentItem] = result;
+      if (!synchronous) {
+        lintWorker();
+      }
+      return null;
+    }
     if (done) {
-      // Nothing to do
-    } else if (asyncItem) {
+      // Abort for error or nothing left to do
+    } else if (files.length > 0) {
+      // Lint next file
       concurrency++;
+      currentItem = files.shift();
       lintFile(
         ruleList,
-        asyncItem,
+        currentItem,
         md,
         config,
         frontMatter,
@@ -16220,34 +16010,48 @@ function lintInput(options, synchronous, callback) {
         resultVersion,
         fs,
         synchronous,
-        (err, result) => {
-          concurrency--;
-          if (err) {
-            done = true;
-            return callback(err);
-          }
-          results[asyncItem] = result;
-          lintConcurrently();
-          return null;
-        }
+        lintWorkerCallback
+      );
+    } else if (stringsKeys.length > 0) {
+      // Lint next string
+      concurrency++;
+      currentItem = stringsKeys.shift();
+      lintContent(
+        ruleList,
+        currentItem,
+        strings[currentItem] || "",
+        md,
+        config,
+        frontMatter,
+        handleRuleFailures,
+        noInlineConfig,
+        resultVersion,
+        lintWorkerCallback
       );
     } else if (concurrency === 0) {
+      // Finish
       done = true;
       return callback(null, results);
     }
     return null;
   }
-  // Testing on a Raspberry Pi 4 Model B with an artificial 5ms file access
-  // delay suggests that a concurrency factor of 8 can eliminate the impact
-  // of that delay (i.e., total time is the same as with no delay).
-  lintConcurrently();
-  lintConcurrently();
-  lintConcurrently();
-  lintConcurrently();
-  lintConcurrently();
-  lintConcurrently();
-  lintConcurrently();
-  lintConcurrently();
+  if (synchronous) {
+    while (!done) {
+      lintWorker();
+    }
+  } else {
+    // Testing on a Raspberry Pi 4 Model B with an artificial 5ms file access
+    // delay suggests that a concurrency factor of 8 can eliminate the impact
+    // of that delay (i.e., total time is the same as with no delay).
+    lintWorker();
+    lintWorker();
+    lintWorker();
+    lintWorker();
+    lintWorker();
+    lintWorker();
+    lintWorker();
+    lintWorker();
+  }
   return null;
 }
 
@@ -16303,12 +16107,13 @@ function parseConfiguration(name, content, parsers) {
   let config = null;
   let message = "";
   const errors = [];
+  let index = 0;
   // Try each parser
   (parsers || [ JSON.parse ]).every((parser) => {
     try {
       config = parser(content);
     } catch (error) {
-      errors.push(error.message);
+      errors.push(`Parser ${index++}: ${error.message}`);
     }
     return !config;
   });
@@ -16404,7 +16209,7 @@ function readConfig(file, parsers, fs, callback) {
     }
   }
   if (!fs) {
-    fs = __nccwpck_require__(5747);
+    fs = __nccwpck_require__(7147);
   }
   // Read file
   fs.readFile(file, "utf8", (err, content) => {
@@ -16471,7 +16276,7 @@ function readConfigPromise(file, parsers, fs) {
  */
 function readConfigSync(file, parsers, fs) {
   if (!fs) {
-    fs = __nccwpck_require__(5747);
+    fs = __nccwpck_require__(7147);
   }
   // Read file
   const content = fs.readFileSync(file, "utf8");
@@ -16499,7 +16304,7 @@ function readConfigSync(file, parsers, fs) {
  * @returns {string} SemVer string.
  */
 function getVersion() {
-  return __nccwpck_require__(3927).version;
+  return (__nccwpck_require__(5039).version);
 }
 
 // Export a/synchronous/Promise APIs
@@ -16569,7 +16374,7 @@ module.exports = markdownlint;
  *
  * @typedef {Object} RuleOnErrorInfo
  * @property {number} lineNumber Line number (1-based).
- * @property {string} [details] Details about the error.
+ * @property {string} [detail] Detail about the error.
  * @property {string} [context] Context for the error.
  * @property {number[]} [range] Column number (1-based) and length.
  * @property {RuleOnErrorFixInfo} [fixInfo] Fix information.
@@ -16593,6 +16398,7 @@ module.exports = markdownlint;
  * @property {string} description Rule description.
  * @property {URL} [information] Link to more information.
  * @property {string[]} tags Rule tag(s).
+ * @property {boolean} [asynchronous] True if asynchronous.
  * @property {RuleFunction} function Rule implementation.
  */
 
@@ -17040,12 +16846,14 @@ module.exports = {
   "function": function MD007(params, onError) {
     const indent = Number(params.config.indent || 2);
     const startIndented = !!params.config.start_indented;
+    const startIndent = Number(params.config.start_indent || indent);
     flattenedLists().forEach((list) => {
       if (list.unordered && list.parentsUnordered) {
         list.items.forEach((item) => {
           const { lineNumber, line } = item;
-          const expectedNesting = list.nesting + (startIndented ? 1 : 0);
-          const expectedIndent = expectedNesting * indent;
+          const expectedIndent =
+            (startIndented ? startIndent : 0) +
+            (list.nesting * indent);
           const actualIndent = indentFor(item);
           let range = null;
           let editColumn = 1;
@@ -17171,8 +16979,8 @@ module.exports = {
 
 
 
-const { addError, forEachLine } = __nccwpck_require__(2935);
-const { lineMetadata } = __nccwpck_require__(3266);
+const { addError, forEachLine, overlapsAnyRange } = __nccwpck_require__(2935);
+const { codeBlockAndSpanRanges, lineMetadata } = __nccwpck_require__(3266);
 
 const tabRe = /\t+/g;
 
@@ -17182,28 +16990,33 @@ module.exports = {
   "tags": [ "whitespace", "hard_tab" ],
   "function": function MD010(params, onError) {
     const codeBlocks = params.config.code_blocks;
-    const includeCodeBlocks = (codeBlocks === undefined) ? true : !!codeBlocks;
+    const includeCode = (codeBlocks === undefined) ? true : !!codeBlocks;
     const spacesPerTab = params.config.spaces_per_tab;
     const spaceMultiplier = (spacesPerTab === undefined) ?
       1 :
       Math.max(0, Number(spacesPerTab));
+    const exclusions = includeCode ? [] : codeBlockAndSpanRanges();
     forEachLine(lineMetadata(), (line, lineIndex, inCode) => {
-      if (!inCode || includeCodeBlocks) {
+      if (includeCode || !inCode) {
         let match = null;
         while ((match = tabRe.exec(line)) !== null) {
-          const column = match.index + 1;
+          const { index } = match;
+          const column = index + 1;
           const length = match[0].length;
-          addError(
-            onError,
-            lineIndex + 1,
-            "Column: " + column,
-            null,
-            [ column, length ],
-            {
-              "editColumn": column,
-              "deleteCount": length,
-              "insertText": "".padEnd(length * spaceMultiplier)
-            });
+          if (!overlapsAnyRange(exclusions, lineIndex, index, length)) {
+            addError(
+              onError,
+              lineIndex + 1,
+              "Column: " + column,
+              null,
+              [ column, length ],
+              {
+                "editColumn": column,
+                "deleteCount": length,
+                "insertText": "".padEnd(length * spaceMultiplier)
+              }
+            );
+          }
         }
       }
     });
@@ -17222,7 +17035,7 @@ module.exports = {
 
 
 const { addError, forEachLine, overlapsAnyRange } = __nccwpck_require__(2935);
-const { inlineCodeSpanRanges, lineMetadata } = __nccwpck_require__(3266);
+const { codeBlockAndSpanRanges, lineMetadata } = __nccwpck_require__(3266);
 
 const reversedLinkRe =
   /(^|[^\\])\(([^)]+)\)\[([^\]^][^\]]*)](?!\()/g;
@@ -17232,7 +17045,7 @@ module.exports = {
   "description": "Reversed link syntax",
   "tags": [ "links" ],
   "function": function MD011(params, onError) {
-    const exclusions = inlineCodeSpanRanges();
+    const exclusions = codeBlockAndSpanRanges();
     forEachLine(lineMetadata(), (line, lineIndex, inCode, onFence) => {
       if (!inCode && !onFence) {
         let match = null;
@@ -18297,12 +18110,13 @@ module.exports = {
 
 
 
-const { addError, forEachLine, unescapeMarkdown } = __nccwpck_require__(2935);
-const { lineMetadata } = __nccwpck_require__(3266);
+const {
+  addError, forEachLine, overlapsAnyRange, unescapeMarkdown
+} = __nccwpck_require__(2935);
+const { codeBlockAndSpanRanges, lineMetadata } = __nccwpck_require__(3266);
 
 const htmlElementRe = /<(([A-Za-z][A-Za-z0-9-]*)(?:\s[^>]*)?)\/?>/g;
 const linkDestinationRe = /]\(\s*$/;
-const inlineCodeRe = /^[^`]*(`+[^`]+`+[^`]+)*`+[^`]*$/;
 // See https://spec.commonmark.org/0.29/#autolinks
 const emailAddressRe =
   // eslint-disable-next-line max-len
@@ -18316,19 +18130,22 @@ module.exports = {
     let allowedElements = params.config.allowed_elements;
     allowedElements = Array.isArray(allowedElements) ? allowedElements : [];
     allowedElements = allowedElements.map((element) => element.toLowerCase());
+    const exclusions = codeBlockAndSpanRanges();
     forEachLine(lineMetadata(), (line, lineIndex, inCode) => {
       let match = null;
       // eslint-disable-next-line no-unmodified-loop-condition
       while (!inCode && ((match = htmlElementRe.exec(line)) !== null)) {
         const [ tag, content, element ] = match;
-        if (!allowedElements.includes(element.toLowerCase()) &&
+        if (
+          !allowedElements.includes(element.toLowerCase()) &&
           !tag.endsWith("\\>") &&
-          !emailAddressRe.test(content)) {
+          !emailAddressRe.test(content) &&
+          !overlapsAnyRange(exclusions, lineIndex, match.index, match[0].length)
+        ) {
           const prefix = line.substring(0, match.index);
-          if (!linkDestinationRe.test(prefix) && !inlineCodeRe.test(prefix)) {
+          if (!linkDestinationRe.test(prefix)) {
             const unescaped = unescapeMarkdown(prefix + "<", "_");
-            if (!unescaped.endsWith("_") &&
-              ((unescaped + "`").match(/`/g).length % 2)) {
+            if (!unescaped.endsWith("_")) {
               addError(onError, lineIndex + 1, "Element: " + element,
                 null, [ match.index + 1, tag.length ]);
             }
@@ -18427,12 +18244,12 @@ module.exports = {
   "tags": [ "hr" ],
   "function": function MD035(params, onError) {
     let style = String(params.config.style || "consistent");
-    filterTokens(params, "hr", function forToken(token) {
-      const lineTrim = token.line.trim();
+    filterTokens(params, "hr", (token) => {
+      const { lineNumber, markup } = token;
       if (style === "consistent") {
-        style = lineTrim;
+        style = markup;
       }
-      addErrorDetailIf(onError, token.lineNumber, style, lineTrim);
+      addErrorDetailIf(onError, lineNumber, style, markup);
     });
   }
 };
@@ -18517,6 +18334,7 @@ const { addErrorContext, emphasisMarkersInContent, forEachLine, isBlankLine } =
 const { lineMetadata } = __nccwpck_require__(3266);
 
 const emphasisRe = /(^|[^\\]|\\\\)(?:(\*\*?\*?)|(__?_?))/g;
+const embeddedUnderscoreRe = /([A-Za-z0-9])_([A-Za-z0-9])/g;
 const asteriskListItemMarkerRe = /^([\s>]*)\*(\s+)/;
 const leftSpaceRe = /^\s+/;
 const rightSpaceRe = /\s+$/;
@@ -18608,14 +18426,15 @@ module.exports = {
           // Emphasis has no meaning here
           return;
         }
+        let patchedLine = line.replace(embeddedUnderscoreRe, "$1 $2");
         if (onItemStart) {
           // Trim overlapping '*' list item marker
-          line = line.replace(asteriskListItemMarkerRe, "$1 $2");
+          patchedLine = patchedLine.replace(asteriskListItemMarkerRe, "$1 $2");
         }
         let match = null;
         // Match all emphasis-looking runs in the line...
-        while ((match = emphasisRe.exec(line))) {
-          const ignoreMarkersForLine = ignoreMarkersByLine[lineIndex] || [];
+        while ((match = emphasisRe.exec(patchedLine))) {
+          const ignoreMarkersForLine = ignoreMarkersByLine[lineIndex];
           const matchIndex = match.index + match[1].length;
           if (ignoreMarkersForLine.includes(matchIndex)) {
             // Ignore emphasis markers inside code spans and links
@@ -18774,7 +18593,8 @@ module.exports = {
 
 const { addErrorContext, filterTokens } = __nccwpck_require__(2935);
 
-const spaceInLinkRe = /\[(?:\s+(?:[^\]]*?)\s*|(?:[^\]]*?)\s+)](?=\(\S*\))/;
+const spaceInLinkRe =
+  /\[(?:\s+(?:[^\]]*?)\s*|(?:[^\]]*?)\s+)](?=((?:\([^)]*\))|(?:\[[^\]]*\])))/;
 
 module.exports = {
   "names": [ "MD039", "no-space-in-links" ],
@@ -18988,7 +18808,6 @@ module.exports = {
       let matchAny = false;
       let hasError = false;
       let anyHeadings = false;
-      // eslint-disable-next-line func-style
       const getExpected = () => requiredHeadings[i++] || "[None]";
       forEachHeading(params, (heading, content) => {
         if (!hasError) {
@@ -19041,7 +18860,7 @@ module.exports = {
 
 const { addErrorDetailIf, bareUrlRe, escapeForRegExp, forEachLine,
   overlapsAnyRange, linkRe, linkReferenceRe } = __nccwpck_require__(2935);
-const { inlineCodeSpanRanges, lineMetadata } = __nccwpck_require__(3266);
+const { codeBlockAndSpanRanges, lineMetadata } = __nccwpck_require__(3266);
 
 module.exports = {
   "names": [ "MD044", "proper-names" ],
@@ -19073,7 +18892,7 @@ module.exports = {
       }
     });
     if (!includeCodeBlocks) {
-      exclusions.push(...inlineCodeSpanRanges());
+      exclusions.push(...codeBlockAndSpanRanges());
     }
     for (const name of names) {
       const escapedName = escapeForRegExp(name);
@@ -19255,6 +19074,112 @@ module.exports = {
 
 /***/ }),
 
+/***/ 2502:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+// @ts-check
+
+
+
+const { addError, emphasisOrStrongStyleFor, forEachInlineChild,
+  getNextChildToken, getRangeAndFixInfoIfFound } = __nccwpck_require__(2935);
+
+module.exports = {
+  "names": [ "MD049", "emphasis-style" ],
+  "description": "Emphasis style should be consistent",
+  "tags": [ "emphasis" ],
+  "function": function MD049(params, onError) {
+    let expectedStyle = String(params.config.style || "consistent");
+    forEachInlineChild(params, "em_open", (token, parent) => {
+      const { lineNumber, markup } = token;
+      const markupStyle = emphasisOrStrongStyleFor(markup);
+      if (expectedStyle === "consistent") {
+        expectedStyle = markupStyle;
+      }
+      if (expectedStyle !== markupStyle) {
+        let rangeAndFixInfo = {};
+        const contentToken = getNextChildToken(
+          parent, token, "text", "em_close"
+        );
+        if (contentToken) {
+          const { content } = contentToken;
+          const actual = `${markup}${content}${markup}`;
+          const expectedMarkup = (expectedStyle === "asterisk") ? "*" : "_";
+          const expected = `${expectedMarkup}${content}${expectedMarkup}`;
+          rangeAndFixInfo = getRangeAndFixInfoIfFound(
+            params.lines, lineNumber - 1, actual, expected
+          );
+        }
+        addError(
+          onError,
+          lineNumber,
+          `Expected: ${expectedStyle}; Actual: ${markupStyle}`,
+          null,
+          rangeAndFixInfo.range,
+          rangeAndFixInfo.fixInfo
+        );
+      }
+    });
+  }
+};
+
+
+/***/ }),
+
+/***/ 7321:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+// @ts-check
+
+
+
+const { addError, emphasisOrStrongStyleFor, forEachInlineChild,
+  getNextChildToken, getRangeAndFixInfoIfFound } = __nccwpck_require__(2935);
+
+module.exports = {
+  "names": [ "MD050", "strong-style" ],
+  "description": "Strong style should be consistent",
+  "tags": [ "emphasis" ],
+  "function": function MD050(params, onError) {
+    let expectedStyle = String(params.config.style || "consistent");
+    forEachInlineChild(params, "strong_open", (token, parent) => {
+      const { lineNumber, markup } = token;
+      const markupStyle = emphasisOrStrongStyleFor(markup);
+      if (expectedStyle === "consistent") {
+        expectedStyle = markupStyle;
+      }
+      if (expectedStyle !== markupStyle) {
+        let rangeAndFixInfo = {};
+        const contentToken = getNextChildToken(
+          parent, token, "text", "strong_close"
+        );
+        if (contentToken) {
+          const { content } = contentToken;
+          const actual = `${markup}${content}${markup}`;
+          const expectedMarkup = (expectedStyle === "asterisk") ? "**" : "__";
+          const expected = `${expectedMarkup}${content}${expectedMarkup}`;
+          rangeAndFixInfo = getRangeAndFixInfoIfFound(
+            params.lines, lineNumber - 1, actual, expected
+          );
+        }
+        addError(
+          onError,
+          lineNumber,
+          `Expected: ${expectedStyle}; Actual: ${markupStyle}`,
+          null,
+          rangeAndFixInfo.range,
+          rangeAndFixInfo.fixInfo
+        );
+      }
+    });
+  }
+};
+
+
+/***/ }),
+
 /***/ 7494:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -19263,9 +19188,7 @@ module.exports = {
 
 
 
-const packageJson = __nccwpck_require__(3927);
-const homepage = packageJson.homepage;
-const version = packageJson.version;
+const { homepage, version } = __nccwpck_require__(5039);
 
 const rules = [
   __nccwpck_require__(3516),
@@ -19311,7 +19234,9 @@ const rules = [
   __nccwpck_require__(2490),
   __nccwpck_require__(4378),
   __nccwpck_require__(9346),
-  __nccwpck_require__(2299)
+  __nccwpck_require__(2299),
+  __nccwpck_require__(2502),
+  __nccwpck_require__(7321)
 ];
 rules.forEach((rule) => {
   const name = rule.names[0].toLowerCase();
@@ -19940,7 +19865,7 @@ module.exports = urlParse;
  * Copyright (c) 2014-2020 Teambition
  * Licensed under the MIT license.
  */
-const Stream = __nccwpck_require__(2413)
+const Stream = __nccwpck_require__(2781)
 const PassThrough = Stream.PassThrough
 const slice = Array.prototype.slice
 
@@ -20086,7 +20011,7 @@ function pauseStreams (streams, options) {
 "use strict";
 
 
-const util = __nccwpck_require__(1669);
+const util = __nccwpck_require__(3837);
 const braces = __nccwpck_require__(610);
 const picomatch = __nccwpck_require__(8569);
 const utils = __nccwpck_require__(479);
@@ -20560,8 +20485,8 @@ module.exports = micromatch;
 
 "use strict";
 
-const {promisify} = __nccwpck_require__(1669);
-const fs = __nccwpck_require__(5747);
+const {promisify} = __nccwpck_require__(3837);
+const fs = __nccwpck_require__(7147);
 
 async function isType(fsStatType, statsMethodName, filePath) {
 	if (typeof filePath !== 'string') {
@@ -20623,7 +20548,7 @@ module.exports = __nccwpck_require__(3322);
 "use strict";
 
 
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const WIN_SLASH = '\\\\/';
 const WIN_NO_SLASH = `[^${WIN_SLASH}]`;
 
@@ -21909,7 +21834,7 @@ module.exports = parse;
 "use strict";
 
 
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const scan = __nccwpck_require__(2429);
 const parse = __nccwpck_require__(2139);
 const utils = __nccwpck_require__(479);
@@ -22658,7 +22583,7 @@ module.exports = scan;
 "use strict";
 
 
-const path = __nccwpck_require__(5622);
+const path = __nccwpck_require__(1017);
 const win32 = process.platform === 'win32';
 const {
   REGEX_BACKSLASH,
@@ -22835,110 +22760,6 @@ function runParallel (tasks, cb) {
 
   isSync = false
 }
-
-
-/***/ }),
-
-/***/ 4111:
-/***/ ((module) => {
-
-"use strict";
-
-module.exports = path => {
-	const isExtendedLengthPath = /^\\\\\?\\/.test(path);
-	const hasNonAscii = /[^\u0000-\u0080]+/.test(path); // eslint-disable-line no-control-regex
-
-	if (isExtendedLengthPath || hasNonAscii) {
-		return path;
-	}
-
-	return path.replace(/\\/g, '/');
-};
-
-
-/***/ }),
-
-/***/ 2562:
-/***/ ((module) => {
-
-"use strict";
-
-const singleComment = Symbol('singleComment');
-const multiComment = Symbol('multiComment');
-const stripWithoutWhitespace = () => '';
-const stripWithWhitespace = (string, start, end) => string.slice(start, end).replace(/\S/g, ' ');
-
-const isEscaped = (jsonString, quotePosition) => {
-	let index = quotePosition - 1;
-	let backslashCount = 0;
-
-	while (jsonString[index] === '\\') {
-		index -= 1;
-		backslashCount += 1;
-	}
-
-	return Boolean(backslashCount % 2);
-};
-
-module.exports = (jsonString, options = {}) => {
-	if (typeof jsonString !== 'string') {
-		throw new TypeError(`Expected argument \`jsonString\` to be a \`string\`, got \`${typeof jsonString}\``);
-	}
-
-	const strip = options.whitespace === false ? stripWithoutWhitespace : stripWithWhitespace;
-
-	let insideString = false;
-	let insideComment = false;
-	let offset = 0;
-	let result = '';
-
-	for (let i = 0; i < jsonString.length; i++) {
-		const currentCharacter = jsonString[i];
-		const nextCharacter = jsonString[i + 1];
-
-		if (!insideComment && currentCharacter === '"') {
-			const escaped = isEscaped(jsonString, i);
-			if (!escaped) {
-				insideString = !insideString;
-			}
-		}
-
-		if (insideString) {
-			continue;
-		}
-
-		if (!insideComment && currentCharacter + nextCharacter === '//') {
-			result += jsonString.slice(offset, i);
-			offset = i;
-			insideComment = singleComment;
-			i++;
-		} else if (insideComment === singleComment && currentCharacter + nextCharacter === '\r\n') {
-			i++;
-			insideComment = false;
-			result += strip(jsonString, offset, i);
-			offset = i;
-			continue;
-		} else if (insideComment === singleComment && currentCharacter === '\n') {
-			insideComment = false;
-			result += strip(jsonString, offset, i);
-			offset = i;
-		} else if (!insideComment && currentCharacter + nextCharacter === '/*') {
-			result += jsonString.slice(offset, i);
-			offset = i;
-			insideComment = multiComment;
-			i++;
-			continue;
-		} else if (insideComment === multiComment && currentCharacter + nextCharacter === '*/') {
-			i++;
-			insideComment = false;
-			result += strip(jsonString, offset, i + 1);
-			offset = i + 1;
-			continue;
-		}
-	}
-
-	return result + (insideComment ? strip(jsonString.slice(offset)) : jsonString.slice(offset));
-};
 
 
 /***/ }),
@@ -23239,6 +23060,286 @@ module.exports = toRegexRange;
 
 /***/ }),
 
+/***/ 4294:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+module.exports = __nccwpck_require__(4219);
+
+
+/***/ }),
+
+/***/ 4219:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+var net = __nccwpck_require__(1808);
+var tls = __nccwpck_require__(4404);
+var http = __nccwpck_require__(3685);
+var https = __nccwpck_require__(5687);
+var events = __nccwpck_require__(2361);
+var assert = __nccwpck_require__(9491);
+var util = __nccwpck_require__(3837);
+
+
+exports.httpOverHttp = httpOverHttp;
+exports.httpsOverHttp = httpsOverHttp;
+exports.httpOverHttps = httpOverHttps;
+exports.httpsOverHttps = httpsOverHttps;
+
+
+function httpOverHttp(options) {
+  var agent = new TunnelingAgent(options);
+  agent.request = http.request;
+  return agent;
+}
+
+function httpsOverHttp(options) {
+  var agent = new TunnelingAgent(options);
+  agent.request = http.request;
+  agent.createSocket = createSecureSocket;
+  agent.defaultPort = 443;
+  return agent;
+}
+
+function httpOverHttps(options) {
+  var agent = new TunnelingAgent(options);
+  agent.request = https.request;
+  return agent;
+}
+
+function httpsOverHttps(options) {
+  var agent = new TunnelingAgent(options);
+  agent.request = https.request;
+  agent.createSocket = createSecureSocket;
+  agent.defaultPort = 443;
+  return agent;
+}
+
+
+function TunnelingAgent(options) {
+  var self = this;
+  self.options = options || {};
+  self.proxyOptions = self.options.proxy || {};
+  self.maxSockets = self.options.maxSockets || http.Agent.defaultMaxSockets;
+  self.requests = [];
+  self.sockets = [];
+
+  self.on('free', function onFree(socket, host, port, localAddress) {
+    var options = toOptions(host, port, localAddress);
+    for (var i = 0, len = self.requests.length; i < len; ++i) {
+      var pending = self.requests[i];
+      if (pending.host === options.host && pending.port === options.port) {
+        // Detect the request to connect same origin server,
+        // reuse the connection.
+        self.requests.splice(i, 1);
+        pending.request.onSocket(socket);
+        return;
+      }
+    }
+    socket.destroy();
+    self.removeSocket(socket);
+  });
+}
+util.inherits(TunnelingAgent, events.EventEmitter);
+
+TunnelingAgent.prototype.addRequest = function addRequest(req, host, port, localAddress) {
+  var self = this;
+  var options = mergeOptions({request: req}, self.options, toOptions(host, port, localAddress));
+
+  if (self.sockets.length >= this.maxSockets) {
+    // We are over limit so we'll add it to the queue.
+    self.requests.push(options);
+    return;
+  }
+
+  // If we are under maxSockets create a new one.
+  self.createSocket(options, function(socket) {
+    socket.on('free', onFree);
+    socket.on('close', onCloseOrRemove);
+    socket.on('agentRemove', onCloseOrRemove);
+    req.onSocket(socket);
+
+    function onFree() {
+      self.emit('free', socket, options);
+    }
+
+    function onCloseOrRemove(err) {
+      self.removeSocket(socket);
+      socket.removeListener('free', onFree);
+      socket.removeListener('close', onCloseOrRemove);
+      socket.removeListener('agentRemove', onCloseOrRemove);
+    }
+  });
+};
+
+TunnelingAgent.prototype.createSocket = function createSocket(options, cb) {
+  var self = this;
+  var placeholder = {};
+  self.sockets.push(placeholder);
+
+  var connectOptions = mergeOptions({}, self.proxyOptions, {
+    method: 'CONNECT',
+    path: options.host + ':' + options.port,
+    agent: false,
+    headers: {
+      host: options.host + ':' + options.port
+    }
+  });
+  if (options.localAddress) {
+    connectOptions.localAddress = options.localAddress;
+  }
+  if (connectOptions.proxyAuth) {
+    connectOptions.headers = connectOptions.headers || {};
+    connectOptions.headers['Proxy-Authorization'] = 'Basic ' +
+        new Buffer(connectOptions.proxyAuth).toString('base64');
+  }
+
+  debug('making CONNECT request');
+  var connectReq = self.request(connectOptions);
+  connectReq.useChunkedEncodingByDefault = false; // for v0.6
+  connectReq.once('response', onResponse); // for v0.6
+  connectReq.once('upgrade', onUpgrade);   // for v0.6
+  connectReq.once('connect', onConnect);   // for v0.7 or later
+  connectReq.once('error', onError);
+  connectReq.end();
+
+  function onResponse(res) {
+    // Very hacky. This is necessary to avoid http-parser leaks.
+    res.upgrade = true;
+  }
+
+  function onUpgrade(res, socket, head) {
+    // Hacky.
+    process.nextTick(function() {
+      onConnect(res, socket, head);
+    });
+  }
+
+  function onConnect(res, socket, head) {
+    connectReq.removeAllListeners();
+    socket.removeAllListeners();
+
+    if (res.statusCode !== 200) {
+      debug('tunneling socket could not be established, statusCode=%d',
+        res.statusCode);
+      socket.destroy();
+      var error = new Error('tunneling socket could not be established, ' +
+        'statusCode=' + res.statusCode);
+      error.code = 'ECONNRESET';
+      options.request.emit('error', error);
+      self.removeSocket(placeholder);
+      return;
+    }
+    if (head.length > 0) {
+      debug('got illegal response body from proxy');
+      socket.destroy();
+      var error = new Error('got illegal response body from proxy');
+      error.code = 'ECONNRESET';
+      options.request.emit('error', error);
+      self.removeSocket(placeholder);
+      return;
+    }
+    debug('tunneling connection has established');
+    self.sockets[self.sockets.indexOf(placeholder)] = socket;
+    return cb(socket);
+  }
+
+  function onError(cause) {
+    connectReq.removeAllListeners();
+
+    debug('tunneling socket could not be established, cause=%s\n',
+          cause.message, cause.stack);
+    var error = new Error('tunneling socket could not be established, ' +
+                          'cause=' + cause.message);
+    error.code = 'ECONNRESET';
+    options.request.emit('error', error);
+    self.removeSocket(placeholder);
+  }
+};
+
+TunnelingAgent.prototype.removeSocket = function removeSocket(socket) {
+  var pos = this.sockets.indexOf(socket)
+  if (pos === -1) {
+    return;
+  }
+  this.sockets.splice(pos, 1);
+
+  var pending = this.requests.shift();
+  if (pending) {
+    // If we have pending requests and a socket gets closed a new one
+    // needs to be created to take over in the pool for the one that closed.
+    this.createSocket(pending, function(socket) {
+      pending.request.onSocket(socket);
+    });
+  }
+};
+
+function createSecureSocket(options, cb) {
+  var self = this;
+  TunnelingAgent.prototype.createSocket.call(self, options, function(socket) {
+    var hostHeader = options.request.getHeader('host');
+    var tlsOptions = mergeOptions({}, self.options, {
+      socket: socket,
+      servername: hostHeader ? hostHeader.replace(/:.*$/, '') : options.host
+    });
+
+    // 0 is dummy port for v0.6
+    var secureSocket = tls.connect(0, tlsOptions);
+    self.sockets[self.sockets.indexOf(socket)] = secureSocket;
+    cb(secureSocket);
+  });
+}
+
+
+function toOptions(host, port, localAddress) {
+  if (typeof host === 'string') { // since v0.10
+    return {
+      host: host,
+      port: port,
+      localAddress: localAddress
+    };
+  }
+  return host; // for v0.11 or later
+}
+
+function mergeOptions(target) {
+  for (var i = 1, len = arguments.length; i < len; ++i) {
+    var overrides = arguments[i];
+    if (typeof overrides === 'object') {
+      var keys = Object.keys(overrides);
+      for (var j = 0, keyLen = keys.length; j < keyLen; ++j) {
+        var k = keys[j];
+        if (overrides[k] !== undefined) {
+          target[k] = overrides[k];
+        }
+      }
+    }
+  }
+  return target;
+}
+
+
+var debug;
+if (process.env.NODE_DEBUG && /\btunnel\b/.test(process.env.NODE_DEBUG)) {
+  debug = function() {
+    var args = Array.prototype.slice.call(arguments);
+    if (typeof args[0] === 'string') {
+      args[0] = 'TUNNEL: ' + args[0];
+    } else {
+      args.unshift('TUNNEL:');
+    }
+    console.error.apply(console, args);
+  }
+} else {
+  debug = function() {};
+}
+exports.debug = debug; // for test
+
+
+/***/ }),
+
 /***/ 4338:
 /***/ ((module) => {
 
@@ -23289,15 +23390,1061 @@ module.exports=/[\0-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-
 
 /***/ }),
 
-/***/ 5506:
+/***/ 9491:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("assert");
+
+/***/ }),
+
+/***/ 2361:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("events");
+
+/***/ }),
+
+/***/ 7147:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("fs");
+
+/***/ }),
+
+/***/ 3685:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("http");
+
+/***/ }),
+
+/***/ 5687:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("https");
+
+/***/ }),
+
+/***/ 1808:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("net");
+
+/***/ }),
+
+/***/ 2037:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("os");
+
+/***/ }),
+
+/***/ 1017:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("path");
+
+/***/ }),
+
+/***/ 5477:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("punycode");
+
+/***/ }),
+
+/***/ 2781:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("stream");
+
+/***/ }),
+
+/***/ 4404:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("tls");
+
+/***/ }),
+
+/***/ 3837:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("util");
+
+/***/ }),
+
+/***/ 7314:
+/***/ ((module) => {
+
+"use strict";
+// @ts-check
+
+
+
+const sliceSize = 1000;
+
+/**
+ * Efficiently appends the source array to the destination array.
+ * @param {Object[]} destination Destination Array.
+ * @param {Object[]} source Source Array.
+ * @returns void
+ */
+const appendToArray = (destination, source) => {
+  // NOTE: destination.push(...source) throws "RangeError: Maximum call stack
+  // size exceeded" for sufficiently lengthy source arrays
+  let index = 0;
+  let slice = null;
+  while ((slice = source.slice(index, index + sliceSize)).length > 0) {
+    destination.push(...slice);
+    index += sliceSize;
+  }
+};
+
+appendToArray.sliceSize = sliceSize;
+module.exports = appendToArray;
+
+
+/***/ }),
+
+/***/ 9247:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+// @ts-check
+
+
+
+// @ts-ignore
+// eslint-disable-next-line camelcase, max-len, no-inline-comments, no-undef
+const dynamicRequire = (typeof require === "undefined") ? require : /* c8 ignore next */ eval("require");
+// Capture native require implementation for dynamic loading of modules
+
+// Requires
+const path = __nccwpck_require__(1017);
+const markdownlintLibrary = __nccwpck_require__(3611);
+const { markdownlint, "readConfig": markdownlintReadConfig } =
+  markdownlintLibrary.promises;
+const markdownlintRuleHelpers = __nccwpck_require__(2870);
+const appendToArray = __nccwpck_require__(7314);
+const mergeOptions = __nccwpck_require__(8446);
+const resolveAndRequire = __nccwpck_require__(5317);
+
+// Variables
+const packageName = "markdownlint-cli2";
+const packageVersion = "0.4.0";
+const libraryName = "markdownlint";
+const libraryVersion = markdownlintLibrary.getVersion();
+const dotOnlySubstitute = "*.{md,markdown}";
+const utf8 = "utf8";
+
+// No-op function
+const noop = () => null;
+
+// Gets a synchronous function to parse JSONC text
+const getJsoncParse = async () => {
+  const { "default": stripJsonComments } =
+    // eslint-disable-next-line max-len
+    // eslint-disable-next-line no-inline-comments, node/no-unsupported-features/es-syntax
+    await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 6177));
+  return (text) => JSON.parse(stripJsonComments(text));
+};
+
+// Synchronous function to parse YAML text
+const yamlParse = (text) => (__nccwpck_require__(4603).parse)(text);
+
+// Negate a glob
+const negateGlob = (glob) => `!${glob}`;
+
+// Return a posix path (even on Windows)
+const posixPath = (p) => p.split(path.sep).join(path.posix.sep);
+
+// Read a JSON(C) or YAML file and return the object
+const readConfig = (fs, dir, name, otherwise) => {
+  const file = path.posix.join(dir, name);
+  return () => fs.promises.access(file).
+    then(
+      () => getJsoncParse().then(
+        (jsoncParse) => markdownlintReadConfig(
+          file,
+          [ jsoncParse, yamlParse ],
+          fs
+        )
+      ),
+      otherwise
+    );
+};
+
+// Require a module ID with the specified directory in the path
+const requireResolve = (dir, id) => {
+  if (typeof id === "string") {
+    return resolveAndRequire(dynamicRequire, id, dir);
+  }
+  return id;
+};
+
+// Require an array of modules by ID
+const requireIds = (dir, ids, noRequire) => (
+  noRequire ? [] : ids.map((id) => requireResolve(dir, id))
+);
+
+// Require an array of modules by ID (preserving parameters)
+const requireIdsAndParams = (dir, idsAndParams, noRequire) => {
+  if (noRequire) {
+    return [];
+  }
+  const ids = idsAndParams.map((entry) => entry[0]);
+  const modules = requireIds(dir, ids);
+  const modulesAndParams = idsAndParams.
+    map((entry, i) => [ modules[i], ...entry.slice(1) ]);
+  return modulesAndParams;
+};
+
+// Require a JS file and return the exported object
+const requireConfig = (fs, dir, name, noRequire) => (
+  () => (noRequire
+    // eslint-disable-next-line prefer-promise-reject-errors
+    ? Promise.reject()
+    : fs.promises.access(path.posix.join(dir, name))
+  ).
+    then(
+      () => requireResolve(dir, `./${name}`),
+      noop
+    )
+);
+
+// Read an options or config file in any format and return the object
+const readOptionsOrConfig = async (configPath, fs, noRequire) => {
+  const basename = path.basename(configPath);
+  const dirname = path.dirname(configPath);
+  let options = null;
+  let config = null;
+  if (basename.endsWith(".markdownlint-cli2.jsonc")) {
+    const jsoncParse = await getJsoncParse();
+    options = jsoncParse(await fs.promises.readFile(configPath, utf8));
+  } else if (basename.endsWith(".markdownlint-cli2.yaml")) {
+    options = yamlParse(await fs.promises.readFile(configPath, utf8));
+  } else if (basename.endsWith(".markdownlint-cli2.cjs")) {
+    options = await (requireConfig(fs, dirname, basename, noRequire)());
+  } else if (
+    basename.endsWith(".markdownlint.jsonc") ||
+    basename.endsWith(".markdownlint.json") ||
+    basename.endsWith(".markdownlint.yaml") ||
+    basename.endsWith(".markdownlint.yml")
+  ) {
+    const jsoncParse = await getJsoncParse();
+    config =
+      await markdownlintReadConfig(configPath, [ jsoncParse, yamlParse ], fs);
+  } else if (basename.endsWith(".markdownlint.cjs")) {
+    config = await (requireConfig(fs, dirname, basename, noRequire)());
+  }
+  return options || { config };
+};
+
+// Filter a list of files to ignore by glob
+const removeIgnoredFiles = (dir, files, ignores) => {
+  const micromatch = __nccwpck_require__(6228);
+  return micromatch(
+    files.map((file) => path.posix.relative(dir, file)),
+    ignores
+  ).map((file) => path.posix.join(dir, file));
+};
+
+// Process/normalize command-line arguments and return glob patterns
+const processArgv = (argv) => {
+  const globPatterns = (argv || []).map(
+    (glob) => {
+      if (glob.startsWith(":")) {
+        return glob;
+      }
+      // Escape RegExp special characters recognized by fast-glob
+      // https://github.com/mrmlnc/fast-glob#advanced-syntax
+      const specialCharacters = /\\(?![$()*+?[\]^])/gu;
+      if (glob.startsWith("\\:")) {
+        return `\\:${glob.slice(2).replace(specialCharacters, "/")}`;
+      }
+      return (glob.startsWith("#") ? `!${glob.slice(1)}` : glob).
+        replace(specialCharacters, "/");
+    }
+  );
+  if ((globPatterns.length === 1) && (globPatterns[0] === ".")) {
+    // Substitute a more reasonable pattern
+    globPatterns[0] = dotOnlySubstitute;
+  }
+  return globPatterns;
+};
+
+// Show help if missing arguments
+const showHelp = (logMessage) => {
+  /* eslint-disable max-len */
+  logMessage(`https://github.com/DavidAnson/markdownlint-cli2
+
+Syntax: markdownlint-cli2 glob0 [glob1] [...] [globN]
+        markdownlint-cli2-fix glob0 [glob1] [...] [globN]
+        markdownlint-cli2-config config-file glob0 [glob1] [...] [globN]
+
+Glob expressions (from the globby library):
+- * matches any number of characters, but not /
+- ? matches a single character, but not /
+- ** matches any number of characters, including /
+- {} allows for a comma-separated list of "or" expressions
+- ! or # at the beginning of a pattern negate the match
+- : at the beginning identifies a literal file path
+
+Dot-only glob:
+- The command "markdownlint-cli2 ." would lint every file in the current directory tree which is probably not intended
+- Instead, it is mapped to "markdownlint-cli2 ${dotOnlySubstitute}" which lints all Markdown files in the current directory
+- To lint every file in the current directory tree, the command "markdownlint-cli2 **" can be used instead
+
+Configuration via:
+- .markdownlint-cli2.jsonc
+- .markdownlint-cli2.yaml
+- .markdownlint-cli2.cjs
+- .markdownlint.jsonc or .markdownlint.json
+- .markdownlint.yaml or .markdownlint.yml
+- .markdownlint.cjs
+
+Cross-platform compatibility:
+- UNIX and Windows shells expand globs according to different rules; quoting arguments is recommended
+- Some Windows shells don't handle single-quoted (') arguments well; double-quote (") is recommended
+- Shells that expand globs do not support negated patterns (!node_modules); quoting is required here
+- Some UNIX shells parse exclamation (!) in double-quotes; hashtag (#) is recommended in these cases
+- The path separator is forward slash (/) on all platforms; backslash (\\) is automatically converted
+
+The most compatible syntax for cross-platform support:
+$ markdownlint-cli2 "**/*.md" "#node_modules"`
+  );
+  /* eslint-enable max-len */
+};
+
+// Get (creating if necessary) and process a directory's info object
+const getAndProcessDirInfo =
+(fs, tasks, dirToDirInfo, dir, noRequire, func) => {
+  let dirInfo = dirToDirInfo[dir];
+  if (!dirInfo) {
+    dirInfo = {
+      dir,
+      "parent": null,
+      "files": [],
+      "markdownlintConfig": null,
+      "markdownlintOptions": null
+    };
+    dirToDirInfo[dir] = dirInfo;
+
+    // Load markdownlint-cli2 object(s)
+    const markdownlintCli2Jsonc =
+      path.posix.join(dir, ".markdownlint-cli2.jsonc");
+    const markdownlintCli2Yaml =
+      path.posix.join(dir, ".markdownlint-cli2.yaml");
+    tasks.push(
+      fs.promises.access(markdownlintCli2Jsonc).
+        then(
+          () => fs.promises.
+            readFile(markdownlintCli2Jsonc, utf8).
+            then(
+              (content) => getJsoncParse().
+                then((jsoncParse) => jsoncParse(content))
+            ),
+          () => fs.promises.access(markdownlintCli2Yaml).
+            then(
+              () => fs.promises.
+                readFile(markdownlintCli2Yaml, utf8).
+                then(yamlParse),
+              requireConfig(
+                fs,
+                dir,
+                ".markdownlint-cli2.cjs",
+                noRequire
+              )
+            )
+        ).
+        then((options) => {
+          dirInfo.markdownlintOptions = options;
+        })
+    );
+
+    // Load markdownlint object(s)
+    const readConfigs =
+      readConfig(
+        fs,
+        dir,
+        ".markdownlint.jsonc",
+        readConfig(
+          fs,
+          dir,
+          ".markdownlint.json",
+          readConfig(
+            fs,
+            dir,
+            ".markdownlint.yaml",
+            readConfig(
+              fs,
+              dir,
+              ".markdownlint.yml",
+              requireConfig(
+                fs,
+                dir,
+                ".markdownlint.cjs",
+                noRequire
+              )
+            )
+          )
+        )
+      );
+    tasks.push(
+      readConfigs().
+        then((config) => {
+          dirInfo.markdownlintConfig = config;
+        })
+    );
+  }
+  if (func) {
+    func(dirInfo);
+  }
+  return dirInfo;
+};
+
+// Get base markdownlint-cli2 options object
+const getBaseOptions = async (
+  fs,
+  baseDir,
+  globPatterns,
+  optionsDefault,
+  fixDefault,
+  noGlobs,
+  noRequire
+) => {
+  const tasks = [];
+  const dirToDirInfo = {};
+  getAndProcessDirInfo(fs, tasks, dirToDirInfo, baseDir, noRequire);
+  await Promise.all(tasks);
+  // eslint-disable-next-line no-multi-assign
+  const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions =
+    mergeOptions(
+      mergeOptions(optionsDefault, { "fix": fixDefault }),
+      dirToDirInfo[baseDir].markdownlintOptions
+    );
+
+  if (!noGlobs) {
+    // Append any globs specified in markdownlint-cli2 configuration
+    const globs = baseMarkdownlintOptions.globs || [];
+    appendToArray(globPatterns, globs);
+  }
+
+  // Pass base ignore globs as globby patterns (best performance)
+  const ignorePatterns =
+    // eslint-disable-next-line unicorn/no-array-callback-reference
+    (baseMarkdownlintOptions.ignores || []).map(negateGlob);
+  appendToArray(globPatterns, ignorePatterns);
+
+  return {
+    baseMarkdownlintOptions,
+    dirToDirInfo
+  };
+};
+
+// Enumerate files from globs and build directory infos
+const enumerateFiles =
+// eslint-disable-next-line max-len
+async (fs, baseDirSystem, baseDir, globPatterns, dirToDirInfo, noErrors, noRequire) => {
+  const tasks = [];
+  const globbyOptions = {
+    "absolute": true,
+    "cwd": baseDir,
+    "expandDirectories": false,
+    fs
+  };
+  if (noErrors) {
+    globbyOptions.suppressErrors = true;
+  }
+  // Special-case literal files
+  const literalFiles = [];
+  const filteredGlobPatterns = globPatterns.filter(
+    (globPattern) => {
+      if (globPattern.startsWith(":")) {
+        literalFiles.push(
+          posixPath(path.resolve(baseDirSystem, globPattern.slice(1)))
+        );
+        return false;
+      }
+      return true;
+    }
+  ).map((globPattern) => globPattern.replace(/^\\:/u, ":"));
+  const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions;
+  const globsForIgnore =
+    (baseMarkdownlintOptions.globs || []).
+      filter((glob) => glob.startsWith("!"));
+  const filteredLiteralFiles =
+    ((literalFiles.length > 0) && (globsForIgnore.length > 0))
+      ? removeIgnoredFiles(baseDir, literalFiles, globsForIgnore)
+      : literalFiles;
+  // Manually expand directories to avoid globby call to dir-glob.sync
+  const expandedDirectories = await Promise.all(
+    filteredGlobPatterns.map((globPattern) => {
+      const barePattern =
+        globPattern.startsWith("!")
+          ? globPattern.slice(1)
+          : globPattern;
+      const globPath =
+        (path.posix.isAbsolute(barePattern) || path.isAbsolute(barePattern))
+          ? barePattern
+          : path.posix.join(baseDir, barePattern);
+      return fs.promises.stat(globPath).
+        then((stats) => (stats.isDirectory()
+          ? path.posix.join(globPattern, "**")
+          : globPattern)).
+        catch(() => globPattern);
+    })
+  );
+  // Process glob patterns
+  // eslint-disable-next-line max-len
+  // eslint-disable-next-line no-inline-comments, node/no-unsupported-features/es-syntax
+  const { globby } = await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 236));
+  const files = [
+    ...await globby(expandedDirectories, globbyOptions),
+    ...filteredLiteralFiles
+  ];
+  for (const file of files) {
+    const dir = path.posix.dirname(file);
+    getAndProcessDirInfo(
+      fs,
+      tasks,
+      dirToDirInfo,
+      dir,
+      noRequire,
+      (dirInfo) => {
+        dirInfo.files.push(file);
+      }
+    );
+  }
+  await Promise.all(tasks);
+};
+
+// Enumerate (possibly missing) parent directories and update directory infos
+const enumerateParents = async (fs, baseDir, dirToDirInfo, noRequire) => {
+  const tasks = [];
+
+  // Create a lookup of baseDir and parents
+  const baseDirParents = {};
+  let baseDirParent = baseDir;
+  do {
+    baseDirParents[baseDirParent] = true;
+    baseDirParent = path.posix.dirname(baseDirParent);
+  } while (!baseDirParents[baseDirParent]);
+
+  // Visit parents of each dirInfo
+  for (let lastDirInfo of Object.values(dirToDirInfo)) {
+    let { dir } = lastDirInfo;
+    let lastDir = dir;
+    while (
+      !baseDirParents[dir] &&
+      (dir = path.posix.dirname(dir)) &&
+      (dir !== lastDir)
+    ) {
+      lastDir = dir;
+      lastDirInfo =
+        getAndProcessDirInfo(
+          fs,
+          tasks,
+          dirToDirInfo,
+          dir,
+          noRequire,
+          // eslint-disable-next-line no-loop-func
+          (dirInfo) => {
+            lastDirInfo.parent = dirInfo;
+          }
+        );
+    }
+
+    // If dir not under baseDir, inject it as parent for configuration
+    if (dir !== baseDir) {
+      dirToDirInfo[dir].parent = dirToDirInfo[baseDir];
+    }
+  }
+  await Promise.all(tasks);
+};
+
+// Create directory info objects by enumerating file globs
+const createDirInfos =
+// eslint-disable-next-line max-len
+async (fs, baseDirSystem, baseDir, globPatterns, dirToDirInfo, optionsOverride, noErrors, noRequire) => {
+  await enumerateFiles(
+    fs,
+    baseDirSystem,
+    baseDir,
+    globPatterns,
+    dirToDirInfo,
+    noErrors,
+    noRequire
+  );
+  await enumerateParents(
+    fs,
+    baseDir,
+    dirToDirInfo,
+    noRequire
+  );
+
+  // Merge file lists with identical configuration
+  const dirs = Object.keys(dirToDirInfo);
+  dirs.sort((a, b) => b.length - a.length);
+  const dirInfos = [];
+  const noConfigDirInfo =
+    (dirInfo) => (
+      dirInfo.parent &&
+      !dirInfo.markdownlintConfig &&
+      !dirInfo.markdownlintOptions
+    );
+  for (const dir of dirs) {
+    const dirInfo = dirToDirInfo[dir];
+    if (noConfigDirInfo(dirInfo)) {
+      if (dirInfo.parent) {
+        appendToArray(dirInfo.parent.files, dirInfo.files);
+      }
+      dirToDirInfo[dir] = null;
+    } else {
+      const { markdownlintOptions } = dirInfo;
+      if (markdownlintOptions && markdownlintOptions.customRules) {
+        const customRules =
+          requireIds(
+            dir,
+            markdownlintOptions.customRules,
+            noRequire
+          );
+        // Expand nested arrays (for packages that export multiple rules)
+        markdownlintOptions.customRules = customRules.flat();
+      }
+      if (markdownlintOptions && markdownlintOptions.markdownItPlugins) {
+        markdownlintOptions.markdownItPlugins =
+          requireIdsAndParams(
+            dir,
+            markdownlintOptions.markdownItPlugins,
+            noRequire
+          );
+      }
+      dirInfos.push(dirInfo);
+    }
+  }
+  for (const dirInfo of dirInfos) {
+    while (dirInfo.parent && !dirToDirInfo[dirInfo.parent.dir]) {
+      dirInfo.parent = dirInfo.parent.parent;
+    }
+  }
+
+  // Verify dirInfos is simplified
+  // if (
+  //   dirInfos.filter(
+  //     (di) => di.parent && !dirInfos.includes(di.parent)
+  //   ).length > 0
+  // ) {
+  //   throw new Error("Extra parent");
+  // }
+  // if (
+  //   dirInfos.filter(
+  //     (di) => !di.parent && (di.dir !== baseDir)
+  //   ).length > 0
+  // ) {
+  //   throw new Error("Missing parent");
+  // }
+  // if (
+  //   dirInfos.filter(
+  //     (di) => di.parent &&
+  //       !((di.markdownlintConfig ? 1 : 0) ^ (di.markdownlintOptions ? 1 : 0))
+  //   ).length > 0
+  // ) {
+  //   throw new Error("Missing object");
+  // }
+  // if (dirInfos.filter((di) => di.dir === "/").length > 0) {
+  //   throw new Error("Includes root");
+  // }
+
+  // Merge configuration by inheritance
+  for (const dirInfo of dirInfos) {
+    let markdownlintOptions = dirInfo.markdownlintOptions || {};
+    let { markdownlintConfig } = dirInfo;
+    let parent = dirInfo;
+    // eslint-disable-next-line prefer-destructuring
+    while ((parent = parent.parent)) {
+      if (parent.markdownlintOptions) {
+        markdownlintOptions = mergeOptions(
+          parent.markdownlintOptions,
+          markdownlintOptions
+        );
+      }
+      if (
+        !markdownlintConfig &&
+        parent.markdownlintConfig &&
+        !markdownlintOptions.config
+      ) {
+        // eslint-disable-next-line prefer-destructuring
+        markdownlintConfig = parent.markdownlintConfig;
+      }
+    }
+    dirInfo.markdownlintOptions = mergeOptions(
+      markdownlintOptions,
+      optionsOverride
+    );
+    dirInfo.markdownlintConfig = markdownlintConfig;
+  }
+  return dirInfos;
+};
+
+// Lint files in groups by shared configuration
+const lintFiles = (fs, dirInfos, fileContents) => {
+  const tasks = [];
+  // For each dirInfo
+  for (const dirInfo of dirInfos) {
+    const { dir, files, markdownlintConfig, markdownlintOptions } = dirInfo;
+    // Filter file/string inputs to only those in the dirInfo
+    let filesAfterIgnores = files;
+    if (
+      markdownlintOptions.ignores &&
+      (markdownlintOptions.ignores.length > 0)
+    ) {
+      // eslint-disable-next-line unicorn/no-array-callback-reference
+      const ignores = markdownlintOptions.ignores.map(negateGlob);
+      filesAfterIgnores = removeIgnoredFiles(dir, files, ignores);
+    }
+    const filteredFiles = filesAfterIgnores.filter(
+      (file) => fileContents[file] === undefined
+    );
+    const filteredStrings = {};
+    for (const file of filesAfterIgnores) {
+      if (fileContents[file] !== undefined) {
+        filteredStrings[file] = fileContents[file];
+      }
+    }
+    // Create markdownlint options object
+    const options = {
+      "files": filteredFiles,
+      "strings": filteredStrings,
+      "config": markdownlintConfig || markdownlintOptions.config,
+      "customRules": markdownlintOptions.customRules,
+      "frontMatter": markdownlintOptions.frontMatter
+        ? new RegExp(markdownlintOptions.frontMatter, "u")
+        : undefined,
+      "handleRuleFailures": true,
+      "markdownItPlugins": markdownlintOptions.markdownItPlugins,
+      "noInlineConfig": Boolean(markdownlintOptions.noInlineConfig),
+      "resultVersion": 3,
+      fs
+    };
+    // Invoke markdownlint
+    // @ts-ignore
+    let task = markdownlint(options);
+    // For any fixable errors, read file, apply fixes, and write it back
+    if (markdownlintOptions.fix) {
+      task = task.then((results) => {
+        options.files = [];
+        const subTasks = [];
+        const errorFiles = Object.keys(results);
+        for (const fileName of errorFiles) {
+          const errorInfos = results[fileName].
+            filter((errorInfo) => errorInfo.fixInfo);
+          if (errorInfos.length > 0) {
+            delete results[fileName];
+            options.files.push(fileName);
+            subTasks.push(fs.promises.readFile(fileName, utf8).
+              then((original) => {
+                const fixed = markdownlintRuleHelpers.
+                  applyFixes(original, errorInfos);
+                return fs.promises.writeFile(fileName, fixed, utf8);
+              })
+            );
+          }
+        }
+        return Promise.all(subTasks).
+          // @ts-ignore
+          then(() => markdownlint(options)).
+          then((fixResults) => ({
+            ...results,
+            ...fixResults
+          }));
+      });
+    }
+    // Queue tasks for this dirInfo
+    tasks.push(task);
+  }
+  // Return result of all tasks
+  return Promise.all(tasks);
+};
+
+// Create summary of results
+const createSummary = (baseDir, taskResults) => {
+  const summary = [];
+  let counter = 0;
+  for (const results of taskResults) {
+    for (const fileName in results) {
+      const errorInfos = results[fileName];
+      for (const errorInfo of errorInfos) {
+        const fileNameRelative = path.posix.relative(baseDir, fileName);
+        summary.push({
+          "fileName": fileNameRelative,
+          ...errorInfo,
+          counter
+        });
+        counter++;
+      }
+    }
+  }
+  summary.sort((a, b) => (
+    a.fileName.localeCompare(b.fileName) ||
+    (a.lineNumber - b.lineNumber) ||
+    a.ruleNames[0].localeCompare(b.ruleNames[0]) ||
+    (a.counter - b.counter)
+  ));
+  for (const result of summary) {
+    delete result.counter;
+  }
+  return summary;
+};
+
+// Output summary via formatters
+const outputSummary =
+  async (baseDir, summary, outputFormatters, logMessage, logError) => {
+    const errorsPresent = (summary.length > 0);
+    if (errorsPresent || outputFormatters) {
+      const formatterOptions = {
+        "directory": baseDir,
+        "results": summary,
+        logMessage,
+        logError
+      };
+      const formattersAndParams = outputFormatters
+        ? requireIdsAndParams(baseDir, outputFormatters)
+        : [ [ __nccwpck_require__(8552) ] ];
+      await Promise.all(formattersAndParams.map((formatterAndParams) => {
+        const [ formatter, ...formatterParams ] = formatterAndParams;
+        return formatter(formatterOptions, ...formatterParams);
+      }));
+    }
+    return errorsPresent;
+  };
+
+// Main function
+const main = async (params) => {
+  // Capture parameters
+  const {
+    directory,
+    argv,
+    optionsDefault,
+    optionsOverride,
+    fixDefault,
+    fileContents,
+    nonFileContents,
+    noErrors,
+    noGlobs,
+    noRequire,
+    name
+  } = params;
+  const logMessage = params.logMessage || noop;
+  const logError = params.logError || noop;
+  const fs = params.fs || __nccwpck_require__(7147);
+  const baseDirSystem =
+    (directory && path.resolve(directory)) ||
+    process.cwd();
+  const baseDir = posixPath(baseDirSystem);
+  // Output banner
+  logMessage(
+    // eslint-disable-next-line max-len
+    `${name || packageName} v${packageVersion} (${libraryName} v${libraryVersion})`
+  );
+  // Read argv configuration file (if relevant and present)
+  let optionsArgv = null;
+  const [ configPath ] = (argv || []);
+  if ((name === "markdownlint-cli2-config") && configPath) {
+    optionsArgv =
+      await readOptionsOrConfig(configPath, fs, noRequire);
+  }
+  // Process arguments and get base options
+  const globPatterns = processArgv(optionsArgv ? argv.slice(1) : argv);
+  const { baseMarkdownlintOptions, dirToDirInfo } =
+    await getBaseOptions(
+      fs,
+      baseDir,
+      globPatterns,
+      optionsArgv || optionsDefault,
+      fixDefault,
+      noGlobs,
+      noRequire
+    );
+  if ((globPatterns.length === 0) && !nonFileContents) {
+    showHelp(logMessage);
+    return 1;
+  }
+  // Include any file overrides or non-file content
+  const resolvedFileContents = {};
+  for (const file in fileContents) {
+    const resolvedFile = posixPath(path.resolve(baseDirSystem, file));
+    resolvedFileContents[resolvedFile] =
+      fileContents[file];
+  }
+  for (const nonFile in nonFileContents) {
+    resolvedFileContents[nonFile] = nonFileContents[nonFile];
+  }
+  appendToArray(
+    dirToDirInfo[baseDir].files,
+    Object.keys(nonFileContents || {})
+  );
+  // Output finding status
+  const showProgress = !baseMarkdownlintOptions.noProgress;
+  if (showProgress) {
+    logMessage(`Finding: ${globPatterns.join(" ")}`);
+  }
+  // Create linting tasks
+  const dirInfos =
+    await createDirInfos(
+      fs,
+      baseDirSystem,
+      baseDir,
+      globPatterns,
+      dirToDirInfo,
+      optionsOverride,
+      noErrors,
+      noRequire
+    );
+  // Output linting status
+  if (showProgress) {
+    let fileCount = 0;
+    for (const dirInfo of dirInfos) {
+      fileCount += dirInfo.files.length;
+    }
+    logMessage(`Linting: ${fileCount} file(s)`);
+  }
+  // Lint files
+  const lintResults = await lintFiles(fs, dirInfos, resolvedFileContents);
+  // Output summary
+  const summary = createSummary(baseDir, lintResults);
+  if (showProgress) {
+    logMessage(`Summary: ${summary.length} error(s)`);
+  }
+  const outputFormatters =
+    (optionsOverride && optionsOverride.outputFormatters) ||
+    baseMarkdownlintOptions.outputFormatters;
+  const errorsPresent = await outputSummary(
+    baseDir, summary, outputFormatters, logMessage, logError
+  );
+  // Return result
+  return errorsPresent ? 1 : 0;
+};
+
+// Run function
+const run = (overrides) => {
+  (async () => {
+    try {
+      const defaultParams = {
+        "argv": process.argv.slice(2),
+        "logMessage": console.log,
+        "logError": console.error
+      };
+      const params = {
+        ...defaultParams,
+        ...overrides
+      };
+      process.exitCode = await main(params);
+    } catch (error) {
+      console.error(error);
+      process.exitCode = 2;
+    }
+  })();
+};
+
+// Export functions
+module.exports = {
+  main,
+  run
+};
+
+// Run if invoked as a CLI
+// @ts-ignore
+if (false) {}
+
+
+/***/ }),
+
+/***/ 8446:
+/***/ ((module) => {
+
+"use strict";
+// @ts-check
+
+
+
+/**
+ * Merges two options objects by combining config and replacing properties.
+ * @param {Object} first First options object.
+ * @param {Object} second Second options object.
+ * @returns {Object} Merged options object.
+ */
+const mergeOptions = (first, second) => {
+  const merged = {
+    ...first,
+    ...second
+  };
+  const firstConfig = first && first.config;
+  const secondConfig = second && second.config;
+  if (firstConfig || secondConfig) {
+    merged.config = {
+      ...firstConfig,
+      ...secondConfig
+    };
+  }
+  return merged;
+};
+
+module.exports = mergeOptions;
+
+
+/***/ }),
+
+/***/ 5317:
+/***/ ((module) => {
+
+"use strict";
+// @ts-check
+
+
+
+/**
+ * Wrapper for calling Node's require.resolve/require with an additional path.
+ * @param {Object} req Node's require implementation (or equivalent).
+ * @param {String} id Package identifier to require.
+ * @param {String} dir Directory to include when resolving paths.
+ * @returns {Object} Exported module content.
+ */
+const resolveAndRequire = (req, id, dir) => {
+  const resolvePaths = req.resolve.paths ? req.resolve.paths("") : [];
+  const paths = [ dir, ...resolvePaths ];
+  const resolved = req.resolve(id, { paths });
+  return req(resolved);
+};
+
+module.exports = resolveAndRequire;
+
+
+/***/ }),
+
+/***/ 525:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-var PlainValue = __nccwpck_require__(5215);
-var resolveSeq = __nccwpck_require__(4227);
-var Schema = __nccwpck_require__(8021);
+var PlainValue = __nccwpck_require__(4941);
+var resolveSeq = __nccwpck_require__(2387);
+var Schema = __nccwpck_require__(1387);
 
 const defaultOptions = {
   anchorPrefix: 'a',
@@ -24054,7 +25201,7 @@ exports.scalarOptions = scalarOptions;
 
 /***/ }),
 
-/***/ 5215:
+/***/ 4941:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
@@ -24938,15 +26085,15 @@ exports.defaultTags = defaultTags;
 
 /***/ }),
 
-/***/ 8021:
+/***/ 1387:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-var PlainValue = __nccwpck_require__(5215);
-var resolveSeq = __nccwpck_require__(4227);
-var warnings = __nccwpck_require__(6003);
+var PlainValue = __nccwpck_require__(4941);
+var resolveSeq = __nccwpck_require__(2387);
+var warnings = __nccwpck_require__(5130);
 
 function createMap(schema, obj, ctx) {
   const map = new resolveSeq.YAMLMap(schema);
@@ -25471,18 +26618,18 @@ exports.Schema = Schema;
 
 /***/ }),
 
-/***/ 5065:
+/***/ 4083:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-var parseCst = __nccwpck_require__(445);
-var Document$1 = __nccwpck_require__(5506);
-var Schema = __nccwpck_require__(8021);
-var PlainValue = __nccwpck_require__(5215);
-var warnings = __nccwpck_require__(6003);
-__nccwpck_require__(4227);
+var parseCst = __nccwpck_require__(4611);
+var Document$1 = __nccwpck_require__(525);
+var Schema = __nccwpck_require__(1387);
+var PlainValue = __nccwpck_require__(4941);
+var warnings = __nccwpck_require__(5130);
+__nccwpck_require__(2387);
 
 function createNode(value, wrapScalars = true, tag) {
   if (tag === undefined && typeof wrapScalars === 'string') {
@@ -25558,13 +26705,13 @@ exports.YAML = YAML;
 
 /***/ }),
 
-/***/ 445:
+/***/ 4611:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-var PlainValue = __nccwpck_require__(5215);
+var PlainValue = __nccwpck_require__(4941);
 
 class BlankLine extends PlainValue.Node {
   constructor() {
@@ -27319,13 +28466,13 @@ exports.parse = parse;
 
 /***/ }),
 
-/***/ 4227:
+/***/ 2387:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-var PlainValue = __nccwpck_require__(5215);
+var PlainValue = __nccwpck_require__(4941);
 
 function addCommentBefore(str, indent, comment) {
   if (!comment) return str;
@@ -29488,14 +30635,14 @@ exports.toJSON = toJSON;
 
 /***/ }),
 
-/***/ 6003:
+/***/ 5130:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-var PlainValue = __nccwpck_require__(5215);
-var resolveSeq = __nccwpck_require__(4227);
+var PlainValue = __nccwpck_require__(4941);
+var resolveSeq = __nccwpck_require__(2387);
 
 /* global atob, btoa, Buffer */
 const binary = {
@@ -29912,91 +31059,529 @@ exports.warnOptionDeprecation = warnOptionDeprecation;
 
 /***/ }),
 
-/***/ 3552:
+/***/ 4603:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-module.exports = __nccwpck_require__(5065).YAML
+module.exports = __nccwpck_require__(4083).YAML
 
 
 /***/ }),
 
-/***/ 4007:
+/***/ 236:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+// ESM COMPAT FLAG
+__nccwpck_require__.r(__webpack_exports__);
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  "generateGlobTasks": () => (/* binding */ generateGlobTasks),
+  "globby": () => (/* binding */ globby),
+  "globbyStream": () => (/* binding */ globbyStream),
+  "globbySync": () => (/* binding */ globbySync),
+  "isDynamicPattern": () => (/* binding */ isDynamicPattern),
+  "isGitIgnored": () => (/* reexport */ isGitIgnored),
+  "isGitIgnoredSync": () => (/* reexport */ isGitIgnoredSync)
+});
+
+;// CONCATENATED MODULE: external "node:fs"
+const external_node_fs_namespaceObject = require("node:fs");
+;// CONCATENATED MODULE: ./node_modules/array-union/index.js
+const arrayUnion = (...arguments_) => [...new Set(arguments_.flat())];
+
+/* harmony default export */ const array_union = (arrayUnion);
+
+// EXTERNAL MODULE: ./node_modules/merge2/index.js
+var merge2 = __nccwpck_require__(2578);
+// EXTERNAL MODULE: ./node_modules/fast-glob/out/index.js
+var out = __nccwpck_require__(3664);
+// EXTERNAL MODULE: ./node_modules/dir-glob/index.js
+var dir_glob = __nccwpck_require__(2738);
+;// CONCATENATED MODULE: external "node:url"
+const external_node_url_namespaceObject = require("node:url");
+;// CONCATENATED MODULE: ./node_modules/globby/to-path.js
+
+
+const toPath = urlOrPath => {
+	if (!urlOrPath) {
+		return urlOrPath;
+	}
+
+	if (urlOrPath instanceof URL) {
+		urlOrPath = urlOrPath.href;
+	}
+
+	return urlOrPath.startsWith('file://') ? (0,external_node_url_namespaceObject.fileURLToPath)(urlOrPath) : urlOrPath;
+};
+
+/* harmony default export */ const to_path = (toPath);
+
+;// CONCATENATED MODULE: external "node:process"
+const external_node_process_namespaceObject = require("node:process");
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = require("node:path");
+// EXTERNAL MODULE: ./node_modules/ignore/index.js
+var ignore = __nccwpck_require__(4777);
+;// CONCATENATED MODULE: ./node_modules/slash/index.js
+function slash(path) {
+	const isExtendedLengthPath = /^\\\\\?\\/.test(path);
+	const hasNonAscii = /[^\u0000-\u0080]+/.test(path); // eslint-disable-line no-control-regex
+
+	if (isExtendedLengthPath || hasNonAscii) {
+		return path;
+	}
+
+	return path.replace(/\\/g, '/');
+}
+
+;// CONCATENATED MODULE: ./node_modules/globby/gitignore.js
+
+
+
+
+
+
+
+
+const DEFAULT_IGNORE = [
+	'**/node_modules/**',
+	'**/flow-typed/**',
+	'**/coverage/**',
+	'**/.git',
+];
+
+const mapGitIgnorePatternTo = base => ignore => {
+	if (ignore.startsWith('!')) {
+		return '!' + external_node_path_namespaceObject.posix.join(base, ignore.slice(1));
+	}
+
+	return external_node_path_namespaceObject.posix.join(base, ignore);
+};
+
+const parseGitIgnore = (content, options) => {
+	const base = slash(external_node_path_namespaceObject.relative(options.cwd, external_node_path_namespaceObject.dirname(options.fileName)));
+
+	return content
+		.split(/\r?\n/)
+		.filter(Boolean)
+		.filter(line => !line.startsWith('#'))
+		.map(mapGitIgnorePatternTo(base));
+};
+
+const reduceIgnore = files => {
+	const ignores = ignore();
+	for (const file of files) {
+		ignores.add(parseGitIgnore(file.content, {
+			cwd: file.cwd,
+			fileName: file.filePath,
+		}));
+	}
+
+	return ignores;
+};
+
+const ensureAbsolutePathForCwd = (cwd, p) => {
+	cwd = slash(cwd);
+	if (external_node_path_namespaceObject.isAbsolute(p)) {
+		if (slash(p).startsWith(cwd)) {
+			return p;
+		}
+
+		throw new Error(`Path ${p} is not in cwd ${cwd}`);
+	}
+
+	return external_node_path_namespaceObject.join(cwd, p);
+};
+
+const getIsIgnoredPredicate = (ignores, cwd) => p => ignores.ignores(slash(external_node_path_namespaceObject.relative(cwd, ensureAbsolutePathForCwd(cwd, p.path || p))));
+
+const getFile = async (file, cwd) => {
+	const filePath = external_node_path_namespaceObject.join(cwd, file);
+	const content = await external_node_fs_namespaceObject.promises.readFile(filePath, 'utf8');
+
+	return {
+		cwd,
+		filePath,
+		content,
+	};
+};
+
+const getFileSync = (file, cwd) => {
+	const filePath = external_node_path_namespaceObject.join(cwd, file);
+	const content = external_node_fs_namespaceObject.readFileSync(filePath, 'utf8');
+
+	return {
+		cwd,
+		filePath,
+		content,
+	};
+};
+
+const normalizeOptions = ({
+	ignore = [],
+	cwd = slash(external_node_process_namespaceObject.cwd()),
+} = {}) => ({ignore: [...DEFAULT_IGNORE, ...ignore], cwd: to_path(cwd)});
+
+const isGitIgnored = async options => {
+	options = normalizeOptions(options);
+
+	const paths = await out('**/.gitignore', options);
+
+	const files = await Promise.all(paths.map(file => getFile(file, options.cwd)));
+	const ignores = reduceIgnore(files);
+
+	return getIsIgnoredPredicate(ignores, options.cwd);
+};
+
+const isGitIgnoredSync = options => {
+	options = normalizeOptions(options);
+
+	const paths = out.sync('**/.gitignore', options);
+
+	const files = paths.map(file => getFileSync(file, options.cwd));
+	const ignores = reduceIgnore(files);
+
+	return getIsIgnoredPredicate(ignores, options.cwd);
+};
+
+;// CONCATENATED MODULE: external "node:stream"
+const external_node_stream_namespaceObject = require("node:stream");
+;// CONCATENATED MODULE: ./node_modules/globby/stream-utils.js
+
+
+class ObjectTransform extends external_node_stream_namespaceObject.Transform {
+	constructor() {
+		super({
+			objectMode: true,
+		});
+	}
+}
+
+class FilterStream extends ObjectTransform {
+	constructor(filter) {
+		super();
+		this._filter = filter;
+	}
+
+	_transform(data, encoding, callback) {
+		if (this._filter(data)) {
+			this.push(data);
+		}
+
+		callback();
+	}
+}
+
+class UniqueStream extends ObjectTransform {
+	constructor() {
+		super();
+		this._pushed = new Set();
+	}
+
+	_transform(data, encoding, callback) {
+		if (!this._pushed.has(data)) {
+			this.push(data);
+			this._pushed.add(data);
+		}
+
+		callback();
+	}
+}
+
+;// CONCATENATED MODULE: ./node_modules/globby/index.js
+
+
+
+
+
+
+
+
+
+const DEFAULT_FILTER = () => false;
+
+const isNegative = pattern => pattern[0] === '!';
+
+const assertPatternsInput = patterns => {
+	if (!patterns.every(pattern => typeof pattern === 'string')) {
+		throw new TypeError('Patterns must be a string or an array of strings');
+	}
+};
+
+const checkCwdOption = options => {
+	if (!options.cwd) {
+		return;
+	}
+
+	let stat;
+	try {
+		stat = external_node_fs_namespaceObject.statSync(options.cwd);
+	} catch {
+		return;
+	}
+
+	if (!stat.isDirectory()) {
+		throw new Error('The `cwd` option must be a path to a directory');
+	}
+};
+
+const getPathString = p => p.stats instanceof external_node_fs_namespaceObject.Stats ? p.path : p;
+
+const generateGlobTasks = (patterns, taskOptions = {}) => {
+	patterns = array_union([patterns].flat());
+	assertPatternsInput(patterns);
+
+	const globTasks = [];
+
+	taskOptions = {
+		ignore: [],
+		expandDirectories: true,
+		...taskOptions,
+		cwd: to_path(taskOptions.cwd),
+	};
+
+	checkCwdOption(taskOptions);
+
+	for (const [index, pattern] of patterns.entries()) {
+		if (isNegative(pattern)) {
+			continue;
+		}
+
+		const ignore = patterns
+			.slice(index)
+			.filter(pattern => isNegative(pattern))
+			.map(pattern => pattern.slice(1));
+
+		const options = {
+			...taskOptions,
+			ignore: [...taskOptions.ignore, ...ignore],
+		};
+
+		globTasks.push({pattern, options});
+	}
+
+	return globTasks;
+};
+
+const globDirectories = (task, fn) => {
+	let options = {};
+	if (task.options.cwd) {
+		options.cwd = task.options.cwd;
+	}
+
+	if (Array.isArray(task.options.expandDirectories)) {
+		options = {
+			...options,
+			files: task.options.expandDirectories,
+		};
+	} else if (typeof task.options.expandDirectories === 'object') {
+		options = {
+			...options,
+			...task.options.expandDirectories,
+		};
+	}
+
+	return fn(task.pattern, options);
+};
+
+const getPattern = (task, fn) => task.options.expandDirectories ? globDirectories(task, fn) : [task.pattern];
+
+const getFilterSync = options => options && options.gitignore
+	? isGitIgnoredSync({cwd: options.cwd, ignore: options.ignore})
+	: DEFAULT_FILTER;
+
+const globToTask = task => async glob => {
+	const {options} = task;
+	if (options.ignore && Array.isArray(options.ignore) && options.expandDirectories) {
+		options.ignore = await dir_glob(options.ignore);
+	}
+
+	return {
+		pattern: glob,
+		options,
+	};
+};
+
+const globToTaskSync = task => glob => {
+	const {options} = task;
+	if (options.ignore && Array.isArray(options.ignore) && options.expandDirectories) {
+		options.ignore = dir_glob.sync(options.ignore);
+	}
+
+	return {
+		pattern: glob,
+		options,
+	};
+};
+
+const globby = async (patterns, options) => {
+	const globTasks = generateGlobTasks(patterns, options);
+
+	const getFilter = async () => options && options.gitignore
+		? isGitIgnored({cwd: options.cwd, ignore: options.ignore})
+		: DEFAULT_FILTER;
+
+	const getTasks = async () => {
+		const tasks = await Promise.all(globTasks.map(async task => {
+			const globs = await getPattern(task, dir_glob);
+			return Promise.all(globs.map(globToTask(task)));
+		}));
+
+		return array_union(...tasks);
+	};
+
+	const [filter, tasks] = await Promise.all([getFilter(), getTasks()]);
+	const paths = await Promise.all(tasks.map(task => out(task.pattern, task.options)));
+
+	return array_union(...paths).filter(path_ => !filter(getPathString(path_)));
+};
+
+const globbySync = (patterns, options) => {
+	const globTasks = generateGlobTasks(patterns, options);
+
+	const tasks = [];
+	for (const task of globTasks) {
+		const newTask = getPattern(task, dir_glob.sync).map(globToTaskSync(task));
+		tasks.push(...newTask);
+	}
+
+	const filter = getFilterSync(options);
+
+	let matches = [];
+	for (const task of tasks) {
+		matches = array_union(matches, out.sync(task.pattern, task.options));
+	}
+
+	return matches.filter(path_ => !filter(path_));
+};
+
+const globbyStream = (patterns, options) => {
+	const globTasks = generateGlobTasks(patterns, options);
+
+	const tasks = [];
+	for (const task of globTasks) {
+		const newTask = getPattern(task, dir_glob.sync).map(globToTaskSync(task));
+		tasks.push(...newTask);
+	}
+
+	const filter = getFilterSync(options);
+	const filterStream = new FilterStream(p => !filter(p));
+	const uniqueStream = new UniqueStream();
+
+	return merge2(tasks.map(task => out.stream(task.pattern, task.options)))
+		.pipe(filterStream)
+		.pipe(uniqueStream);
+};
+
+const isDynamicPattern = (patterns, options = {}) => {
+	options = {
+		...options,
+		cwd: to_path(options.cwd),
+	};
+
+	return [patterns].flat().some(pattern => out.isDynamicPattern(pattern, options));
+};
+
+
+
+
+/***/ }),
+
+/***/ 6177:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+__nccwpck_require__.r(__webpack_exports__);
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (/* binding */ stripJsonComments)
+/* harmony export */ });
+const singleComment = Symbol('singleComment');
+const multiComment = Symbol('multiComment');
+
+const stripWithoutWhitespace = () => '';
+const stripWithWhitespace = (string, start, end) => string.slice(start, end).replace(/\S/g, ' ');
+
+const isEscaped = (jsonString, quotePosition) => {
+	let index = quotePosition - 1;
+	let backslashCount = 0;
+
+	while (jsonString[index] === '\\') {
+		index -= 1;
+		backslashCount += 1;
+	}
+
+	return Boolean(backslashCount % 2);
+};
+
+function stripJsonComments(jsonString, {whitespace = true} = {}) {
+	if (typeof jsonString !== 'string') {
+		throw new TypeError(`Expected argument \`jsonString\` to be a \`string\`, got \`${typeof jsonString}\``);
+	}
+
+	const strip = whitespace ? stripWithWhitespace : stripWithoutWhitespace;
+
+	let isInsideString = false;
+	let isInsideComment = false;
+	let offset = 0;
+	let result = '';
+
+	for (let index = 0; index < jsonString.length; index++) {
+		const currentCharacter = jsonString[index];
+		const nextCharacter = jsonString[index + 1];
+
+		if (!isInsideComment && currentCharacter === '"') {
+			const escaped = isEscaped(jsonString, index);
+			if (!escaped) {
+				isInsideString = !isInsideString;
+			}
+		}
+
+		if (isInsideString) {
+			continue;
+		}
+
+		if (!isInsideComment && currentCharacter + nextCharacter === '//') {
+			result += jsonString.slice(offset, index);
+			offset = index;
+			isInsideComment = singleComment;
+			index++;
+		} else if (isInsideComment === singleComment && currentCharacter + nextCharacter === '\r\n') {
+			index++;
+			isInsideComment = false;
+			result += strip(jsonString, offset, index);
+			offset = index;
+			continue;
+		} else if (isInsideComment === singleComment && currentCharacter === '\n') {
+			isInsideComment = false;
+			result += strip(jsonString, offset, index);
+			offset = index;
+		} else if (!isInsideComment && currentCharacter + nextCharacter === '/*') {
+			result += jsonString.slice(offset, index);
+			offset = index;
+			isInsideComment = multiComment;
+			index++;
+			continue;
+		} else if (isInsideComment === multiComment && currentCharacter + nextCharacter === '*/') {
+			index++;
+			isInsideComment = false;
+			result += strip(jsonString, offset, index + 1);
+			offset = index + 1;
+			continue;
+		}
+	}
+
+	return result + (isInsideComment ? strip(jsonString.slice(offset)) : jsonString.slice(offset));
+}
+
+
+/***/ }),
+
+/***/ 9323:
 /***/ ((module) => {
 
 "use strict";
 module.exports = JSON.parse('{"Aacute":"Á","aacute":"á","Abreve":"Ă","abreve":"ă","ac":"∾","acd":"∿","acE":"∾̳","Acirc":"Â","acirc":"â","acute":"´","Acy":"А","acy":"а","AElig":"Æ","aelig":"æ","af":"⁡","Afr":"𝔄","afr":"𝔞","Agrave":"À","agrave":"à","alefsym":"ℵ","aleph":"ℵ","Alpha":"Α","alpha":"α","Amacr":"Ā","amacr":"ā","amalg":"⨿","amp":"&","AMP":"&","andand":"⩕","And":"⩓","and":"∧","andd":"⩜","andslope":"⩘","andv":"⩚","ang":"∠","ange":"⦤","angle":"∠","angmsdaa":"⦨","angmsdab":"⦩","angmsdac":"⦪","angmsdad":"⦫","angmsdae":"⦬","angmsdaf":"⦭","angmsdag":"⦮","angmsdah":"⦯","angmsd":"∡","angrt":"∟","angrtvb":"⊾","angrtvbd":"⦝","angsph":"∢","angst":"Å","angzarr":"⍼","Aogon":"Ą","aogon":"ą","Aopf":"𝔸","aopf":"𝕒","apacir":"⩯","ap":"≈","apE":"⩰","ape":"≊","apid":"≋","apos":"\'","ApplyFunction":"⁡","approx":"≈","approxeq":"≊","Aring":"Å","aring":"å","Ascr":"𝒜","ascr":"𝒶","Assign":"≔","ast":"*","asymp":"≈","asympeq":"≍","Atilde":"Ã","atilde":"ã","Auml":"Ä","auml":"ä","awconint":"∳","awint":"⨑","backcong":"≌","backepsilon":"϶","backprime":"‵","backsim":"∽","backsimeq":"⋍","Backslash":"∖","Barv":"⫧","barvee":"⊽","barwed":"⌅","Barwed":"⌆","barwedge":"⌅","bbrk":"⎵","bbrktbrk":"⎶","bcong":"≌","Bcy":"Б","bcy":"б","bdquo":"„","becaus":"∵","because":"∵","Because":"∵","bemptyv":"⦰","bepsi":"϶","bernou":"ℬ","Bernoullis":"ℬ","Beta":"Β","beta":"β","beth":"ℶ","between":"≬","Bfr":"𝔅","bfr":"𝔟","bigcap":"⋂","bigcirc":"◯","bigcup":"⋃","bigodot":"⨀","bigoplus":"⨁","bigotimes":"⨂","bigsqcup":"⨆","bigstar":"★","bigtriangledown":"▽","bigtriangleup":"△","biguplus":"⨄","bigvee":"⋁","bigwedge":"⋀","bkarow":"⤍","blacklozenge":"⧫","blacksquare":"▪","blacktriangle":"▴","blacktriangledown":"▾","blacktriangleleft":"◂","blacktriangleright":"▸","blank":"␣","blk12":"▒","blk14":"░","blk34":"▓","block":"█","bne":"=⃥","bnequiv":"≡⃥","bNot":"⫭","bnot":"⌐","Bopf":"𝔹","bopf":"𝕓","bot":"⊥","bottom":"⊥","bowtie":"⋈","boxbox":"⧉","boxdl":"┐","boxdL":"╕","boxDl":"╖","boxDL":"╗","boxdr":"┌","boxdR":"╒","boxDr":"╓","boxDR":"╔","boxh":"─","boxH":"═","boxhd":"┬","boxHd":"╤","boxhD":"╥","boxHD":"╦","boxhu":"┴","boxHu":"╧","boxhU":"╨","boxHU":"╩","boxminus":"⊟","boxplus":"⊞","boxtimes":"⊠","boxul":"┘","boxuL":"╛","boxUl":"╜","boxUL":"╝","boxur":"└","boxuR":"╘","boxUr":"╙","boxUR":"╚","boxv":"│","boxV":"║","boxvh":"┼","boxvH":"╪","boxVh":"╫","boxVH":"╬","boxvl":"┤","boxvL":"╡","boxVl":"╢","boxVL":"╣","boxvr":"├","boxvR":"╞","boxVr":"╟","boxVR":"╠","bprime":"‵","breve":"˘","Breve":"˘","brvbar":"¦","bscr":"𝒷","Bscr":"ℬ","bsemi":"⁏","bsim":"∽","bsime":"⋍","bsolb":"⧅","bsol":"\\\\","bsolhsub":"⟈","bull":"•","bullet":"•","bump":"≎","bumpE":"⪮","bumpe":"≏","Bumpeq":"≎","bumpeq":"≏","Cacute":"Ć","cacute":"ć","capand":"⩄","capbrcup":"⩉","capcap":"⩋","cap":"∩","Cap":"⋒","capcup":"⩇","capdot":"⩀","CapitalDifferentialD":"ⅅ","caps":"∩︀","caret":"⁁","caron":"ˇ","Cayleys":"ℭ","ccaps":"⩍","Ccaron":"Č","ccaron":"č","Ccedil":"Ç","ccedil":"ç","Ccirc":"Ĉ","ccirc":"ĉ","Cconint":"∰","ccups":"⩌","ccupssm":"⩐","Cdot":"Ċ","cdot":"ċ","cedil":"¸","Cedilla":"¸","cemptyv":"⦲","cent":"¢","centerdot":"·","CenterDot":"·","cfr":"𝔠","Cfr":"ℭ","CHcy":"Ч","chcy":"ч","check":"✓","checkmark":"✓","Chi":"Χ","chi":"χ","circ":"ˆ","circeq":"≗","circlearrowleft":"↺","circlearrowright":"↻","circledast":"⊛","circledcirc":"⊚","circleddash":"⊝","CircleDot":"⊙","circledR":"®","circledS":"Ⓢ","CircleMinus":"⊖","CirclePlus":"⊕","CircleTimes":"⊗","cir":"○","cirE":"⧃","cire":"≗","cirfnint":"⨐","cirmid":"⫯","cirscir":"⧂","ClockwiseContourIntegral":"∲","CloseCurlyDoubleQuote":"”","CloseCurlyQuote":"’","clubs":"♣","clubsuit":"♣","colon":":","Colon":"∷","Colone":"⩴","colone":"≔","coloneq":"≔","comma":",","commat":"@","comp":"∁","compfn":"∘","complement":"∁","complexes":"ℂ","cong":"≅","congdot":"⩭","Congruent":"≡","conint":"∮","Conint":"∯","ContourIntegral":"∮","copf":"𝕔","Copf":"ℂ","coprod":"∐","Coproduct":"∐","copy":"©","COPY":"©","copysr":"℗","CounterClockwiseContourIntegral":"∳","crarr":"↵","cross":"✗","Cross":"⨯","Cscr":"𝒞","cscr":"𝒸","csub":"⫏","csube":"⫑","csup":"⫐","csupe":"⫒","ctdot":"⋯","cudarrl":"⤸","cudarrr":"⤵","cuepr":"⋞","cuesc":"⋟","cularr":"↶","cularrp":"⤽","cupbrcap":"⩈","cupcap":"⩆","CupCap":"≍","cup":"∪","Cup":"⋓","cupcup":"⩊","cupdot":"⊍","cupor":"⩅","cups":"∪︀","curarr":"↷","curarrm":"⤼","curlyeqprec":"⋞","curlyeqsucc":"⋟","curlyvee":"⋎","curlywedge":"⋏","curren":"¤","curvearrowleft":"↶","curvearrowright":"↷","cuvee":"⋎","cuwed":"⋏","cwconint":"∲","cwint":"∱","cylcty":"⌭","dagger":"†","Dagger":"‡","daleth":"ℸ","darr":"↓","Darr":"↡","dArr":"⇓","dash":"‐","Dashv":"⫤","dashv":"⊣","dbkarow":"⤏","dblac":"˝","Dcaron":"Ď","dcaron":"ď","Dcy":"Д","dcy":"д","ddagger":"‡","ddarr":"⇊","DD":"ⅅ","dd":"ⅆ","DDotrahd":"⤑","ddotseq":"⩷","deg":"°","Del":"∇","Delta":"Δ","delta":"δ","demptyv":"⦱","dfisht":"⥿","Dfr":"𝔇","dfr":"𝔡","dHar":"⥥","dharl":"⇃","dharr":"⇂","DiacriticalAcute":"´","DiacriticalDot":"˙","DiacriticalDoubleAcute":"˝","DiacriticalGrave":"`","DiacriticalTilde":"˜","diam":"⋄","diamond":"⋄","Diamond":"⋄","diamondsuit":"♦","diams":"♦","die":"¨","DifferentialD":"ⅆ","digamma":"ϝ","disin":"⋲","div":"÷","divide":"÷","divideontimes":"⋇","divonx":"⋇","DJcy":"Ђ","djcy":"ђ","dlcorn":"⌞","dlcrop":"⌍","dollar":"$","Dopf":"𝔻","dopf":"𝕕","Dot":"¨","dot":"˙","DotDot":"⃜","doteq":"≐","doteqdot":"≑","DotEqual":"≐","dotminus":"∸","dotplus":"∔","dotsquare":"⊡","doublebarwedge":"⌆","DoubleContourIntegral":"∯","DoubleDot":"¨","DoubleDownArrow":"⇓","DoubleLeftArrow":"⇐","DoubleLeftRightArrow":"⇔","DoubleLeftTee":"⫤","DoubleLongLeftArrow":"⟸","DoubleLongLeftRightArrow":"⟺","DoubleLongRightArrow":"⟹","DoubleRightArrow":"⇒","DoubleRightTee":"⊨","DoubleUpArrow":"⇑","DoubleUpDownArrow":"⇕","DoubleVerticalBar":"∥","DownArrowBar":"⤓","downarrow":"↓","DownArrow":"↓","Downarrow":"⇓","DownArrowUpArrow":"⇵","DownBreve":"̑","downdownarrows":"⇊","downharpoonleft":"⇃","downharpoonright":"⇂","DownLeftRightVector":"⥐","DownLeftTeeVector":"⥞","DownLeftVectorBar":"⥖","DownLeftVector":"↽","DownRightTeeVector":"⥟","DownRightVectorBar":"⥗","DownRightVector":"⇁","DownTeeArrow":"↧","DownTee":"⊤","drbkarow":"⤐","drcorn":"⌟","drcrop":"⌌","Dscr":"𝒟","dscr":"𝒹","DScy":"Ѕ","dscy":"ѕ","dsol":"⧶","Dstrok":"Đ","dstrok":"đ","dtdot":"⋱","dtri":"▿","dtrif":"▾","duarr":"⇵","duhar":"⥯","dwangle":"⦦","DZcy":"Џ","dzcy":"џ","dzigrarr":"⟿","Eacute":"É","eacute":"é","easter":"⩮","Ecaron":"Ě","ecaron":"ě","Ecirc":"Ê","ecirc":"ê","ecir":"≖","ecolon":"≕","Ecy":"Э","ecy":"э","eDDot":"⩷","Edot":"Ė","edot":"ė","eDot":"≑","ee":"ⅇ","efDot":"≒","Efr":"𝔈","efr":"𝔢","eg":"⪚","Egrave":"È","egrave":"è","egs":"⪖","egsdot":"⪘","el":"⪙","Element":"∈","elinters":"⏧","ell":"ℓ","els":"⪕","elsdot":"⪗","Emacr":"Ē","emacr":"ē","empty":"∅","emptyset":"∅","EmptySmallSquare":"◻","emptyv":"∅","EmptyVerySmallSquare":"▫","emsp13":" ","emsp14":" ","emsp":" ","ENG":"Ŋ","eng":"ŋ","ensp":" ","Eogon":"Ę","eogon":"ę","Eopf":"𝔼","eopf":"𝕖","epar":"⋕","eparsl":"⧣","eplus":"⩱","epsi":"ε","Epsilon":"Ε","epsilon":"ε","epsiv":"ϵ","eqcirc":"≖","eqcolon":"≕","eqsim":"≂","eqslantgtr":"⪖","eqslantless":"⪕","Equal":"⩵","equals":"=","EqualTilde":"≂","equest":"≟","Equilibrium":"⇌","equiv":"≡","equivDD":"⩸","eqvparsl":"⧥","erarr":"⥱","erDot":"≓","escr":"ℯ","Escr":"ℰ","esdot":"≐","Esim":"⩳","esim":"≂","Eta":"Η","eta":"η","ETH":"Ð","eth":"ð","Euml":"Ë","euml":"ë","euro":"€","excl":"!","exist":"∃","Exists":"∃","expectation":"ℰ","exponentiale":"ⅇ","ExponentialE":"ⅇ","fallingdotseq":"≒","Fcy":"Ф","fcy":"ф","female":"♀","ffilig":"ﬃ","fflig":"ﬀ","ffllig":"ﬄ","Ffr":"𝔉","ffr":"𝔣","filig":"ﬁ","FilledSmallSquare":"◼","FilledVerySmallSquare":"▪","fjlig":"fj","flat":"♭","fllig":"ﬂ","fltns":"▱","fnof":"ƒ","Fopf":"𝔽","fopf":"𝕗","forall":"∀","ForAll":"∀","fork":"⋔","forkv":"⫙","Fouriertrf":"ℱ","fpartint":"⨍","frac12":"½","frac13":"⅓","frac14":"¼","frac15":"⅕","frac16":"⅙","frac18":"⅛","frac23":"⅔","frac25":"⅖","frac34":"¾","frac35":"⅗","frac38":"⅜","frac45":"⅘","frac56":"⅚","frac58":"⅝","frac78":"⅞","frasl":"⁄","frown":"⌢","fscr":"𝒻","Fscr":"ℱ","gacute":"ǵ","Gamma":"Γ","gamma":"γ","Gammad":"Ϝ","gammad":"ϝ","gap":"⪆","Gbreve":"Ğ","gbreve":"ğ","Gcedil":"Ģ","Gcirc":"Ĝ","gcirc":"ĝ","Gcy":"Г","gcy":"г","Gdot":"Ġ","gdot":"ġ","ge":"≥","gE":"≧","gEl":"⪌","gel":"⋛","geq":"≥","geqq":"≧","geqslant":"⩾","gescc":"⪩","ges":"⩾","gesdot":"⪀","gesdoto":"⪂","gesdotol":"⪄","gesl":"⋛︀","gesles":"⪔","Gfr":"𝔊","gfr":"𝔤","gg":"≫","Gg":"⋙","ggg":"⋙","gimel":"ℷ","GJcy":"Ѓ","gjcy":"ѓ","gla":"⪥","gl":"≷","glE":"⪒","glj":"⪤","gnap":"⪊","gnapprox":"⪊","gne":"⪈","gnE":"≩","gneq":"⪈","gneqq":"≩","gnsim":"⋧","Gopf":"𝔾","gopf":"𝕘","grave":"`","GreaterEqual":"≥","GreaterEqualLess":"⋛","GreaterFullEqual":"≧","GreaterGreater":"⪢","GreaterLess":"≷","GreaterSlantEqual":"⩾","GreaterTilde":"≳","Gscr":"𝒢","gscr":"ℊ","gsim":"≳","gsime":"⪎","gsiml":"⪐","gtcc":"⪧","gtcir":"⩺","gt":">","GT":">","Gt":"≫","gtdot":"⋗","gtlPar":"⦕","gtquest":"⩼","gtrapprox":"⪆","gtrarr":"⥸","gtrdot":"⋗","gtreqless":"⋛","gtreqqless":"⪌","gtrless":"≷","gtrsim":"≳","gvertneqq":"≩︀","gvnE":"≩︀","Hacek":"ˇ","hairsp":" ","half":"½","hamilt":"ℋ","HARDcy":"Ъ","hardcy":"ъ","harrcir":"⥈","harr":"↔","hArr":"⇔","harrw":"↭","Hat":"^","hbar":"ℏ","Hcirc":"Ĥ","hcirc":"ĥ","hearts":"♥","heartsuit":"♥","hellip":"…","hercon":"⊹","hfr":"𝔥","Hfr":"ℌ","HilbertSpace":"ℋ","hksearow":"⤥","hkswarow":"⤦","hoarr":"⇿","homtht":"∻","hookleftarrow":"↩","hookrightarrow":"↪","hopf":"𝕙","Hopf":"ℍ","horbar":"―","HorizontalLine":"─","hscr":"𝒽","Hscr":"ℋ","hslash":"ℏ","Hstrok":"Ħ","hstrok":"ħ","HumpDownHump":"≎","HumpEqual":"≏","hybull":"⁃","hyphen":"‐","Iacute":"Í","iacute":"í","ic":"⁣","Icirc":"Î","icirc":"î","Icy":"И","icy":"и","Idot":"İ","IEcy":"Е","iecy":"е","iexcl":"¡","iff":"⇔","ifr":"𝔦","Ifr":"ℑ","Igrave":"Ì","igrave":"ì","ii":"ⅈ","iiiint":"⨌","iiint":"∭","iinfin":"⧜","iiota":"℩","IJlig":"Ĳ","ijlig":"ĳ","Imacr":"Ī","imacr":"ī","image":"ℑ","ImaginaryI":"ⅈ","imagline":"ℐ","imagpart":"ℑ","imath":"ı","Im":"ℑ","imof":"⊷","imped":"Ƶ","Implies":"⇒","incare":"℅","in":"∈","infin":"∞","infintie":"⧝","inodot":"ı","intcal":"⊺","int":"∫","Int":"∬","integers":"ℤ","Integral":"∫","intercal":"⊺","Intersection":"⋂","intlarhk":"⨗","intprod":"⨼","InvisibleComma":"⁣","InvisibleTimes":"⁢","IOcy":"Ё","iocy":"ё","Iogon":"Į","iogon":"į","Iopf":"𝕀","iopf":"𝕚","Iota":"Ι","iota":"ι","iprod":"⨼","iquest":"¿","iscr":"𝒾","Iscr":"ℐ","isin":"∈","isindot":"⋵","isinE":"⋹","isins":"⋴","isinsv":"⋳","isinv":"∈","it":"⁢","Itilde":"Ĩ","itilde":"ĩ","Iukcy":"І","iukcy":"і","Iuml":"Ï","iuml":"ï","Jcirc":"Ĵ","jcirc":"ĵ","Jcy":"Й","jcy":"й","Jfr":"𝔍","jfr":"𝔧","jmath":"ȷ","Jopf":"𝕁","jopf":"𝕛","Jscr":"𝒥","jscr":"𝒿","Jsercy":"Ј","jsercy":"ј","Jukcy":"Є","jukcy":"є","Kappa":"Κ","kappa":"κ","kappav":"ϰ","Kcedil":"Ķ","kcedil":"ķ","Kcy":"К","kcy":"к","Kfr":"𝔎","kfr":"𝔨","kgreen":"ĸ","KHcy":"Х","khcy":"х","KJcy":"Ќ","kjcy":"ќ","Kopf":"𝕂","kopf":"𝕜","Kscr":"𝒦","kscr":"𝓀","lAarr":"⇚","Lacute":"Ĺ","lacute":"ĺ","laemptyv":"⦴","lagran":"ℒ","Lambda":"Λ","lambda":"λ","lang":"⟨","Lang":"⟪","langd":"⦑","langle":"⟨","lap":"⪅","Laplacetrf":"ℒ","laquo":"«","larrb":"⇤","larrbfs":"⤟","larr":"←","Larr":"↞","lArr":"⇐","larrfs":"⤝","larrhk":"↩","larrlp":"↫","larrpl":"⤹","larrsim":"⥳","larrtl":"↢","latail":"⤙","lAtail":"⤛","lat":"⪫","late":"⪭","lates":"⪭︀","lbarr":"⤌","lBarr":"⤎","lbbrk":"❲","lbrace":"{","lbrack":"[","lbrke":"⦋","lbrksld":"⦏","lbrkslu":"⦍","Lcaron":"Ľ","lcaron":"ľ","Lcedil":"Ļ","lcedil":"ļ","lceil":"⌈","lcub":"{","Lcy":"Л","lcy":"л","ldca":"⤶","ldquo":"“","ldquor":"„","ldrdhar":"⥧","ldrushar":"⥋","ldsh":"↲","le":"≤","lE":"≦","LeftAngleBracket":"⟨","LeftArrowBar":"⇤","leftarrow":"←","LeftArrow":"←","Leftarrow":"⇐","LeftArrowRightArrow":"⇆","leftarrowtail":"↢","LeftCeiling":"⌈","LeftDoubleBracket":"⟦","LeftDownTeeVector":"⥡","LeftDownVectorBar":"⥙","LeftDownVector":"⇃","LeftFloor":"⌊","leftharpoondown":"↽","leftharpoonup":"↼","leftleftarrows":"⇇","leftrightarrow":"↔","LeftRightArrow":"↔","Leftrightarrow":"⇔","leftrightarrows":"⇆","leftrightharpoons":"⇋","leftrightsquigarrow":"↭","LeftRightVector":"⥎","LeftTeeArrow":"↤","LeftTee":"⊣","LeftTeeVector":"⥚","leftthreetimes":"⋋","LeftTriangleBar":"⧏","LeftTriangle":"⊲","LeftTriangleEqual":"⊴","LeftUpDownVector":"⥑","LeftUpTeeVector":"⥠","LeftUpVectorBar":"⥘","LeftUpVector":"↿","LeftVectorBar":"⥒","LeftVector":"↼","lEg":"⪋","leg":"⋚","leq":"≤","leqq":"≦","leqslant":"⩽","lescc":"⪨","les":"⩽","lesdot":"⩿","lesdoto":"⪁","lesdotor":"⪃","lesg":"⋚︀","lesges":"⪓","lessapprox":"⪅","lessdot":"⋖","lesseqgtr":"⋚","lesseqqgtr":"⪋","LessEqualGreater":"⋚","LessFullEqual":"≦","LessGreater":"≶","lessgtr":"≶","LessLess":"⪡","lesssim":"≲","LessSlantEqual":"⩽","LessTilde":"≲","lfisht":"⥼","lfloor":"⌊","Lfr":"𝔏","lfr":"𝔩","lg":"≶","lgE":"⪑","lHar":"⥢","lhard":"↽","lharu":"↼","lharul":"⥪","lhblk":"▄","LJcy":"Љ","ljcy":"љ","llarr":"⇇","ll":"≪","Ll":"⋘","llcorner":"⌞","Lleftarrow":"⇚","llhard":"⥫","lltri":"◺","Lmidot":"Ŀ","lmidot":"ŀ","lmoustache":"⎰","lmoust":"⎰","lnap":"⪉","lnapprox":"⪉","lne":"⪇","lnE":"≨","lneq":"⪇","lneqq":"≨","lnsim":"⋦","loang":"⟬","loarr":"⇽","lobrk":"⟦","longleftarrow":"⟵","LongLeftArrow":"⟵","Longleftarrow":"⟸","longleftrightarrow":"⟷","LongLeftRightArrow":"⟷","Longleftrightarrow":"⟺","longmapsto":"⟼","longrightarrow":"⟶","LongRightArrow":"⟶","Longrightarrow":"⟹","looparrowleft":"↫","looparrowright":"↬","lopar":"⦅","Lopf":"𝕃","lopf":"𝕝","loplus":"⨭","lotimes":"⨴","lowast":"∗","lowbar":"_","LowerLeftArrow":"↙","LowerRightArrow":"↘","loz":"◊","lozenge":"◊","lozf":"⧫","lpar":"(","lparlt":"⦓","lrarr":"⇆","lrcorner":"⌟","lrhar":"⇋","lrhard":"⥭","lrm":"‎","lrtri":"⊿","lsaquo":"‹","lscr":"𝓁","Lscr":"ℒ","lsh":"↰","Lsh":"↰","lsim":"≲","lsime":"⪍","lsimg":"⪏","lsqb":"[","lsquo":"‘","lsquor":"‚","Lstrok":"Ł","lstrok":"ł","ltcc":"⪦","ltcir":"⩹","lt":"<","LT":"<","Lt":"≪","ltdot":"⋖","lthree":"⋋","ltimes":"⋉","ltlarr":"⥶","ltquest":"⩻","ltri":"◃","ltrie":"⊴","ltrif":"◂","ltrPar":"⦖","lurdshar":"⥊","luruhar":"⥦","lvertneqq":"≨︀","lvnE":"≨︀","macr":"¯","male":"♂","malt":"✠","maltese":"✠","Map":"⤅","map":"↦","mapsto":"↦","mapstodown":"↧","mapstoleft":"↤","mapstoup":"↥","marker":"▮","mcomma":"⨩","Mcy":"М","mcy":"м","mdash":"—","mDDot":"∺","measuredangle":"∡","MediumSpace":" ","Mellintrf":"ℳ","Mfr":"𝔐","mfr":"𝔪","mho":"℧","micro":"µ","midast":"*","midcir":"⫰","mid":"∣","middot":"·","minusb":"⊟","minus":"−","minusd":"∸","minusdu":"⨪","MinusPlus":"∓","mlcp":"⫛","mldr":"…","mnplus":"∓","models":"⊧","Mopf":"𝕄","mopf":"𝕞","mp":"∓","mscr":"𝓂","Mscr":"ℳ","mstpos":"∾","Mu":"Μ","mu":"μ","multimap":"⊸","mumap":"⊸","nabla":"∇","Nacute":"Ń","nacute":"ń","nang":"∠⃒","nap":"≉","napE":"⩰̸","napid":"≋̸","napos":"ŉ","napprox":"≉","natural":"♮","naturals":"ℕ","natur":"♮","nbsp":" ","nbump":"≎̸","nbumpe":"≏̸","ncap":"⩃","Ncaron":"Ň","ncaron":"ň","Ncedil":"Ņ","ncedil":"ņ","ncong":"≇","ncongdot":"⩭̸","ncup":"⩂","Ncy":"Н","ncy":"н","ndash":"–","nearhk":"⤤","nearr":"↗","neArr":"⇗","nearrow":"↗","ne":"≠","nedot":"≐̸","NegativeMediumSpace":"​","NegativeThickSpace":"​","NegativeThinSpace":"​","NegativeVeryThinSpace":"​","nequiv":"≢","nesear":"⤨","nesim":"≂̸","NestedGreaterGreater":"≫","NestedLessLess":"≪","NewLine":"\\n","nexist":"∄","nexists":"∄","Nfr":"𝔑","nfr":"𝔫","ngE":"≧̸","nge":"≱","ngeq":"≱","ngeqq":"≧̸","ngeqslant":"⩾̸","nges":"⩾̸","nGg":"⋙̸","ngsim":"≵","nGt":"≫⃒","ngt":"≯","ngtr":"≯","nGtv":"≫̸","nharr":"↮","nhArr":"⇎","nhpar":"⫲","ni":"∋","nis":"⋼","nisd":"⋺","niv":"∋","NJcy":"Њ","njcy":"њ","nlarr":"↚","nlArr":"⇍","nldr":"‥","nlE":"≦̸","nle":"≰","nleftarrow":"↚","nLeftarrow":"⇍","nleftrightarrow":"↮","nLeftrightarrow":"⇎","nleq":"≰","nleqq":"≦̸","nleqslant":"⩽̸","nles":"⩽̸","nless":"≮","nLl":"⋘̸","nlsim":"≴","nLt":"≪⃒","nlt":"≮","nltri":"⋪","nltrie":"⋬","nLtv":"≪̸","nmid":"∤","NoBreak":"⁠","NonBreakingSpace":" ","nopf":"𝕟","Nopf":"ℕ","Not":"⫬","not":"¬","NotCongruent":"≢","NotCupCap":"≭","NotDoubleVerticalBar":"∦","NotElement":"∉","NotEqual":"≠","NotEqualTilde":"≂̸","NotExists":"∄","NotGreater":"≯","NotGreaterEqual":"≱","NotGreaterFullEqual":"≧̸","NotGreaterGreater":"≫̸","NotGreaterLess":"≹","NotGreaterSlantEqual":"⩾̸","NotGreaterTilde":"≵","NotHumpDownHump":"≎̸","NotHumpEqual":"≏̸","notin":"∉","notindot":"⋵̸","notinE":"⋹̸","notinva":"∉","notinvb":"⋷","notinvc":"⋶","NotLeftTriangleBar":"⧏̸","NotLeftTriangle":"⋪","NotLeftTriangleEqual":"⋬","NotLess":"≮","NotLessEqual":"≰","NotLessGreater":"≸","NotLessLess":"≪̸","NotLessSlantEqual":"⩽̸","NotLessTilde":"≴","NotNestedGreaterGreater":"⪢̸","NotNestedLessLess":"⪡̸","notni":"∌","notniva":"∌","notnivb":"⋾","notnivc":"⋽","NotPrecedes":"⊀","NotPrecedesEqual":"⪯̸","NotPrecedesSlantEqual":"⋠","NotReverseElement":"∌","NotRightTriangleBar":"⧐̸","NotRightTriangle":"⋫","NotRightTriangleEqual":"⋭","NotSquareSubset":"⊏̸","NotSquareSubsetEqual":"⋢","NotSquareSuperset":"⊐̸","NotSquareSupersetEqual":"⋣","NotSubset":"⊂⃒","NotSubsetEqual":"⊈","NotSucceeds":"⊁","NotSucceedsEqual":"⪰̸","NotSucceedsSlantEqual":"⋡","NotSucceedsTilde":"≿̸","NotSuperset":"⊃⃒","NotSupersetEqual":"⊉","NotTilde":"≁","NotTildeEqual":"≄","NotTildeFullEqual":"≇","NotTildeTilde":"≉","NotVerticalBar":"∤","nparallel":"∦","npar":"∦","nparsl":"⫽⃥","npart":"∂̸","npolint":"⨔","npr":"⊀","nprcue":"⋠","nprec":"⊀","npreceq":"⪯̸","npre":"⪯̸","nrarrc":"⤳̸","nrarr":"↛","nrArr":"⇏","nrarrw":"↝̸","nrightarrow":"↛","nRightarrow":"⇏","nrtri":"⋫","nrtrie":"⋭","nsc":"⊁","nsccue":"⋡","nsce":"⪰̸","Nscr":"𝒩","nscr":"𝓃","nshortmid":"∤","nshortparallel":"∦","nsim":"≁","nsime":"≄","nsimeq":"≄","nsmid":"∤","nspar":"∦","nsqsube":"⋢","nsqsupe":"⋣","nsub":"⊄","nsubE":"⫅̸","nsube":"⊈","nsubset":"⊂⃒","nsubseteq":"⊈","nsubseteqq":"⫅̸","nsucc":"⊁","nsucceq":"⪰̸","nsup":"⊅","nsupE":"⫆̸","nsupe":"⊉","nsupset":"⊃⃒","nsupseteq":"⊉","nsupseteqq":"⫆̸","ntgl":"≹","Ntilde":"Ñ","ntilde":"ñ","ntlg":"≸","ntriangleleft":"⋪","ntrianglelefteq":"⋬","ntriangleright":"⋫","ntrianglerighteq":"⋭","Nu":"Ν","nu":"ν","num":"#","numero":"№","numsp":" ","nvap":"≍⃒","nvdash":"⊬","nvDash":"⊭","nVdash":"⊮","nVDash":"⊯","nvge":"≥⃒","nvgt":">⃒","nvHarr":"⤄","nvinfin":"⧞","nvlArr":"⤂","nvle":"≤⃒","nvlt":"<⃒","nvltrie":"⊴⃒","nvrArr":"⤃","nvrtrie":"⊵⃒","nvsim":"∼⃒","nwarhk":"⤣","nwarr":"↖","nwArr":"⇖","nwarrow":"↖","nwnear":"⤧","Oacute":"Ó","oacute":"ó","oast":"⊛","Ocirc":"Ô","ocirc":"ô","ocir":"⊚","Ocy":"О","ocy":"о","odash":"⊝","Odblac":"Ő","odblac":"ő","odiv":"⨸","odot":"⊙","odsold":"⦼","OElig":"Œ","oelig":"œ","ofcir":"⦿","Ofr":"𝔒","ofr":"𝔬","ogon":"˛","Ograve":"Ò","ograve":"ò","ogt":"⧁","ohbar":"⦵","ohm":"Ω","oint":"∮","olarr":"↺","olcir":"⦾","olcross":"⦻","oline":"‾","olt":"⧀","Omacr":"Ō","omacr":"ō","Omega":"Ω","omega":"ω","Omicron":"Ο","omicron":"ο","omid":"⦶","ominus":"⊖","Oopf":"𝕆","oopf":"𝕠","opar":"⦷","OpenCurlyDoubleQuote":"“","OpenCurlyQuote":"‘","operp":"⦹","oplus":"⊕","orarr":"↻","Or":"⩔","or":"∨","ord":"⩝","order":"ℴ","orderof":"ℴ","ordf":"ª","ordm":"º","origof":"⊶","oror":"⩖","orslope":"⩗","orv":"⩛","oS":"Ⓢ","Oscr":"𝒪","oscr":"ℴ","Oslash":"Ø","oslash":"ø","osol":"⊘","Otilde":"Õ","otilde":"õ","otimesas":"⨶","Otimes":"⨷","otimes":"⊗","Ouml":"Ö","ouml":"ö","ovbar":"⌽","OverBar":"‾","OverBrace":"⏞","OverBracket":"⎴","OverParenthesis":"⏜","para":"¶","parallel":"∥","par":"∥","parsim":"⫳","parsl":"⫽","part":"∂","PartialD":"∂","Pcy":"П","pcy":"п","percnt":"%","period":".","permil":"‰","perp":"⊥","pertenk":"‱","Pfr":"𝔓","pfr":"𝔭","Phi":"Φ","phi":"φ","phiv":"ϕ","phmmat":"ℳ","phone":"☎","Pi":"Π","pi":"π","pitchfork":"⋔","piv":"ϖ","planck":"ℏ","planckh":"ℎ","plankv":"ℏ","plusacir":"⨣","plusb":"⊞","pluscir":"⨢","plus":"+","plusdo":"∔","plusdu":"⨥","pluse":"⩲","PlusMinus":"±","plusmn":"±","plussim":"⨦","plustwo":"⨧","pm":"±","Poincareplane":"ℌ","pointint":"⨕","popf":"𝕡","Popf":"ℙ","pound":"£","prap":"⪷","Pr":"⪻","pr":"≺","prcue":"≼","precapprox":"⪷","prec":"≺","preccurlyeq":"≼","Precedes":"≺","PrecedesEqual":"⪯","PrecedesSlantEqual":"≼","PrecedesTilde":"≾","preceq":"⪯","precnapprox":"⪹","precneqq":"⪵","precnsim":"⋨","pre":"⪯","prE":"⪳","precsim":"≾","prime":"′","Prime":"″","primes":"ℙ","prnap":"⪹","prnE":"⪵","prnsim":"⋨","prod":"∏","Product":"∏","profalar":"⌮","profline":"⌒","profsurf":"⌓","prop":"∝","Proportional":"∝","Proportion":"∷","propto":"∝","prsim":"≾","prurel":"⊰","Pscr":"𝒫","pscr":"𝓅","Psi":"Ψ","psi":"ψ","puncsp":" ","Qfr":"𝔔","qfr":"𝔮","qint":"⨌","qopf":"𝕢","Qopf":"ℚ","qprime":"⁗","Qscr":"𝒬","qscr":"𝓆","quaternions":"ℍ","quatint":"⨖","quest":"?","questeq":"≟","quot":"\\"","QUOT":"\\"","rAarr":"⇛","race":"∽̱","Racute":"Ŕ","racute":"ŕ","radic":"√","raemptyv":"⦳","rang":"⟩","Rang":"⟫","rangd":"⦒","range":"⦥","rangle":"⟩","raquo":"»","rarrap":"⥵","rarrb":"⇥","rarrbfs":"⤠","rarrc":"⤳","rarr":"→","Rarr":"↠","rArr":"⇒","rarrfs":"⤞","rarrhk":"↪","rarrlp":"↬","rarrpl":"⥅","rarrsim":"⥴","Rarrtl":"⤖","rarrtl":"↣","rarrw":"↝","ratail":"⤚","rAtail":"⤜","ratio":"∶","rationals":"ℚ","rbarr":"⤍","rBarr":"⤏","RBarr":"⤐","rbbrk":"❳","rbrace":"}","rbrack":"]","rbrke":"⦌","rbrksld":"⦎","rbrkslu":"⦐","Rcaron":"Ř","rcaron":"ř","Rcedil":"Ŗ","rcedil":"ŗ","rceil":"⌉","rcub":"}","Rcy":"Р","rcy":"р","rdca":"⤷","rdldhar":"⥩","rdquo":"”","rdquor":"”","rdsh":"↳","real":"ℜ","realine":"ℛ","realpart":"ℜ","reals":"ℝ","Re":"ℜ","rect":"▭","reg":"®","REG":"®","ReverseElement":"∋","ReverseEquilibrium":"⇋","ReverseUpEquilibrium":"⥯","rfisht":"⥽","rfloor":"⌋","rfr":"𝔯","Rfr":"ℜ","rHar":"⥤","rhard":"⇁","rharu":"⇀","rharul":"⥬","Rho":"Ρ","rho":"ρ","rhov":"ϱ","RightAngleBracket":"⟩","RightArrowBar":"⇥","rightarrow":"→","RightArrow":"→","Rightarrow":"⇒","RightArrowLeftArrow":"⇄","rightarrowtail":"↣","RightCeiling":"⌉","RightDoubleBracket":"⟧","RightDownTeeVector":"⥝","RightDownVectorBar":"⥕","RightDownVector":"⇂","RightFloor":"⌋","rightharpoondown":"⇁","rightharpoonup":"⇀","rightleftarrows":"⇄","rightleftharpoons":"⇌","rightrightarrows":"⇉","rightsquigarrow":"↝","RightTeeArrow":"↦","RightTee":"⊢","RightTeeVector":"⥛","rightthreetimes":"⋌","RightTriangleBar":"⧐","RightTriangle":"⊳","RightTriangleEqual":"⊵","RightUpDownVector":"⥏","RightUpTeeVector":"⥜","RightUpVectorBar":"⥔","RightUpVector":"↾","RightVectorBar":"⥓","RightVector":"⇀","ring":"˚","risingdotseq":"≓","rlarr":"⇄","rlhar":"⇌","rlm":"‏","rmoustache":"⎱","rmoust":"⎱","rnmid":"⫮","roang":"⟭","roarr":"⇾","robrk":"⟧","ropar":"⦆","ropf":"𝕣","Ropf":"ℝ","roplus":"⨮","rotimes":"⨵","RoundImplies":"⥰","rpar":")","rpargt":"⦔","rppolint":"⨒","rrarr":"⇉","Rrightarrow":"⇛","rsaquo":"›","rscr":"𝓇","Rscr":"ℛ","rsh":"↱","Rsh":"↱","rsqb":"]","rsquo":"’","rsquor":"’","rthree":"⋌","rtimes":"⋊","rtri":"▹","rtrie":"⊵","rtrif":"▸","rtriltri":"⧎","RuleDelayed":"⧴","ruluhar":"⥨","rx":"℞","Sacute":"Ś","sacute":"ś","sbquo":"‚","scap":"⪸","Scaron":"Š","scaron":"š","Sc":"⪼","sc":"≻","sccue":"≽","sce":"⪰","scE":"⪴","Scedil":"Ş","scedil":"ş","Scirc":"Ŝ","scirc":"ŝ","scnap":"⪺","scnE":"⪶","scnsim":"⋩","scpolint":"⨓","scsim":"≿","Scy":"С","scy":"с","sdotb":"⊡","sdot":"⋅","sdote":"⩦","searhk":"⤥","searr":"↘","seArr":"⇘","searrow":"↘","sect":"§","semi":";","seswar":"⤩","setminus":"∖","setmn":"∖","sext":"✶","Sfr":"𝔖","sfr":"𝔰","sfrown":"⌢","sharp":"♯","SHCHcy":"Щ","shchcy":"щ","SHcy":"Ш","shcy":"ш","ShortDownArrow":"↓","ShortLeftArrow":"←","shortmid":"∣","shortparallel":"∥","ShortRightArrow":"→","ShortUpArrow":"↑","shy":"­","Sigma":"Σ","sigma":"σ","sigmaf":"ς","sigmav":"ς","sim":"∼","simdot":"⩪","sime":"≃","simeq":"≃","simg":"⪞","simgE":"⪠","siml":"⪝","simlE":"⪟","simne":"≆","simplus":"⨤","simrarr":"⥲","slarr":"←","SmallCircle":"∘","smallsetminus":"∖","smashp":"⨳","smeparsl":"⧤","smid":"∣","smile":"⌣","smt":"⪪","smte":"⪬","smtes":"⪬︀","SOFTcy":"Ь","softcy":"ь","solbar":"⌿","solb":"⧄","sol":"/","Sopf":"𝕊","sopf":"𝕤","spades":"♠","spadesuit":"♠","spar":"∥","sqcap":"⊓","sqcaps":"⊓︀","sqcup":"⊔","sqcups":"⊔︀","Sqrt":"√","sqsub":"⊏","sqsube":"⊑","sqsubset":"⊏","sqsubseteq":"⊑","sqsup":"⊐","sqsupe":"⊒","sqsupset":"⊐","sqsupseteq":"⊒","square":"□","Square":"□","SquareIntersection":"⊓","SquareSubset":"⊏","SquareSubsetEqual":"⊑","SquareSuperset":"⊐","SquareSupersetEqual":"⊒","SquareUnion":"⊔","squarf":"▪","squ":"□","squf":"▪","srarr":"→","Sscr":"𝒮","sscr":"𝓈","ssetmn":"∖","ssmile":"⌣","sstarf":"⋆","Star":"⋆","star":"☆","starf":"★","straightepsilon":"ϵ","straightphi":"ϕ","strns":"¯","sub":"⊂","Sub":"⋐","subdot":"⪽","subE":"⫅","sube":"⊆","subedot":"⫃","submult":"⫁","subnE":"⫋","subne":"⊊","subplus":"⪿","subrarr":"⥹","subset":"⊂","Subset":"⋐","subseteq":"⊆","subseteqq":"⫅","SubsetEqual":"⊆","subsetneq":"⊊","subsetneqq":"⫋","subsim":"⫇","subsub":"⫕","subsup":"⫓","succapprox":"⪸","succ":"≻","succcurlyeq":"≽","Succeeds":"≻","SucceedsEqual":"⪰","SucceedsSlantEqual":"≽","SucceedsTilde":"≿","succeq":"⪰","succnapprox":"⪺","succneqq":"⪶","succnsim":"⋩","succsim":"≿","SuchThat":"∋","sum":"∑","Sum":"∑","sung":"♪","sup1":"¹","sup2":"²","sup3":"³","sup":"⊃","Sup":"⋑","supdot":"⪾","supdsub":"⫘","supE":"⫆","supe":"⊇","supedot":"⫄","Superset":"⊃","SupersetEqual":"⊇","suphsol":"⟉","suphsub":"⫗","suplarr":"⥻","supmult":"⫂","supnE":"⫌","supne":"⊋","supplus":"⫀","supset":"⊃","Supset":"⋑","supseteq":"⊇","supseteqq":"⫆","supsetneq":"⊋","supsetneqq":"⫌","supsim":"⫈","supsub":"⫔","supsup":"⫖","swarhk":"⤦","swarr":"↙","swArr":"⇙","swarrow":"↙","swnwar":"⤪","szlig":"ß","Tab":"\\t","target":"⌖","Tau":"Τ","tau":"τ","tbrk":"⎴","Tcaron":"Ť","tcaron":"ť","Tcedil":"Ţ","tcedil":"ţ","Tcy":"Т","tcy":"т","tdot":"⃛","telrec":"⌕","Tfr":"𝔗","tfr":"𝔱","there4":"∴","therefore":"∴","Therefore":"∴","Theta":"Θ","theta":"θ","thetasym":"ϑ","thetav":"ϑ","thickapprox":"≈","thicksim":"∼","ThickSpace":"  ","ThinSpace":" ","thinsp":" ","thkap":"≈","thksim":"∼","THORN":"Þ","thorn":"þ","tilde":"˜","Tilde":"∼","TildeEqual":"≃","TildeFullEqual":"≅","TildeTilde":"≈","timesbar":"⨱","timesb":"⊠","times":"×","timesd":"⨰","tint":"∭","toea":"⤨","topbot":"⌶","topcir":"⫱","top":"⊤","Topf":"𝕋","topf":"𝕥","topfork":"⫚","tosa":"⤩","tprime":"‴","trade":"™","TRADE":"™","triangle":"▵","triangledown":"▿","triangleleft":"◃","trianglelefteq":"⊴","triangleq":"≜","triangleright":"▹","trianglerighteq":"⊵","tridot":"◬","trie":"≜","triminus":"⨺","TripleDot":"⃛","triplus":"⨹","trisb":"⧍","tritime":"⨻","trpezium":"⏢","Tscr":"𝒯","tscr":"𝓉","TScy":"Ц","tscy":"ц","TSHcy":"Ћ","tshcy":"ћ","Tstrok":"Ŧ","tstrok":"ŧ","twixt":"≬","twoheadleftarrow":"↞","twoheadrightarrow":"↠","Uacute":"Ú","uacute":"ú","uarr":"↑","Uarr":"↟","uArr":"⇑","Uarrocir":"⥉","Ubrcy":"Ў","ubrcy":"ў","Ubreve":"Ŭ","ubreve":"ŭ","Ucirc":"Û","ucirc":"û","Ucy":"У","ucy":"у","udarr":"⇅","Udblac":"Ű","udblac":"ű","udhar":"⥮","ufisht":"⥾","Ufr":"𝔘","ufr":"𝔲","Ugrave":"Ù","ugrave":"ù","uHar":"⥣","uharl":"↿","uharr":"↾","uhblk":"▀","ulcorn":"⌜","ulcorner":"⌜","ulcrop":"⌏","ultri":"◸","Umacr":"Ū","umacr":"ū","uml":"¨","UnderBar":"_","UnderBrace":"⏟","UnderBracket":"⎵","UnderParenthesis":"⏝","Union":"⋃","UnionPlus":"⊎","Uogon":"Ų","uogon":"ų","Uopf":"𝕌","uopf":"𝕦","UpArrowBar":"⤒","uparrow":"↑","UpArrow":"↑","Uparrow":"⇑","UpArrowDownArrow":"⇅","updownarrow":"↕","UpDownArrow":"↕","Updownarrow":"⇕","UpEquilibrium":"⥮","upharpoonleft":"↿","upharpoonright":"↾","uplus":"⊎","UpperLeftArrow":"↖","UpperRightArrow":"↗","upsi":"υ","Upsi":"ϒ","upsih":"ϒ","Upsilon":"Υ","upsilon":"υ","UpTeeArrow":"↥","UpTee":"⊥","upuparrows":"⇈","urcorn":"⌝","urcorner":"⌝","urcrop":"⌎","Uring":"Ů","uring":"ů","urtri":"◹","Uscr":"𝒰","uscr":"𝓊","utdot":"⋰","Utilde":"Ũ","utilde":"ũ","utri":"▵","utrif":"▴","uuarr":"⇈","Uuml":"Ü","uuml":"ü","uwangle":"⦧","vangrt":"⦜","varepsilon":"ϵ","varkappa":"ϰ","varnothing":"∅","varphi":"ϕ","varpi":"ϖ","varpropto":"∝","varr":"↕","vArr":"⇕","varrho":"ϱ","varsigma":"ς","varsubsetneq":"⊊︀","varsubsetneqq":"⫋︀","varsupsetneq":"⊋︀","varsupsetneqq":"⫌︀","vartheta":"ϑ","vartriangleleft":"⊲","vartriangleright":"⊳","vBar":"⫨","Vbar":"⫫","vBarv":"⫩","Vcy":"В","vcy":"в","vdash":"⊢","vDash":"⊨","Vdash":"⊩","VDash":"⊫","Vdashl":"⫦","veebar":"⊻","vee":"∨","Vee":"⋁","veeeq":"≚","vellip":"⋮","verbar":"|","Verbar":"‖","vert":"|","Vert":"‖","VerticalBar":"∣","VerticalLine":"|","VerticalSeparator":"❘","VerticalTilde":"≀","VeryThinSpace":" ","Vfr":"𝔙","vfr":"𝔳","vltri":"⊲","vnsub":"⊂⃒","vnsup":"⊃⃒","Vopf":"𝕍","vopf":"𝕧","vprop":"∝","vrtri":"⊳","Vscr":"𝒱","vscr":"𝓋","vsubnE":"⫋︀","vsubne":"⊊︀","vsupnE":"⫌︀","vsupne":"⊋︀","Vvdash":"⊪","vzigzag":"⦚","Wcirc":"Ŵ","wcirc":"ŵ","wedbar":"⩟","wedge":"∧","Wedge":"⋀","wedgeq":"≙","weierp":"℘","Wfr":"𝔚","wfr":"𝔴","Wopf":"𝕎","wopf":"𝕨","wp":"℘","wr":"≀","wreath":"≀","Wscr":"𝒲","wscr":"𝓌","xcap":"⋂","xcirc":"◯","xcup":"⋃","xdtri":"▽","Xfr":"𝔛","xfr":"𝔵","xharr":"⟷","xhArr":"⟺","Xi":"Ξ","xi":"ξ","xlarr":"⟵","xlArr":"⟸","xmap":"⟼","xnis":"⋻","xodot":"⨀","Xopf":"𝕏","xopf":"𝕩","xoplus":"⨁","xotime":"⨂","xrarr":"⟶","xrArr":"⟹","Xscr":"𝒳","xscr":"𝓍","xsqcup":"⨆","xuplus":"⨄","xutri":"△","xvee":"⋁","xwedge":"⋀","Yacute":"Ý","yacute":"ý","YAcy":"Я","yacy":"я","Ycirc":"Ŷ","ycirc":"ŷ","Ycy":"Ы","ycy":"ы","yen":"¥","Yfr":"𝔜","yfr":"𝔶","YIcy":"Ї","yicy":"ї","Yopf":"𝕐","yopf":"𝕪","Yscr":"𝒴","yscr":"𝓎","YUcy":"Ю","yucy":"ю","yuml":"ÿ","Yuml":"Ÿ","Zacute":"Ź","zacute":"ź","Zcaron":"Ž","zcaron":"ž","Zcy":"З","zcy":"з","Zdot":"Ż","zdot":"ż","zeetrf":"ℨ","ZeroWidthSpace":"​","Zeta":"Ζ","zeta":"ζ","zfr":"𝔷","Zfr":"ℨ","ZHcy":"Ж","zhcy":"ж","zigrarr":"⇝","zopf":"𝕫","Zopf":"ℤ","Zscr":"𝒵","zscr":"𝓏","zwj":"‍","zwnj":"‌"}');
-
-/***/ }),
-
-/***/ 9040:
-/***/ ((module) => {
-
-"use strict";
-module.exports = JSON.parse('{"name":"markdownlint-cli2","version":"0.3.2","description":"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library","author":{"name":"David Anson","url":"https://dlaa.me/"},"license":"MIT","main":"markdownlint-cli2.js","bin":{"markdownlint-cli2":"markdownlint-cli2.js","markdownlint-cli2-fix":"markdownlint-cli2-fix.js"},"homepage":"https://github.com/DavidAnson/markdownlint-cli2","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint-cli2.git"},"bugs":"https://github.com/DavidAnson/markdownlint-cli2/issues","scripts":{"build-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker build -t davidanson/markdownlint-cli2:$VERSION -f docker/Dockerfile .","ci":"npm-run-all --continue-on-error --parallel test-cover lint","lint":"eslint --max-warnings 0 .","lint-dockerfile":"docker run --rm -i hadolint/hadolint:latest-alpine < docker/Dockerfile","lint-watch":"git ls-files | entr npm run lint","publish-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker buildx build --platform linux/arm64,linux/amd64 -t davidanson/markdownlint-cli2:$VERSION -t davidanson/markdownlint-cli2:latest -f docker/Dockerfile --push .","test":"ava test/append-to-array-test.js test/fs-mock-test.js test/markdownlint-cli2-test.js test/markdownlint-cli2-test-exec.js test/markdownlint-cli2-test-fs.js test/markdownlint-cli2-test-main.js test/merge-options-test.js test/resolve-and-require-test.js","test-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:$VERSION \\"*.md\\"","test-docker-hub-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker image rm davidanson/markdownlint-cli2:$VERSION davidanson/markdownlint-cli2:latest || true && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:$VERSION \\"*.md\\" && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:latest \\"*.md\\"","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-watch":"git ls-files | entr npm run test"},"engines":{"node":">=12"},"files":["append-to-array.js","markdownlint-cli2.js","markdownlint-cli2-fix.js","merge-options.js","resolve-and-require.js"],"dependencies":{"globby":"~11.0.4","markdownlint":"~0.24.0","markdownlint-cli2-formatter-default":"^0.0.2","markdownlint-rule-helpers":"~0.15.0","micromatch":"~4.0.4","strip-json-comments":"~3.1.1","yaml":"~1.10.2"},"devDependencies":{"@iktakahiro/markdown-it-katex":"~4.0.1","ava":"~3.15.0","c8":"~7.8.0","cpy":"~8.1.2","del":"~6.0.0","eslint":"~7.32.0","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~35.0.0","execa":"~5.1.1","markdown-it-emoji":"~2.0.0","markdown-it-for-inline":"~0.1.1","markdownlint-cli2-formatter-json":"^0.0.4","markdownlint-cli2-formatter-junit":"^0.0.3","markdownlint-cli2-formatter-pretty":"^0.0.2","markdownlint-cli2-formatter-summarize":"^0.0.3","markdownlint-rule-titlecase":"~0.1.0","npm-run-all":"~4.1.5"},"keywords":["markdown","lint","cli","md","CommonMark","markdownlint"]}');
-
-/***/ }),
-
-/***/ 3927:
-/***/ ((module) => {
-
-"use strict";
-module.exports = JSON.parse('{"name":"markdownlint","version":"0.24.0","description":"A Node.js style checker and lint tool for Markdown/CommonMark files.","main":"lib/markdownlint.js","types":"lib/markdownlint.d.ts","author":"David Anson (https://dlaa.me/)","license":"MIT","homepage":"https://github.com/DavidAnson/markdownlint","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint.git"},"bugs":"https://github.com/DavidAnson/markdownlint/issues","scripts":{"build-config":"npm run build-config-schema && npm run build-config-example","build-config-example":"node schema/build-config-example.js","build-config-schema":"node schema/build-config-schema.js","build-declaration":"tsc --allowJs --declaration --emitDeclarationOnly --resolveJsonModule lib/markdownlint.js && rimraf \'lib/{c,md,r}*.d.ts\' \'helpers/*.d.ts\'","build-demo":"cpy node_modules/markdown-it/dist/markdown-it.min.js demo && cd demo && rimraf markdownlint-browser.* && webpack --no-stats","build-example":"npm install --no-save --ignore-scripts grunt grunt-cli gulp through2","ci":"npm-run-all --continue-on-error --parallel test-cover lint declaration build-config build-demo && git diff --exit-code","clean-test-repos":"rimraf test-repos","clone-test-repos-dotnet-docs":"cd test-repos && git clone https://github.com/dotnet/docs dotnet-docs --depth 1 --no-tags --quiet","clone-test-repos-eslint-eslint":"cd test-repos && git clone https://github.com/eslint/eslint eslint-eslint --depth 1 --no-tags --quiet","clone-test-repos-mkdocs-mkdocs":"cd test-repos && git clone https://github.com/mkdocs/mkdocs mkdocs-mkdocs --depth 1 --no-tags --quiet","clone-test-repos-mochajs-mocha":"cd test-repos && git clone https://github.com/mochajs/mocha mochajs-mocha --depth 1 --no-tags --quiet","clone-test-repos-pi-hole-docs":"cd test-repos && git clone https://github.com/pi-hole/docs pi-hole-docs --depth 1 --no-tags --quiet","clone-test-repos-v8-v8-dev":"cd test-repos && git clone https://github.com/v8/v8.dev v8-v8-dev --depth 1 --no-tags --quiet","clone-test-repos-webhintio-hint":"cd test-repos && git clone https://github.com/webhintio/hint webhintio-hint --depth 1 --no-tags --quiet","clone-test-repos-webpack-webpack-js-org":"cd test-repos && git clone https://github.com/webpack/webpack.js.org webpack-webpack-js-org --depth 1 --no-tags --quiet","clone-test-repos":"mkdir test-repos && cd test-repos && npm run clone-test-repos-eslint-eslint && npm run clone-test-repos-mkdocs-mkdocs && npm run clone-test-repos-mochajs-mocha && npm run clone-test-repos-pi-hole-docs && npm run clone-test-repos-webhintio-hint && npm run clone-test-repos-webpack-webpack-js-org","clone-test-repos-large":"npm run clone-test-repos && cd test-repos && npm run clone-test-repos-dotnet-docs && npm run clone-test-repos-v8-v8-dev","declaration":"npm run build-declaration && npm run test-declaration","example":"cd example && node standalone.js && grunt markdownlint --force && gulp markdownlint","lint":"eslint --max-warnings 0 .","lint-test-repos":"ava --timeout=5m test/markdownlint-test-repos.js","test":"ava test/markdownlint-test.js test/markdownlint-test-custom-rules.js test/markdownlint-test-helpers.js test/markdownlint-test-result-object.js test/markdownlint-test-scenarios.js","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-declaration":"cd example/typescript && tsc && node type-check.js","test-extra":"ava --timeout=5m test/markdownlint-test-extra.js"},"engines":{"node":">=10"},"dependencies":{"markdown-it":"12.2.0"},"devDependencies":{"ava":"~3.15.0","c8":"~7.8.0","cpy-cli":"~3.1.1","eslint":"~7.32.0","eslint-plugin-jsdoc":"~36.0.7","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~35.0.0","globby":"~11.0.4","js-yaml":"~4.1.0","markdown-it-for-inline":"~0.1.1","markdown-it-sub":"~1.0.0","markdown-it-sup":"~1.0.0","markdown-it-texmath":"~0.9.1","markdownlint-rule-helpers":"~0.14.0","npm-run-all":"~4.1.5","rimraf":"~3.0.2","strip-json-comments":"~3.1.1","toml":"~3.0.0","ts-loader":"~9.2.5","tv4":"~1.3.0","typescript":"~4.3.5","webpack":"~5.51.1","webpack-cli":"~4.8.0"},"keywords":["markdown","lint","md","CommonMark","markdownlint"]}');
-
-/***/ }),
-
-/***/ 8614:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("events");
-
-/***/ }),
-
-/***/ 5747:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("fs");
-
-/***/ }),
-
-/***/ 2087:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("os");
-
-/***/ }),
-
-/***/ 5622:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("path");
-
-/***/ }),
-
-/***/ 4213:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("punycode");
-
-/***/ }),
-
-/***/ 2413:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("stream");
-
-/***/ }),
-
-/***/ 1669:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("util");
 
 /***/ })
 
@@ -30033,6 +31618,34 @@ module.exports = require("util");
 /******/ 	}
 /******/ 	
 /************************************************************************/
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__nccwpck_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__nccwpck_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
+/******/ 	})();
+/******/ 	
 /******/ 	/* webpack/runtime/compat */
 /******/ 	
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
@@ -30047,7 +31660,7 @@ var __webpack_exports__ = {};
 
 
 const core = __nccwpck_require__(2186);
-const {"main": markdownlintCli2} = __nccwpck_require__(9202);
+const {"main": markdownlintCli2} = __nccwpck_require__(9247);
 
 const logMessage = core.info;
 const logError = core.error;
