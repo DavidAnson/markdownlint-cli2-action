@@ -6,6 +6,7 @@
     "url": "https://dlaa.me/"
   },
   "license": "MIT",
+  "type": "commonjs",
   "homepage": "https://github.com/DavidAnson/markdownlint-cli2-action",
   "repository": {
     "type": "git",
