@@ -2458,6 +2458,7 @@ module.exports.sync = (input, options) => {
 "use strict";
 
 const taskManager = __nccwpck_require__(2708);
+const patternManager = __nccwpck_require__(8306);
 const async_1 = __nccwpck_require__(5679);
 const stream_1 = __nccwpck_require__(4630);
 const sync_1 = __nccwpck_require__(2405);
@@ -2491,7 +2492,7 @@ async function FastGlob(source, options) {
     FastGlob.stream = stream;
     function generateTasks(source, options) {
         assertPatternsInput(source);
-        const patterns = [].concat(source);
+        const patterns = patternManager.transform([].concat(source));
         const settings = new settings_1.default(options);
         return taskManager.generate(patterns, settings);
     }
@@ -2509,7 +2510,7 @@ async function FastGlob(source, options) {
     FastGlob.escapePath = escapePath;
 })(FastGlob || (FastGlob = {}));
 function getWorks(source, _Provider, options) {
-    const patterns = [].concat(source);
+    const patterns = patternManager.transform([].concat(source));
     const settings = new settings_1.default(options);
     const tasks = taskManager.generate(patterns, settings);
     const provider = new _Provider(settings);
@@ -2523,6 +2524,35 @@ function assertPatternsInput(input) {
     }
 }
 module.exports = FastGlob;
+
+
+/***/ }),
+
+/***/ 8306:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.removeDuplicateSlashes = exports.transform = void 0;
+/**
+ * Matches a sequence of two or more consecutive slashes, excluding the first two slashes at the beginning of the string.
+ * The latter is due to the presence of the device path at the beginning of the UNC path.
+ * @todo rewrite to negative lookbehind with the next major release.
+ */
+const DOUBLE_SLASH_RE = /(?!^)\/{2,}/g;
+function transform(patterns) {
+    return patterns.map((pattern) => removeDuplicateSlashes(pattern));
+}
+exports.transform = transform;
+/**
+ * This package only works with forward slashes as a path separator.
+ * Because of this, we cannot use the standard `path.normalize` method, because on Windows platform it will use of backslashes.
+ */
+function removeDuplicateSlashes(pattern) {
+    return pattern.replace(DOUBLE_SLASH_RE, '/');
+}
+exports.removeDuplicateSlashes = removeDuplicateSlashes;
 
 
 /***/ }),
@@ -2775,9 +2805,13 @@ class EntryFilter {
         const fullpath = utils.path.makeAbsolute(this._settings.cwd, entryPath);
         return utils.pattern.matchAny(fullpath, patternsRe);
     }
+    /**
+     * First, just trying to apply patterns to the path.
+     * Second, trying to apply patterns to the path with final slash.
+     */
     _isMatchToPatterns(entryPath, patternsRe) {
         const filepath = utils.path.removeLeadingDotSegment(entryPath);
-        return utils.pattern.matchAny(filepath, patternsRe);
+        return utils.pattern.matchAny(filepath, patternsRe) || utils.pattern.matchAny(filepath + '/', patternsRe);
     }
 }
 exports.default = EntryFilter;
@@ -3443,10 +3477,10 @@ const micromatch = __nccwpck_require__(6228);
 const GLOBSTAR = '**';
 const ESCAPE_SYMBOL = '\\';
 const COMMON_GLOB_SYMBOLS_RE = /[*?]|^!/;
-const REGEX_CHARACTER_CLASS_SYMBOLS_RE = /\[.*]/;
-const REGEX_GROUP_SYMBOLS_RE = /(?:^|[^!*+?@])\(.*\|.*\)/;
-const GLOB_EXTENSION_SYMBOLS_RE = /[!*+?@]\(.*\)/;
-const BRACE_EXPANSIONS_SYMBOLS_RE = /{.*(?:,|\.\.).*}/;
+const REGEX_CHARACTER_CLASS_SYMBOLS_RE = /\[[^[]*]/;
+const REGEX_GROUP_SYMBOLS_RE = /(?:^|[^!*+?@])\([^(]*\|[^|]*\)/;
+const GLOB_EXTENSION_SYMBOLS_RE = /[!*+?@]\([^(]*\)/;
+const BRACE_EXPANSION_SEPARATORS_RE = /,|\.\./;
 function isStaticPattern(pattern, options = {}) {
     return !isDynamicPattern(pattern, options);
 }
@@ -3473,12 +3507,24 @@ function isDynamicPattern(pattern, options = {}) {
     if (options.extglob !== false && GLOB_EXTENSION_SYMBOLS_RE.test(pattern)) {
         return true;
     }
-    if (options.braceExpansion !== false && BRACE_EXPANSIONS_SYMBOLS_RE.test(pattern)) {
+    if (options.braceExpansion !== false && hasBraceExpansion(pattern)) {
         return true;
     }
     return false;
 }
 exports.isDynamicPattern = isDynamicPattern;
+function hasBraceExpansion(pattern) {
+    const openingBraceIndex = pattern.indexOf('{');
+    if (openingBraceIndex === -1) {
+        return false;
+    }
+    const closingBraceIndex = pattern.indexOf('}', openingBraceIndex + 1);
+    if (closingBraceIndex === -1) {
+        return false;
+    }
+    const braceContent = pattern.slice(openingBraceIndex, closingBraceIndex);
+    return BRACE_EXPANSION_SEPARATORS_RE.test(braceContent);
+}
 function convertToPositivePattern(pattern) {
     return isNegativePattern(pattern) ? pattern.slice(1) : pattern;
 }
@@ -4589,6 +4635,8 @@ const define = (object, key, value) =>
 
 const REGEX_REGEXP_RANGE = /([0-z])-([0-z])/g
 
+const RETURN_FALSE = () => false
+
 // Sanitize the range of a regular expression
 // The cases are complicated, see test cases for details
 const sanitizeRange = range => range.replace(
@@ -4847,22 +4895,18 @@ const REPLACERS = [
 const regexCache = Object.create(null)
 
 // @param {pattern}
-const makeRegex = (pattern, negative, ignorecase) => {
-  const r = regexCache[pattern]
-  if (r) {
-    return r
+const makeRegex = (pattern, ignoreCase) => {
+  let source = regexCache[pattern]
+
+  if (!source) {
+    source = REPLACERS.reduce(
+      (prev, current) => prev.replace(current[0], current[1].bind(pattern)),
+      pattern
+    )
+    regexCache[pattern] = source
   }
 
-  // const replacers = negative
-  //   ? NEGATIVE_REPLACERS
-  //   : POSITIVE_REPLACERS
-
-  const source = REPLACERS.reduce(
-    (prev, current) => prev.replace(current[0], current[1].bind(pattern)),
-    pattern
-  )
-
-  return regexCache[pattern] = ignorecase
+  return ignoreCase
     ? new RegExp(source, 'i')
     : new RegExp(source)
 }
@@ -4893,7 +4937,7 @@ class IgnoreRule {
   }
 }
 
-const createRule = (pattern, ignorecase) => {
+const createRule = (pattern, ignoreCase) => {
   const origin = pattern
   let negative = false
 
@@ -4911,7 +4955,7 @@ const createRule = (pattern, ignorecase) => {
   // >   begin with a hash.
   .replace(REGEX_REPLACE_LEADING_EXCAPED_HASH, '#')
 
-  const regex = makeRegex(pattern, negative, ignorecase)
+  const regex = makeRegex(pattern, ignoreCase)
 
   return new IgnoreRule(
     origin,
@@ -4957,11 +5001,15 @@ checkPath.convert = p => p
 
 class Ignore {
   constructor ({
-    ignorecase = true
+    ignorecase = true,
+    ignoreCase = ignorecase,
+    allowRelativePaths = false
   } = {}) {
-    this._rules = []
-    this._ignorecase = ignorecase
     define(this, KEY_IGNORE, true)
+
+    this._rules = []
+    this._ignoreCase = ignoreCase
+    this._allowRelativePaths = allowRelativePaths
     this._initCache()
   }
 
@@ -4979,7 +5027,7 @@ class Ignore {
     }
 
     if (checkPattern(pattern)) {
-      const rule = createRule(pattern, this._ignorecase)
+      const rule = createRule(pattern, this._ignoreCase)
       this._added = true
       this._rules.push(rule)
     }
@@ -5058,7 +5106,13 @@ class Ignore {
       // Supports nullable path
       && checkPath.convert(originalPath)
 
-    checkPath(path, originalPath, throwError)
+    checkPath(
+      path,
+      originalPath,
+      this._allowRelativePaths
+        ? RETURN_FALSE
+        : throwError
+    )
 
     return this._t(path, cache, checkUnignored, slices)
   }
@@ -5116,10 +5170,8 @@ class Ignore {
 
 const factory = options => new Ignore(options)
 
-const returnFalse = () => false
-
 const isPathValid = path =>
-  checkPath(path && checkPath.convert(path), path, returnFalse)
+  checkPath(path && checkPath.convert(path), path, RETURN_FALSE)
 
 factory.isPathValid = isPathValid
 
@@ -5251,8 +5303,128 @@ module.exports = function isExtglob(str) {
 
 var isExtglob = __nccwpck_require__(6435);
 var chars = { '{': '}', '(': ')', '[': ']'};
-var strictRegex = /\\(.)|(^!|\*|[\].+)]\?|\[[^\\\]]+\]|\{[^\\}]+\}|\(\?[:!=][^\\)]+\)|\([^|]+\|[^\\)]+\))/;
-var relaxedRegex = /\\(.)|(^!|[*?{}()[\]]|\(\?)/;
+var strictCheck = function(str) {
+  if (str[0] === '!') {
+    return true;
+  }
+  var index = 0;
+  var pipeIndex = -2;
+  var closeSquareIndex = -2;
+  var closeCurlyIndex = -2;
+  var closeParenIndex = -2;
+  var backSlashIndex = -2;
+  while (index < str.length) {
+    if (str[index] === '*') {
+      return true;
+    }
+
+    if (str[index + 1] === '?' && /[\].+)]/.test(str[index])) {
+      return true;
+    }
+
+    if (closeSquareIndex !== -1 && str[index] === '[' && str[index + 1] !== ']') {
+      if (closeSquareIndex < index) {
+        closeSquareIndex = str.indexOf(']', index);
+      }
+      if (closeSquareIndex > index) {
+        if (backSlashIndex === -1 || backSlashIndex > closeSquareIndex) {
+          return true;
+        }
+        backSlashIndex = str.indexOf('\\', index);
+        if (backSlashIndex === -1 || backSlashIndex > closeSquareIndex) {
+          return true;
+        }
+      }
+    }
+
+    if (closeCurlyIndex !== -1 && str[index] === '{' && str[index + 1] !== '}') {
+      closeCurlyIndex = str.indexOf('}', index);
+      if (closeCurlyIndex > index) {
+        backSlashIndex = str.indexOf('\\', index);
+        if (backSlashIndex === -1 || backSlashIndex > closeCurlyIndex) {
+          return true;
+        }
+      }
+    }
+
+    if (closeParenIndex !== -1 && str[index] === '(' && str[index + 1] === '?' && /[:!=]/.test(str[index + 2]) && str[index + 3] !== ')') {
+      closeParenIndex = str.indexOf(')', index);
+      if (closeParenIndex > index) {
+        backSlashIndex = str.indexOf('\\', index);
+        if (backSlashIndex === -1 || backSlashIndex > closeParenIndex) {
+          return true;
+        }
+      }
+    }
+
+    if (pipeIndex !== -1 && str[index] === '(' && str[index + 1] !== '|') {
+      if (pipeIndex < index) {
+        pipeIndex = str.indexOf('|', index);
+      }
+      if (pipeIndex !== -1 && str[pipeIndex + 1] !== ')') {
+        closeParenIndex = str.indexOf(')', pipeIndex);
+        if (closeParenIndex > pipeIndex) {
+          backSlashIndex = str.indexOf('\\', pipeIndex);
+          if (backSlashIndex === -1 || backSlashIndex > closeParenIndex) {
+            return true;
+          }
+        }
+      }
+    }
+
+    if (str[index] === '\\') {
+      var open = str[index + 1];
+      index += 2;
+      var close = chars[open];
+
+      if (close) {
+        var n = str.indexOf(close, index);
+        if (n !== -1) {
+          index = n + 1;
+        }
+      }
+
+      if (str[index] === '!') {
+        return true;
+      }
+    } else {
+      index++;
+    }
+  }
+  return false;
+};
+
+var relaxedCheck = function(str) {
+  if (str[0] === '!') {
+    return true;
+  }
+  var index = 0;
+  while (index < str.length) {
+    if (/[*?{}()[\]]/.test(str[index])) {
+      return true;
+    }
+
+    if (str[index] === '\\') {
+      var open = str[index + 1];
+      index += 2;
+      var close = chars[open];
+
+      if (close) {
+        var n = str.indexOf(close, index);
+        if (n !== -1) {
+          index = n + 1;
+        }
+      }
+
+      if (str[index] === '!') {
+        return true;
+      }
+    } else {
+      index++;
+    }
+  }
+  return false;
+};
 
 module.exports = function isGlob(str, options) {
   if (typeof str !== 'string' || str === '') {
@@ -5263,32 +5435,14 @@ module.exports = function isGlob(str, options) {
     return true;
   }
 
-  var regex = strictRegex;
-  var match;
+  var check = strictCheck;
 
-  // optionally relax regex
+  // optionally relax check
   if (options && options.strict === false) {
-    regex = relaxedRegex;
+    check = relaxedCheck;
   }
 
-  while ((match = regex.exec(str))) {
-    if (match[2]) return true;
-    var idx = match.index + match[0].length;
-
-    // if an open bracket/brace/paren is escaped,
-    // set the index to the next closing character
-    var open = match[1];
-    var close = open ? chars[open] : null;
-    if (open && close) {
-      var n = str.indexOf(close, idx);
-      if (n !== -1) {
-        idx = n + 1;
-      }
-    }
-
-    str = str.slice(idx);
-  }
-  return false;
+  return check(str);
 };
 
 
@@ -6019,7 +6173,7 @@ module.exports = function (opts) {
     '(?:' +
       '[/?#]' +
         '(?:' +
-          '(?!' + re.src_ZCc + '|' + text_separators + '|[()[\\]{}.,"\'?!\\-]).|' +
+          '(?!' + re.src_ZCc + '|' + text_separators + '|[()[\\]{}.,"\'?!\\-;]).|' +
           '\\[(?:(?!' + re.src_ZCc + '|\\]).)*\\]|' +
           '\\((?:(?!' + re.src_ZCc + '|[)]).)*\\)|' +
           '\\{(?:(?!' + re.src_ZCc + '|[}]).)*\\}|' +
@@ -6040,7 +6194,8 @@ module.exports = function (opts) {
             :
             '\\-+|'
           ) +
-          '\\,(?!' + re.src_ZCc + ').|' +       // allow `,,,` in paths
+          ',(?!' + re.src_ZCc + ').|' +       // allow `,,,` in paths
+          ';(?!' + re.src_ZCc + ').|' +       // allow `;` if not followed by space-like char
           '\\!+(?!' + re.src_ZCc + '|[!]).|' +  // allow `!!!` in paths, but not at the end
           '\\?(?!' + re.src_ZCc + '|[?]).' +
         ')+' +
@@ -12833,7 +12988,7 @@ const resolveAndRequire = __nccwpck_require__(3924);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.3.1";
+const packageVersion = "0.3.2";
 const libraryName = "markdownlint";
 const libraryVersion = markdownlintLibrary.getVersion();
 const dotOnlySubstitute = "*.{md,markdown}";
@@ -13072,7 +13227,6 @@ const getBaseOptions = async (
     // eslint-disable-next-line unicorn/no-array-callback-reference
     (baseMarkdownlintOptions.ignores || []).map(negateGlob);
   appendToArray(globPatterns, ignorePatterns);
-  delete baseMarkdownlintOptions.ignores;
 
   return {
     baseMarkdownlintOptions,
@@ -13082,7 +13236,7 @@ const getBaseOptions = async (
 
 // Enumerate files from globs and build directory infos
 const enumerateFiles =
-async (fs, baseDir, globPatterns, dirToDirInfo, noRequire) => {
+async (fs, baseDir, globPatterns, dirToDirInfo, noErrors, noRequire) => {
   const tasks = [];
   const globbyOptions = {
     "absolute": true,
@@ -13090,10 +13244,13 @@ async (fs, baseDir, globPatterns, dirToDirInfo, noRequire) => {
     "expandDirectories": false,
     fs
   };
+  if (noErrors) {
+    globbyOptions.suppressErrors = true;
+  }
   // Manually expand directories to avoid globby call to dir-glob.sync
   const expandedDirectories = await Promise.all(
     globPatterns.map((globPattern) => {
-      const globPath = path.resolve(
+      const globPath = path.posix.join(
         baseDir,
         globPattern[0] === "!" ? globPattern.slice(1) : globPattern
       );
@@ -13168,9 +13325,22 @@ const enumerateParents = async (fs, baseDir, dirToDirInfo, noRequire) => {
 
 // Create directory info objects by enumerating file globs
 const createDirInfos =
-async (fs, baseDir, globPatterns, dirToDirInfo, optionsOverride, noRequire) => {
-  await enumerateFiles(fs, baseDir, globPatterns, dirToDirInfo, noRequire);
-  await enumerateParents(fs, baseDir, dirToDirInfo, noRequire);
+// eslint-disable-next-line max-len
+async (fs, baseDir, globPatterns, dirToDirInfo, optionsOverride, noErrors, noRequire) => {
+  await enumerateFiles(
+    fs,
+    baseDir,
+    globPatterns,
+    dirToDirInfo,
+    noErrors,
+    noRequire
+  );
+  await enumerateParents(
+    fs,
+    baseDir,
+    dirToDirInfo,
+    noRequire
+  );
 
   // Merge file lists with identical configuration
   const dirs = Object.keys(dirToDirInfo);
@@ -13284,7 +13454,10 @@ const lintFiles = (fs, dirInfos, fileContents) => {
     const { dir, files, markdownlintConfig, markdownlintOptions } = dirInfo;
     // Filter file/string inputs to only those in the dirInfo
     let filesAfterIgnores = files;
-    if (markdownlintOptions.ignores) {
+    if (
+      markdownlintOptions.ignores &&
+      (markdownlintOptions.ignores.length > 0)
+    ) {
       // eslint-disable-next-line unicorn/no-array-callback-reference
       const ignores = markdownlintOptions.ignores.map(negateGlob);
       const micromatch = __nccwpck_require__(6228);
@@ -13420,6 +13593,7 @@ const main = async (params) => {
     fixDefault,
     fileContents,
     nonFileContents,
+    noErrors,
     noGlobs,
     noRequire
   } = params;
@@ -13477,6 +13651,7 @@ const main = async (params) => {
       globPatterns,
       dirToDirInfo,
       optionsOverride,
+      noErrors,
       noRequire
     );
   // Output linting status
@@ -20885,7 +21060,14 @@ const parse = (input, options) => {
       }
 
       if (token.inner.includes('*') && (rest = remaining()) && /^\.[^\\/.]+$/.test(rest)) {
-        output = token.close = `)${rest})${extglobStar})`;
+        // Any non-magical string (`.ts`) or even nested expression (`.{ts,tsx}`) can follow after the closing parenthesis.
+        // In this case, we need to parse the string and use it in the output of the original pattern.
+        // Suitable patterns: `/!(*.d).ts`, `/!(*.d).{ts,tsx}`, `**/!(*-dbg).@(js)`.
+        //
+        // Disabling the `fastpaths` option due to a problem with parsing strings as `.ts` in the pattern like `**/!(*.d).ts`.
+        const expression = parse(rest, { ...options, fastpaths: false }).output;
+
+        output = token.close = `)${expression})${extglobStar})`;
       }
 
       if (token.prev.type === 'bos') {
@@ -29750,7 +29932,7 @@ module.exports = JSON.parse('{"Aacute":"Á","aacute":"á","Abreve":"Ă","abreve"
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"markdownlint-cli2","version":"0.3.1","description":"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library","author":{"name":"David Anson","url":"https://dlaa.me/"},"license":"MIT","main":"markdownlint-cli2.js","bin":{"markdownlint-cli2":"markdownlint-cli2.js","markdownlint-cli2-fix":"markdownlint-cli2-fix.js"},"homepage":"https://github.com/DavidAnson/markdownlint-cli2","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint-cli2.git"},"bugs":"https://github.com/DavidAnson/markdownlint-cli2/issues","scripts":{"build-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker build -t davidanson/markdownlint-cli2:$VERSION -f docker/Dockerfile .","ci":"npm-run-all --continue-on-error --parallel test-cover lint","lint":"eslint --max-warnings 0 .","lint-dockerfile":"docker run --rm -i hadolint/hadolint:latest-alpine < docker/Dockerfile","lint-watch":"git ls-files | entr npm run lint","publish-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker buildx build --platform linux/arm64,linux/amd64 -t davidanson/markdownlint-cli2:$VERSION -t davidanson/markdownlint-cli2:latest -f docker/Dockerfile --push .","test":"ava test/append-to-array-test.js test/fs-mock-test.js test/markdownlint-cli2-test.js test/markdownlint-cli2-test-exec.js test/markdownlint-cli2-test-fs.js test/markdownlint-cli2-test-main.js test/merge-options-test.js test/resolve-and-require-test.js","test-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:$VERSION \\"*.md\\"","test-docker-hub-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker image rm davidanson/markdownlint-cli2:$VERSION davidanson/markdownlint-cli2:latest || true && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:$VERSION \\"*.md\\" && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:latest \\"*.md\\"","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-watch":"git ls-files | entr npm run test"},"engines":{"node":">=12"},"files":["append-to-array.js","markdownlint-cli2.js","markdownlint-cli2-fix.js","merge-options.js","resolve-and-require.js"],"dependencies":{"globby":"~11.0.4","markdownlint":"~0.24.0","markdownlint-cli2-formatter-default":"^0.0.2","markdownlint-rule-helpers":"~0.15.0","micromatch":"~4.0.4","strip-json-comments":"~3.1.1","yaml":"~1.10.2"},"devDependencies":{"@iktakahiro/markdown-it-katex":"~4.0.1","ava":"~3.15.0","c8":"~7.8.0","cpy":"~8.1.2","del":"~6.0.0","eslint":"~7.32.0","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~35.0.0","execa":"~5.1.1","markdown-it-emoji":"~2.0.0","markdown-it-for-inline":"~0.1.1","markdownlint-cli2-formatter-json":"^0.0.4","markdownlint-cli2-formatter-junit":"^0.0.3","markdownlint-cli2-formatter-pretty":"^0.0.2","markdownlint-cli2-formatter-summarize":"^0.0.3","markdownlint-rule-titlecase":"~0.1.0","npm-run-all":"~4.1.5"},"keywords":["markdown","lint","cli","md","CommonMark","markdownlint"]}');
+module.exports = JSON.parse('{"name":"markdownlint-cli2","version":"0.3.2","description":"A fast, flexible, configuration-based command-line interface for linting Markdown/CommonMark files with the `markdownlint` library","author":{"name":"David Anson","url":"https://dlaa.me/"},"license":"MIT","main":"markdownlint-cli2.js","bin":{"markdownlint-cli2":"markdownlint-cli2.js","markdownlint-cli2-fix":"markdownlint-cli2-fix.js"},"homepage":"https://github.com/DavidAnson/markdownlint-cli2","repository":{"type":"git","url":"https://github.com/DavidAnson/markdownlint-cli2.git"},"bugs":"https://github.com/DavidAnson/markdownlint-cli2/issues","scripts":{"build-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker build -t davidanson/markdownlint-cli2:$VERSION -f docker/Dockerfile .","ci":"npm-run-all --continue-on-error --parallel test-cover lint","lint":"eslint --max-warnings 0 .","lint-dockerfile":"docker run --rm -i hadolint/hadolint:latest-alpine < docker/Dockerfile","lint-watch":"git ls-files | entr npm run lint","publish-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker buildx build --platform linux/arm64,linux/amd64 -t davidanson/markdownlint-cli2:$VERSION -t davidanson/markdownlint-cli2:latest -f docker/Dockerfile --push .","test":"ava test/append-to-array-test.js test/fs-mock-test.js test/markdownlint-cli2-test.js test/markdownlint-cli2-test-exec.js test/markdownlint-cli2-test-fs.js test/markdownlint-cli2-test-main.js test/merge-options-test.js test/resolve-and-require-test.js","test-docker-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:$VERSION \\"*.md\\"","test-docker-hub-image":"VERSION=$(node -e \\"process.stdout.write(require(\'./package.json\').version)\\") && docker image rm davidanson/markdownlint-cli2:$VERSION davidanson/markdownlint-cli2:latest || true && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:$VERSION \\"*.md\\" && docker run --rm -v $PWD:/workdir davidanson/markdownlint-cli2:latest \\"*.md\\"","test-cover":"c8 --check-coverage --branches 100 --functions 100 --lines 100 --statements 100 npm test","test-watch":"git ls-files | entr npm run test"},"engines":{"node":">=12"},"files":["append-to-array.js","markdownlint-cli2.js","markdownlint-cli2-fix.js","merge-options.js","resolve-and-require.js"],"dependencies":{"globby":"~11.0.4","markdownlint":"~0.24.0","markdownlint-cli2-formatter-default":"^0.0.2","markdownlint-rule-helpers":"~0.15.0","micromatch":"~4.0.4","strip-json-comments":"~3.1.1","yaml":"~1.10.2"},"devDependencies":{"@iktakahiro/markdown-it-katex":"~4.0.1","ava":"~3.15.0","c8":"~7.8.0","cpy":"~8.1.2","del":"~6.0.0","eslint":"~7.32.0","eslint-plugin-node":"~11.1.0","eslint-plugin-unicorn":"~35.0.0","execa":"~5.1.1","markdown-it-emoji":"~2.0.0","markdown-it-for-inline":"~0.1.1","markdownlint-cli2-formatter-json":"^0.0.4","markdownlint-cli2-formatter-junit":"^0.0.3","markdownlint-cli2-formatter-pretty":"^0.0.2","markdownlint-cli2-formatter-summarize":"^0.0.3","markdownlint-rule-titlecase":"~0.1.0","npm-run-all":"~4.1.5"},"keywords":["markdown","lint","cli","md","CommonMark","markdownlint"]}');
 
 /***/ }),
 
