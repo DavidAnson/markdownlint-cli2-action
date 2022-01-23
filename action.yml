@@ -2,7 +2,7 @@ name: 'markdownlint-cli2-action'
 author: 'David Anson'
 description: 'A GitHub Action to run the markdownlint-cli2 tool for linting Markdown/CommonMark files with the markdownlint library'
 branding:
-  icon: 'check-square'  
+  icon: 'check-square'
   color: 'orange'
 inputs:
   globs:
@@ -10,5 +10,5 @@ inputs:
     default: '*.{md,markdown}'
     required: false
 runs:
-  using: 'node12'
+  using: 'node16'
   main: 'dist/index.js'
