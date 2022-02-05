@@ -18,7 +18,10 @@
   "reportUnusedDisableDirectives": true,
   "rules": {
     "indent": ["error", 2],
+    "function-call-argument-newline": "off",
     "one-var": "off",
+    "padded-blocks": "off",
+    "prefer-named-capture-group": "off",
     "sort-keys": "off",
 
     "node/handle-callback-err": "error",
@@ -59,6 +62,7 @@
     "node/prefer-promises/dns": "error",
     "node/prefer-promises/fs": "error",
 
+    "unicorn/no-unsafe-regex": "off",
     "unicorn/prefer-module": "off",
     "unicorn/prefer-top-level-await": "off"
   }

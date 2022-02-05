@@ -31663,7 +31663,28 @@ const core = __nccwpck_require__(2186);
 const {"main": markdownlintCli2} = __nccwpck_require__(9247);
 
 const logMessage = core.info;
-const logError = core.error;
+const logError = (error) => {
+  // eslint-disable-next-line init-declarations
+  let annotation;
+  const match = error.match(/^([^:]+):(\d+)(?::(\d+))?\s(\S+)\s(.+)$/u);
+  if (match) {
+    const [
+      ,
+      file,
+      startLine,
+      startColumn,
+      ,
+      title
+    ] = match;
+    annotation = {
+      title,
+      file,
+      startLine,
+      startColumn
+    };
+  }
+  core.error(error, annotation);
+};
 const argv =
   core.getInput("globs").
     split("\n").
