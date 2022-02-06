@@ -14,17 +14,21 @@ const logError = (error) => {
     const [
       ,
       file,
-      startLine,
-      startColumn,
+      startLineString,
+      startColumnString,
       ,
       title
     ] = match;
+    const startLine = Number(startLineString);
     annotation = {
       title,
       file,
-      startLine,
-      startColumn
+      startLine
     };
+    if (startColumnString) {
+      // @ts-ignore
+      annotation.startColumn = Number(startColumnString);
+    }
   }
   core.error(error, annotation);
 };
