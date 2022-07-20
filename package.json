@@ -22,13 +22,13 @@
     "upgrade": "npx --yes npm-check-updates --upgrade"
   },
   "dependencies": {
-    "@actions/core": "1.6.0",
+    "@actions/core": "1.9.0",
     "markdownlint-cli2": "0.4.0"
   },
   "devDependencies": {
-    "@vercel/ncc": "0.33.1",
-    "eslint": "8.7.0",
+    "@vercel/ncc": "0.34.0",
+    "eslint": "8.20.0",
     "eslint-plugin-node": "11.1.0",
-    "eslint-plugin-unicorn": "40.1.0"
+    "eslint-plugin-unicorn": "43.0.2"
   }
 }
