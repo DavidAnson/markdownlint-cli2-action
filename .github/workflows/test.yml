@@ -38,3 +38,38 @@ jobs:
         globs: |
           *.md
           test/*
+  command-config:
+    name: Command = config (test/errors.md, errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./
+      with:
+        command: config
+        globs: |
+          config/.markdownlint.jsonc
+          test/*
+  command-config-missing:
+    name: Command = config (missing configuration file)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./
+      with:
+        command: config
+  command-fix:
+    name: Command = fix (test/errors.md, no errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./
+      with:
+        command: fix
+  command-unsupported:
+    name: Command = unsupported (fails)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./
+      with:
+        command: unsupported

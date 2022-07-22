@@ -5,6 +5,10 @@ branding:
   icon: 'check-square'
   color: 'orange'
 inputs:
+  command:
+    description: 'Command to run (unset, "fix", or "config")'
+    default: ''
+    required: false
   globs:
     description: 'Glob expression(s) of files to lint (newline-delimited)'
     default: '*.{md,markdown}'

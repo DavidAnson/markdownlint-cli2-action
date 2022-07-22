@@ -13,6 +13,20 @@ information.
 
 ## Inputs
 
+### command (optional)
+
+Command to run (unset, `fix`, or `config`)
+
+If unspecified or `""`, the `markdownlint-cli2` command is run.
+
+If set to `fix`, the `markdownlint-cli2-fix` command is run and supported
+issues will be fixed automatically.
+
+If set to `config`, the `markdownlint-cli2-config` command is run and the
+first element of `globs` should specify a supported configuration file.
+
+For more detail: [command line documentation for `markdownlint-cli2`][command-line].
+
 ### globs (optional)
 
 Glob expression(s) of files to lint (newline-delimited)
@@ -20,7 +34,7 @@ Glob expression(s) of files to lint (newline-delimited)
 The default `*.{md,markdown}` lints all Markdown files in the base directory
 of a project.
 
-For more detail, read about [glob syntax in `markdownlint-cli2`][glob-syntax].
+For more detail: [glob syntax in `markdownlint-cli2`][glob-syntax].
 
 ## Outputs
 
@@ -63,6 +77,7 @@ To prevent linting issues from failing the workflow run:
 See [`example.yml`][example-yml] for a simple GitHub workflow that uses
 `markdownlint-cli2-action`.
 
+[command-line]: https://github.com/DavidAnson/markdownlint-cli2#command-line
 [commonmark]: https://commonmark.org/
 [example-yml]: .github/workflows/example.yml
 [glob-syntax]: https://github.com/DavidAnson/markdownlint-cli2#use

@@ -32158,14 +32158,36 @@ const argv =
     split("\n").
     filter(String);
 
-markdownlintCli2({
+const parameters = {
   argv,
   logMessage,
   logError
-}).then(
-  (code) => code && core.setFailed(`Failed with exit code: ${code}`),
-  (error) => core.setFailed(`Failed due to error: ${error}`)
-);
+};
+let invoke = true;
+const command = core.getInput("command");
+switch (command) {
+case "":
+  // Default behavior
+  break;
+case "config":
+  parameters.name = "markdownlint-cli2-config";
+  break;
+case "fix":
+  parameters.name = "markdownlint-cli2-fix";
+  parameters.fixDefault = true;
+  break;
+default:
+  core.setFailed(`Unsupported command: ${command}`);
+  invoke = false;
+  break;
+}
+
+if (invoke) {
+  markdownlintCli2(parameters).then(
+    (code) => code && core.setFailed(`Failed with exit code: ${code}`),
+    (error) => core.setFailed(`Failed due to error: ${error}`)
+  );
+}
 
 })();
 
