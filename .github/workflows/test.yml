@@ -20,7 +20,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./
-  one-glob:
+  one-glob-file:
     name: One glob (test/errors.md, 3 errors)
     runs-on: ubuntu-latest
     steps:
@@ -28,6 +28,14 @@ jobs:
     - uses: ./
       with:
         globs: test/errors.md
+  one-glob-pattern:
+    name: One glob (*.md, 3 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./
+      with:
+        globs: '*.md'
   two-globs:
     name: Two globs (README.md and test/errors.md, 3 errors)
     runs-on: ubuntu-latest
@@ -48,6 +56,17 @@ jobs:
         command: config
         globs: |
           config/test.markdownlint.jsonc
+          test/*
+  command-config-invalid:
+    name: Command = config (invalid, fails)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./
+      with:
+        command: config
+        globs: |
+          invalid.markdownlint.jsonc
           test/*
   command-config-missing:
     name: Command = config (missing configuration file, fails)

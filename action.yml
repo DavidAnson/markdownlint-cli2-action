@@ -1,18 +1,18 @@
-name: 'markdownlint-cli2-action'
-author: 'David Anson'
-description: 'A GitHub Action to run the markdownlint-cli2 tool for linting Markdown/CommonMark files with the markdownlint library'
+name: markdownlint-cli2-action
+author: David Anson
+description: A GitHub Action to run the markdownlint-cli2 tool for linting Markdown/CommonMark files with the markdownlint library
 branding:
-  icon: 'check-square'
-  color: 'orange'
+  icon: check-square
+  color: orange
 inputs:
   command:
-    description: 'Command to run (unset, "fix", or "config")'
+    description: Command to run (unset, "fix", or "config")
     default: ''
     required: false
   globs:
-    description: 'Glob expression(s) of files to lint (newline-delimited)'
+    description: Glob expression(s) of files to lint (newline-delimited)
     default: '*.{md,markdown}'
     required: false
 runs:
-  using: 'node16'
-  main: 'dist/index.js'
+  using: node16
+  main: dist/index.js
