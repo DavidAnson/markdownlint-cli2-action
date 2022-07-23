@@ -58,7 +58,7 @@ jobs:
           config/test.markdownlint.jsonc
           test/*
   command-config-invalid:
-    name: Command = config (invalid, fails)
+    name: Command = config (invalid configuration file, fails)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3

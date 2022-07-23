@@ -67,6 +67,26 @@ To lint specific Markdown files in a project:
       docs/*.md
 ```
 
+To fix supported issues when linting:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v5
+  with:
+    command: fix
+    globs: '**/*.md'
+```
+
+To specify a custom configuration file:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v5
+  with:
+    command: config
+    globs: |
+      config/custom.markdownlint.jsonc
+      **/*.md
+```
+
 To prevent linting issues from failing the workflow run:
 
 ```yaml
