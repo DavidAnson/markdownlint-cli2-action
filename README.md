@@ -45,13 +45,13 @@ For more detail: [glob syntax in `markdownlint-cli2`][glob-syntax].
 To lint Markdown files in the base directory of a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v5
+- uses: DavidAnson/markdownlint-cli2-action@v6
 ```
 
 To lint all Markdown files in a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v5
+- uses: DavidAnson/markdownlint-cli2-action@v6
   with:
     globs: '**/*.md'
 ```
@@ -59,7 +59,7 @@ To lint all Markdown files in a project:
 To lint specific Markdown files in a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v5
+- uses: DavidAnson/markdownlint-cli2-action@v6
   with:
     globs: |
       README.md
@@ -70,7 +70,7 @@ To lint specific Markdown files in a project:
 To fix supported issues when linting:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v5
+- uses: DavidAnson/markdownlint-cli2-action@v6
   with:
     command: fix
     globs: '**/*.md'
@@ -79,7 +79,7 @@ To fix supported issues when linting:
 To specify a custom configuration file:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v5
+- uses: DavidAnson/markdownlint-cli2-action@v6
   with:
     command: config
     globs: |
@@ -90,7 +90,7 @@ To specify a custom configuration file:
 To prevent linting issues from failing the workflow run:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v5
+- uses: DavidAnson/markdownlint-cli2-action@v6
   continue-on-error: true
 ```
 
