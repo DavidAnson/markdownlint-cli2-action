@@ -47,7 +47,7 @@ jobs:
       with:
         command: config
         globs: |
-          config/.markdownlint.jsonc
+          config/test.markdownlint.jsonc
           test/*
   command-config-missing:
     name: Command = config (missing configuration file, fails)
