@@ -97,6 +97,11 @@ To prevent linting issues from failing the workflow run:
 See [`example.yml`][example-yml] for a simple GitHub workflow that uses
 `markdownlint-cli2-action`.
 
+See [`changed.yml`][changed-yml] for a GitHub workflow that lints only the
+Markdown files that changed in the most recent commit (useful for Pull
+Requests and/or gradually introducing linting rules to a new repository).
+
+[changed-yml]: .github/workflows/changed.yml
 [command-line]: https://github.com/DavidAnson/markdownlint-cli2#command-line
 [commonmark]: https://commonmark.org/
 [example-yml]: .github/workflows/example.yml
