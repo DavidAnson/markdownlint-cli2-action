@@ -18,7 +18,7 @@
     "docker-npm-install": "docker run --rm --tty --name npm-install --volume $PWD:/home/workdir --workdir /home/workdir --user node node:16 npm install",
     "docker-npm-run-upgrade": "docker run --rm --tty --name npm-run-upgrade --volume $PWD:/home/workdir --workdir /home/workdir --user node node:16 npm run upgrade",
     "lint": "eslint *.js && markdownlint-cli2-config ./config/.markdownlint.jsonc *.md",
-    "test": "npm run lint && npm run build && git diff --exit-code",
+    "test": "npm run lint && npm run build && git diff --exit-code ':(exclude)dist/index.js'",
     "upgrade": "npx --yes npm-check-updates --upgrade"
   },
   "dependencies": {
