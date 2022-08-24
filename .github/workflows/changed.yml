@@ -7,7 +7,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 2
-    - uses: tj-actions/changed-files@v28
+    - uses: tj-actions/changed-files@v29.0.0
       id: changed-files
       with:
         files: '**/*.md'
