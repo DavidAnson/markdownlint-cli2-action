@@ -28,6 +28,10 @@ jobs:
     - uses: ./
       with:
         globs: test/errors.md
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
   one-glob-pattern:
     name: One glob (*.md, 0 errors)
     runs-on: ubuntu-latest
@@ -46,6 +50,10 @@ jobs:
         globs: |
           *.md
           test/*
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
   command-config:
     name: Command = config (test/errors.md, 2 errors)
     runs-on: ubuntu-latest
@@ -57,6 +65,10 @@ jobs:
         globs: |
           config/test.markdownlint.jsonc
           test/*
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
   command-config-invalid:
     name: Command = config (invalid configuration file, fails)
     runs-on: ubuntu-latest
@@ -68,6 +80,10 @@ jobs:
         globs: |
           invalid.markdownlint.jsonc
           test/*
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
   command-config-missing:
     name: Command = config (missing configuration file, fails)
     runs-on: ubuntu-latest
@@ -76,6 +92,10 @@ jobs:
     - uses: ./
       with:
         command: config
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
   command-fix:
     name: Command = fix (test/errors.md, 0 errors)
     runs-on: ubuntu-latest
@@ -92,3 +112,7 @@ jobs:
     - uses: ./
       with:
         command: unsupported
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
