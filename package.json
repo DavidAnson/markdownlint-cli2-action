@@ -22,7 +22,7 @@
     "upgrade": "npx --yes npm-check-updates --upgrade"
   },
   "dependencies": {
-    "@actions/core": "1.9.1",
+    "@actions/core": "1.10.0",
     "markdownlint-cli2": "0.5.1"
   },
   "devDependencies": {
