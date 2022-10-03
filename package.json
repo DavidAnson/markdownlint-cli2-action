@@ -29,6 +29,6 @@
     "@vercel/ncc": "0.34.0",
     "eslint": "8.24.0",
     "eslint-plugin-node": "11.1.0",
-    "eslint-plugin-unicorn": "43.0.2"
+    "eslint-plugin-unicorn": "44.0.0"
   }
 }
