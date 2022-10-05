@@ -65,6 +65,7 @@
     "unicorn/no-array-callback-reference": "off",
     "unicorn/no-unsafe-regex": "off",
     "unicorn/prefer-module": "off",
-    "unicorn/prefer-top-level-await": "off"
+    "unicorn/prefer-top-level-await": "off",
+    "unicorn/switch-case-braces": ["error", "avoid"]
   }
 }
