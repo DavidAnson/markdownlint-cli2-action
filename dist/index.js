@@ -140,7 +140,6 @@ const file_command_1 = __nccwpck_require__(717);
 const utils_1 = __nccwpck_require__(5278);
 const os = __importStar(__nccwpck_require__(2037));
 const path = __importStar(__nccwpck_require__(1017));
-const uuid_1 = __nccwpck_require__(5840);
 const oidc_utils_1 = __nccwpck_require__(8041);
 /**
  * The code to exit an action
@@ -170,20 +169,9 @@ function exportVariable(name, val) {
     process.env[name] = convertedVal;
     const filePath = process.env['GITHUB_ENV'] || '';
     if (filePath) {
-        const delimiter = `ghadelimiter_${uuid_1.v4()}`;
-        // These should realistically never happen, but just in case someone finds a way to exploit uuid generation let's not allow keys or values that contain the delimiter.
-        if (name.includes(delimiter)) {
-            throw new Error(`Unexpected input: name should not contain the delimiter "${delimiter}"`);
-        }
-        if (convertedVal.includes(delimiter)) {
-            throw new Error(`Unexpected input: value should not contain the delimiter "${delimiter}"`);
-        }
-        const commandValue = `${name}<<${delimiter}${os.EOL}${convertedVal}${os.EOL}${delimiter}`;
-        file_command_1.issueCommand('ENV', commandValue);
+        return file_command_1.issueFileCommand('ENV', file_command_1.prepareKeyValueMessage(name, val));
     }
-    else {
-        command_1.issueCommand('set-env', { name }, convertedVal);
-    }
+    command_1.issueCommand('set-env', { name }, convertedVal);
 }
 exports.exportVariable = exportVariable;
 /**
@@ -201,7 +189,7 @@ exports.setSecret = setSecret;
 function addPath(inputPath) {
     const filePath = process.env['GITHUB_PATH'] || '';
     if (filePath) {
-        file_command_1.issueCommand('PATH', inputPath);
+        file_command_1.issueFileCommand('PATH', inputPath);
     }
     else {
         command_1.issueCommand('add-path', {}, inputPath);
@@ -241,7 +229,10 @@ function getMultilineInput(name, options) {
     const inputs = getInput(name, options)
         .split('\n')
         .filter(x => x !== '');
-    return inputs;
+    if (options && options.trimWhitespace === false) {
+        return inputs;
+    }
+    return inputs.map(input => input.trim());
 }
 exports.getMultilineInput = getMultilineInput;
 /**
@@ -274,8 +265,12 @@ exports.getBooleanInput = getBooleanInput;
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function setOutput(name, value) {
+    const filePath = process.env['GITHUB_OUTPUT'] || '';
+    if (filePath) {
+        return file_command_1.issueFileCommand('OUTPUT', file_command_1.prepareKeyValueMessage(name, value));
+    }
     process.stdout.write(os.EOL);
-    command_1.issueCommand('set-output', { name }, value);
+    command_1.issueCommand('set-output', { name }, utils_1.toCommandValue(value));
 }
 exports.setOutput = setOutput;
 /**
@@ -404,7 +399,11 @@ exports.group = group;
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function saveState(name, value) {
-    command_1.issueCommand('save-state', { name }, value);
+    const filePath = process.env['GITHUB_STATE'] || '';
+    if (filePath) {
+        return file_command_1.issueFileCommand('STATE', file_command_1.prepareKeyValueMessage(name, value));
+    }
+    command_1.issueCommand('save-state', { name }, utils_1.toCommandValue(value));
 }
 exports.saveState = saveState;
 /**
@@ -470,13 +469,14 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.issueCommand = void 0;
+exports.prepareKeyValueMessage = exports.issueFileCommand = void 0;
 // We use any as a valid input type
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const fs = __importStar(__nccwpck_require__(7147));
 const os = __importStar(__nccwpck_require__(2037));
+const uuid_1 = __nccwpck_require__(5840);
 const utils_1 = __nccwpck_require__(5278);
-function issueCommand(command, message) {
+function issueFileCommand(command, message) {
     const filePath = process.env[`GITHUB_${command}`];
     if (!filePath) {
         throw new Error(`Unable to find environment variable for file command ${command}`);
@@ -488,7 +488,22 @@ function issueCommand(command, message) {
         encoding: 'utf8'
     });
 }
-exports.issueCommand = issueCommand;
+exports.issueFileCommand = issueFileCommand;
+function prepareKeyValueMessage(key, value) {
+    const delimiter = `ghadelimiter_${uuid_1.v4()}`;
+    const convertedValue = utils_1.toCommandValue(value);
+    // These should realistically never happen, but just in case someone finds a
+    // way to exploit uuid generation let's not allow keys or values that contain
+    // the delimiter.
+    if (key.includes(delimiter)) {
+        throw new Error(`Unexpected input: name should not contain the delimiter "${delimiter}"`);
+    }
+    if (convertedValue.includes(delimiter)) {
+        throw new Error(`Unexpected input: value should not contain the delimiter "${delimiter}"`);
+    }
+    return `${key}<<${delimiter}${os.EOL}${convertedValue}${os.EOL}${delimiter}`;
+}
+exports.prepareKeyValueMessage = prepareKeyValueMessage;
 //# sourceMappingURL=file-command.js.map
 
 /***/ }),
@@ -3679,56 +3694,6 @@ module.exports.sync = (input, options) => {
 
 /***/ }),
 
-/***/ 4460:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var isGlob = __nccwpck_require__(4466);
-var pathPosixDirname = (__nccwpck_require__(1017).posix.dirname);
-var isWin32 = (__nccwpck_require__(2037).platform)() === 'win32';
-
-var slash = '/';
-var backslash = /\\/g;
-var enclosure = /[\{\[].*[\}\]]$/;
-var globby = /(^|[^\\])([\{\[]|\([^\)]+$)/;
-var escaped = /\\([\!\*\?\|\[\]\(\)\{\}])/g;
-
-/**
- * @param {string} str
- * @param {Object} opts
- * @param {boolean} [opts.flipBackslashes=true]
- * @returns {string}
- */
-module.exports = function globParent(str, opts) {
-  var options = Object.assign({ flipBackslashes: true }, opts);
-
-  // flip windows path separators
-  if (options.flipBackslashes && isWin32 && str.indexOf(slash) < 0) {
-    str = str.replace(backslash, slash);
-  }
-
-  // special case for strings ending in enclosure containing path separator
-  if (enclosure.test(str)) {
-    str += slash;
-  }
-
-  // preserves full path in case of trailing path separator
-  str += 'a';
-
-  // remove path parts that are globby
-  do {
-    str = pathPosixDirname(str);
-  } while (isGlob(str) || globby.test(str));
-
-  // remove escape chars and return result
-  return str.replace(escaped, '$1');
-};
-
-
-/***/ }),
-
 /***/ 3664:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -3928,23 +3893,18 @@ exports.convertPatternGroupToTask = convertPatternGroupToTask;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const stream_1 = __nccwpck_require__(2083);
+const async_1 = __nccwpck_require__(7747);
 const provider_1 = __nccwpck_require__(257);
 class ProviderAsync extends provider_1.default {
     constructor() {
         super(...arguments);
-        this._reader = new stream_1.default(this._settings);
+        this._reader = new async_1.default(this._settings);
     }
-    read(task) {
+    async read(task) {
         const root = this._getRootDirectory(task);
         const options = this._getReaderOptions(task);
-        const entries = [];
-        return new Promise((resolve, reject) => {
-            const stream = this.api(root, task, options);
-            stream.once('error', reject);
-            stream.on('data', (entry) => entries.push(options.transform(entry)));
-            stream.once('end', () => resolve(entries));
-        });
+        const entries = await this.api(root, task, options);
+        return entries.map((entry) => options.transform(entry));
     }
     api(root, task, options) {
         if (task.dynamic) {
@@ -4057,7 +4017,8 @@ class EntryFilter {
             return false;
         }
         const filepath = this._settings.baseNameMatch ? entry.name : entry.path;
-        const isMatched = this._isMatchToPatterns(filepath, positiveRe) && !this._isMatchToPatterns(entry.path, negativeRe);
+        const isDirectory = entry.dirent.isDirectory();
+        const isMatched = this._isMatchToPatterns(filepath, positiveRe, isDirectory) && !this._isMatchToPatterns(entry.path, negativeRe, isDirectory);
         if (this._settings.unique && isMatched) {
             this._createIndexRecord(entry);
         }
@@ -4082,13 +4043,16 @@ class EntryFilter {
         const fullpath = utils.path.makeAbsolute(this._settings.cwd, entryPath);
         return utils.pattern.matchAny(fullpath, patternsRe);
     }
-    /**
-     * First, just trying to apply patterns to the path.
-     * Second, trying to apply patterns to the path with final slash.
-     */
-    _isMatchToPatterns(entryPath, patternsRe) {
+    _isMatchToPatterns(entryPath, patternsRe, isDirectory) {
         const filepath = utils.path.removeLeadingDotSegment(entryPath);
-        return utils.pattern.matchAny(filepath, patternsRe) || utils.pattern.matchAny(filepath + '/', patternsRe);
+        // Trying to match files and directories by patterns.
+        const isMatched = utils.pattern.matchAny(filepath, patternsRe);
+        // A pattern with a trailling slash can be used for directory matching.
+        // To apply such pattern, we need to add a tralling slash to the path.
+        if (!isMatched && isDirectory) {
+            return utils.pattern.matchAny(filepath + '/', patternsRe);
+        }
+        return isMatched;
     }
 }
 exports["default"] = EntryFilter;
@@ -4379,6 +4343,49 @@ class EntryTransformer {
     }
 }
 exports["default"] = EntryTransformer;
+
+
+/***/ }),
+
+/***/ 7747:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const fsWalk = __nccwpck_require__(6026);
+const reader_1 = __nccwpck_require__(5582);
+const stream_1 = __nccwpck_require__(2083);
+class ReaderAsync extends reader_1.default {
+    constructor() {
+        super(...arguments);
+        this._walkAsync = fsWalk.walk;
+        this._readerStream = new stream_1.default(this._settings);
+    }
+    dynamic(root, options) {
+        return new Promise((resolve, reject) => {
+            this._walkAsync(root, options, (error, entries) => {
+                if (error === null) {
+                    resolve(entries);
+                }
+                else {
+                    reject(error);
+                }
+            });
+        });
+    }
+    async static(patterns, options) {
+        const entries = [];
+        const stream = this._readerStream.static(patterns, options);
+        // After #235, replace it with an asynchronous iterator.
+        return new Promise((resolve, reject) => {
+            stream.once('error', reject);
+            stream.on('data', (entry) => entries.push(entry));
+            stream.once('end', () => resolve(entries));
+        });
+    }
+}
+exports["default"] = ReaderAsync;
 
 
 /***/ }),
@@ -4749,7 +4756,7 @@ exports.removeLeadingDotSegment = removeLeadingDotSegment;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.matchAny = exports.convertPatternsToRe = exports.makeRe = exports.getPatternParts = exports.expandBraceExpansion = exports.expandPatternsWithBraceExpansion = exports.isAffectDepthOfReadingPattern = exports.endsWithSlashGlobStar = exports.hasGlobStar = exports.getBaseDirectory = exports.isPatternRelatedToParentDirectory = exports.getPatternsOutsideCurrentDirectory = exports.getPatternsInsideCurrentDirectory = exports.getPositivePatterns = exports.getNegativePatterns = exports.isPositivePattern = exports.isNegativePattern = exports.convertToNegativePattern = exports.convertToPositivePattern = exports.isDynamicPattern = exports.isStaticPattern = void 0;
 const path = __nccwpck_require__(1017);
-const globParent = __nccwpck_require__(4460);
+const globParent = __nccwpck_require__(4655);
 const micromatch = __nccwpck_require__(6228);
 const GLOBSTAR = '**';
 const ESCAPE_SYMBOL = '\\';
@@ -5506,6 +5513,56 @@ const fill = (start, end, step, options = {}) => {
 };
 
 module.exports = fill;
+
+
+/***/ }),
+
+/***/ 4655:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+var isGlob = __nccwpck_require__(4466);
+var pathPosixDirname = (__nccwpck_require__(1017).posix.dirname);
+var isWin32 = (__nccwpck_require__(2037).platform)() === 'win32';
+
+var slash = '/';
+var backslash = /\\/g;
+var enclosure = /[\{\[].*[\}\]]$/;
+var globby = /(^|[^\\])([\{\[]|\([^\)]+$)/;
+var escaped = /\\([\!\*\?\|\[\]\(\)\{\}])/g;
+
+/**
+ * @param {string} str
+ * @param {Object} opts
+ * @param {boolean} [opts.flipBackslashes=true]
+ * @returns {string}
+ */
+module.exports = function globParent(str, opts) {
+  var options = Object.assign({ flipBackslashes: true }, opts);
+
+  // flip windows path separators
+  if (options.flipBackslashes && isWin32 && str.indexOf(slash) < 0) {
+    str = str.replace(backslash, slash);
+  }
+
+  // special case for strings ending in enclosure containing path separator
+  if (enclosure.test(str)) {
+    str += slash;
+  }
+
+  // preserves full path in case of trailing path separator
+  str += 'a';
+
+  // remove path parts that are globby
+  do {
+    str = pathPosixDirname(str);
+  } while (isGlob(str) || globby.test(str));
+
+  // remove escape chars and return result
+  return str.replace(escaped, '$1');
+};
 
 
 /***/ }),
@@ -20152,7 +20209,7 @@ const getJsoncParse = async () => {
   const { "default": stripJsonComments } =
     // eslint-disable-next-line max-len
     // eslint-disable-next-line no-inline-comments, node/no-unsupported-features/es-syntax
-    await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 6177));
+    await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 1519));
   return (text) => JSON.parse(stripJsonComments(text));
 };
 
@@ -20564,7 +20621,7 @@ async (fs, baseDirSystem, baseDir, globPatterns, dirToDirInfo, noErrors, noRequi
   // Process glob patterns
   // eslint-disable-next-line max-len
   // eslint-disable-next-line no-inline-comments, node/no-unsupported-features/es-syntax
-  const { globby } = await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 7084));
+  const { globby } = await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 277));
   const files = [
     ...await globby(expandedDirectories, globbyOptions),
     ...filteredLiteralFiles
@@ -33823,7 +33880,7 @@ exports.visitAsync = visitAsync;
 
 /***/ }),
 
-/***/ 7084:
+/***/ 277:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
@@ -33856,7 +33913,7 @@ var dir_glob = __nccwpck_require__(2738);
 const external_node_process_namespaceObject = require("node:process");
 // EXTERNAL MODULE: ./node_modules/ignore/index.js
 var ignore = __nccwpck_require__(4777);
-;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/node_modules/slash/index.js
+;// CONCATENATED MODULE: ./node_modules/slash/index.js
 function slash(path) {
 	const isExtendedLengthPath = /^\\\\\?\\/.test(path);
 	const hasNonAscii = /[^\u0000-\u0080]+/.test(path); // eslint-disable-line no-control-regex
@@ -33872,7 +33929,7 @@ function slash(path) {
 var external_node_url_ = __nccwpck_require__(1041);
 ;// CONCATENATED MODULE: external "node:stream"
 const external_node_stream_namespaceObject = require("node:stream");
-;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/node_modules/globby/utilities.js
+;// CONCATENATED MODULE: ./node_modules/globby/utilities.js
 
 
 
@@ -33891,7 +33948,7 @@ class FilterStream extends external_node_stream_namespaceObject.Transform {
 
 const isNegativePattern = pattern => pattern[0] === '!';
 
-;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/node_modules/globby/ignore.js
+;// CONCATENATED MODULE: ./node_modules/globby/ignore.js
 
 
 
@@ -33985,7 +34042,7 @@ const isIgnoredByIgnoreFilesSync = (patterns, options) => {
 const isGitIgnored = options => isIgnoredByIgnoreFiles(GITIGNORE_FILES_PATTERN, options);
 const isGitIgnoredSync = options => isIgnoredByIgnoreFilesSync(GITIGNORE_FILES_PATTERN, options);
 
-;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/node_modules/globby/index.js
+;// CONCATENATED MODULE: ./node_modules/globby/index.js
 
 
 
@@ -34210,7 +34267,7 @@ const generateGlobTasksSync = normalizeArgumentsSync(generateTasksSync);
 
 /***/ }),
 
-/***/ 6177:
+/***/ 1519:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
