@@ -32,9 +32,11 @@ const logError = (error) => {
   }
   core.error(error, annotation);
 };
+
+const separator = core.getInput("separator") || "\n";
 const argv =
   core.getInput("globs").
-    split("\n").
+    split(separator).
     filter(String);
 
 const parameters = {

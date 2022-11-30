@@ -29,12 +29,19 @@ For more detail: [documentation for `markdownlint-cli2`][command-line].
 
 ### globs (optional)
 
-Glob expression(s) of files to lint (newline-delimited)
+Glob expression(s) of files to lint (newline-delimited by default)
 
 The default `*.{md,markdown}` lints all Markdown files in the base directory
 of a project.
 
 For more detail: [glob syntax in `markdownlint-cli2`][glob-syntax].
+
+### separator (optional)
+
+String to use as a separator for the `globs` input (defaults to newline)
+
+Allows the `globs` input to use something other than `\n` to separate glob
+expressions.
 
 ## Outputs
 
@@ -65,6 +72,15 @@ To lint specific Markdown files in a project:
       README.md
       CHANGELOG.md
       docs/*.md
+```
+
+To use a custom separator:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v7
+  with:
+    globs: 'README.md,CHANGELOG.md,docs/*.md'
+    separator: ','
 ```
 
 To fix supported issues when linting:

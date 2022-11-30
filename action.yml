@@ -13,6 +13,10 @@ inputs:
     description: Glob expression(s) of files to lint (newline-delimited)
     default: '*.{md,markdown}'
     required: false
+  separator:
+    description: String to use as a separator for the "globs" input (defaults to newline)
+    default: "\n"
+    required: false
 runs:
   using: node16
   main: dist/index.js

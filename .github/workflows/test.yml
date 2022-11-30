@@ -54,6 +54,19 @@ jobs:
       id: test
     - run: exit 1
       if: steps.test.outcome != 'failure'
+  separator:
+    name: Separator (README.md and test/errors.md, 3 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./
+      with:
+        globs: '*.md,test/*'
+        separator: ','
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
   command-config:
     name: Command = config (test/errors.md, 2 errors)
     runs-on: ubuntu-latest
