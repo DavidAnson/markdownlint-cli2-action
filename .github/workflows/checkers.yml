@@ -16,12 +16,13 @@ jobs:
     - uses: JustinBeckwith/linkinator-action@v1.10.4
       with:
         paths: '*.md'
+        timeout: 60000
 
   spellcheck:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - uses: tbroadley/spellchecker-cli-action@v1.1.1
+    - uses: tbroadley/spellchecker-cli-action@v1
       with:
         dictionaries: '.github/dictionary.txt'
         files: '*.md'
