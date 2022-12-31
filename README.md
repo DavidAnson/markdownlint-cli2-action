@@ -45,7 +45,7 @@ expressions.
 
 ## Outputs
 
-[Nope]
+[Nope!]
 
 ## Examples
 
