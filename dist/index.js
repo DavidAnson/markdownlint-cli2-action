@@ -3694,6 +3694,56 @@ module.exports.sync = (input, options) => {
 
 /***/ }),
 
+/***/ 4460:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+var isGlob = __nccwpck_require__(4466);
+var pathPosixDirname = (__nccwpck_require__(1017).posix.dirname);
+var isWin32 = (__nccwpck_require__(2037).platform)() === 'win32';
+
+var slash = '/';
+var backslash = /\\/g;
+var enclosure = /[\{\[].*[\}\]]$/;
+var globby = /(^|[^\\])([\{\[]|\([^\)]+$)/;
+var escaped = /\\([\!\*\?\|\[\]\(\)\{\}])/g;
+
+/**
+ * @param {string} str
+ * @param {Object} opts
+ * @param {boolean} [opts.flipBackslashes=true]
+ * @returns {string}
+ */
+module.exports = function globParent(str, opts) {
+  var options = Object.assign({ flipBackslashes: true }, opts);
+
+  // flip windows path separators
+  if (options.flipBackslashes && isWin32 && str.indexOf(slash) < 0) {
+    str = str.replace(backslash, slash);
+  }
+
+  // special case for strings ending in enclosure containing path separator
+  if (enclosure.test(str)) {
+    str += slash;
+  }
+
+  // preserves full path in case of trailing path separator
+  str += 'a';
+
+  // remove path parts that are globby
+  do {
+    str = pathPosixDirname(str);
+  } while (isGlob(str) || globby.test(str));
+
+  // remove escape chars and return result
+  return str.replace(escaped, '$1');
+};
+
+
+/***/ }),
+
 /***/ 3664:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -4756,7 +4806,7 @@ exports.removeLeadingDotSegment = removeLeadingDotSegment;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.matchAny = exports.convertPatternsToRe = exports.makeRe = exports.getPatternParts = exports.expandBraceExpansion = exports.expandPatternsWithBraceExpansion = exports.isAffectDepthOfReadingPattern = exports.endsWithSlashGlobStar = exports.hasGlobStar = exports.getBaseDirectory = exports.isPatternRelatedToParentDirectory = exports.getPatternsOutsideCurrentDirectory = exports.getPatternsInsideCurrentDirectory = exports.getPositivePatterns = exports.getNegativePatterns = exports.isPositivePattern = exports.isNegativePattern = exports.convertToNegativePattern = exports.convertToPositivePattern = exports.isDynamicPattern = exports.isStaticPattern = void 0;
 const path = __nccwpck_require__(1017);
-const globParent = __nccwpck_require__(4655);
+const globParent = __nccwpck_require__(4460);
 const micromatch = __nccwpck_require__(6228);
 const GLOBSTAR = '**';
 const ESCAPE_SYMBOL = '\\';
@@ -5241,6 +5291,12 @@ function queueAsPromised (context, worker, concurrency) {
   }
 
   function drained () {
+    if (queue.idle()) {
+      return new Promise(function (resolve) {
+        resolve()
+      })
+    }
+
     var previousDrain = queue.drain
 
     var p = new Promise(function (resolve) {
@@ -5517,56 +5573,6 @@ module.exports = fill;
 
 /***/ }),
 
-/***/ 4655:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var isGlob = __nccwpck_require__(4466);
-var pathPosixDirname = (__nccwpck_require__(1017).posix.dirname);
-var isWin32 = (__nccwpck_require__(2037).platform)() === 'win32';
-
-var slash = '/';
-var backslash = /\\/g;
-var enclosure = /[\{\[].*[\}\]]$/;
-var globby = /(^|[^\\])([\{\[]|\([^\)]+$)/;
-var escaped = /\\([\!\*\?\|\[\]\(\)\{\}])/g;
-
-/**
- * @param {string} str
- * @param {Object} opts
- * @param {boolean} [opts.flipBackslashes=true]
- * @returns {string}
- */
-module.exports = function globParent(str, opts) {
-  var options = Object.assign({ flipBackslashes: true }, opts);
-
-  // flip windows path separators
-  if (options.flipBackslashes && isWin32 && str.indexOf(slash) < 0) {
-    str = str.replace(backslash, slash);
-  }
-
-  // special case for strings ending in enclosure containing path separator
-  if (enclosure.test(str)) {
-    str += slash;
-  }
-
-  // preserves full path in case of trailing path separator
-  str += 'a';
-
-  // remove path parts that are globby
-  do {
-    str = pathPosixDirname(str);
-  } while (isGlob(str) || globby.test(str));
-
-  // remove escape chars and return result
-  return str.replace(escaped, '$1');
-};
-
-
-/***/ }),
-
 /***/ 4777:
 /***/ ((module) => {
 
@@ -5581,6 +5587,7 @@ const EMPTY = ''
 const SPACE = ' '
 const ESCAPE = '\\'
 const REGEX_TEST_BLANK_LINE = /^\s+$/
+const REGEX_INVALID_TRAILING_BACKSLASH = /(?:[^\\]|^)\\$/
 const REGEX_REPLACE_LEADING_EXCAPED_EXCLAMATION = /^\\!/
 const REGEX_REPLACE_LEADING_EXCAPED_HASH = /^\\#/
 const REGEX_SPLITALL_CRLF = /\r?\n/g
@@ -5592,10 +5599,14 @@ const REGEX_SPLITALL_CRLF = /\r?\n/g
 const REGEX_TEST_INVALID_PATH = /^\.*\/|^\.+$/
 
 const SLASH = '/'
-const KEY_IGNORE = typeof Symbol !== 'undefined'
-  ? Symbol.for('node-ignore')
-  /* istanbul ignore next */
-  : 'node-ignore'
+
+// Do not use ternary expression here, since "istanbul ignore next" is buggy
+let TMP_KEY_IGNORE = 'node-ignore'
+/* istanbul ignore else */
+if (typeof Symbol !== 'undefined') {
+  TMP_KEY_IGNORE = Symbol.for('node-ignore')
+}
+const KEY_IGNORE = TMP_KEY_IGNORE
 
 const define = (object, key, value) =>
   Object.defineProperty(object, key, {value})
@@ -5762,18 +5773,27 @@ const REPLACERS = [
       : '\\/.+'
   ],
 
-  // intermediate wildcards
+  // normal intermediate wildcards
   [
     // Never replace escaped '*'
     // ignore rule '\*' will match the path '*'
 
     // 'abc.*/' -> go
-    // 'abc.*'  -> skip this rule
-    /(^|[^\\]+)\\\*(?=.+)/g,
+    // 'abc.*'  -> skip this rule,
+    //    coz trailing single wildcard will be handed by [trailing wildcard]
+    /(^|[^\\]+)(\\\*)+(?=.+)/g,
 
     // '*.js' matches '.js'
     // '*.js' doesn't match 'abc'
-    (_, p1) => `${p1}[^\\/]*`
+    (_, p1, p2) => {
+      // 1.
+      // > An asterisk "*" matches anything except a slash.
+      // 2.
+      // > Other consecutive asterisks are considered regular asterisks
+      // > and will match according to the previous rules.
+      const unescaped = p2.replace(/\\\*/g, '[^\\/]*')
+      return p1 + unescaped
+    }
   ],
 
   [
@@ -5884,6 +5904,7 @@ const isString = subject => typeof subject === 'string'
 const checkPattern = pattern => pattern
   && isString(pattern)
   && !REGEX_TEST_BLANK_LINE.test(pattern)
+  && !REGEX_INVALID_TRAILING_BACKSLASH.test(pattern)
 
   // > A line starting with # serves as a comment.
   && pattern.indexOf('#') !== 0
@@ -6149,7 +6170,7 @@ module.exports = factory
 
 // Windows
 // --------------------------------------------------------------
-/* istanbul ignore if  */
+/* istanbul ignore if */
 if (
   // Detect `process` so that it can run in browsers.
   typeof process !== 'undefined'
@@ -14086,20 +14107,19 @@ module.exports.newLineRe = newLineRe;
 // Regular expression for matching common front matter (YAML and TOML)
 module.exports.frontMatterRe =
   // eslint-disable-next-line max-len
-  /((^---\s*$[^]*?^---\s*$)|(^\+\+\+\s*$[^]*?^(\+\+\+|\.\.\.)\s*$)|(^\{\s*$[^]*?^\}\s*$))(\r\n|\r|\n|$)/m;
+  /((^---\s*$[\s\S]*?^---\s*)|(^\+\+\+\s*$[\s\S]*?^(\+\+\+|\.\.\.)\s*)|(^\{\s*$[\s\S]*?^\}\s*))(\r\n|\r|\n|$)/m;
 
 // Regular expression for matching the start of inline disable/enable comments
 const inlineCommentStartRe =
   // eslint-disable-next-line max-len
-  /(<!--\s*markdownlint-(disable|enable|capture|restore|disable-file|enable-file|disable-line|disable-next-line|configure-file))(?:\s|-->)/ig;
+  /(<!--\s*markdownlint-(disable|enable|capture|restore|disable-file|enable-file|disable-line|disable-next-line|configure-file))(?:\s|-->)/gi;
 module.exports.inlineCommentStartRe = inlineCommentStartRe;
 
 // Regular expression for matching HTML elements
-const htmlElementRe = /<(([A-Za-z][A-Za-z0-9-]*)(?:\s[^`>]*)?)\/?>/g;
+const htmlElementRe = /<(([A-Za-z][A-Za-z\d-]*)(?:\s[^`>]*)?)\/?>/g;
 module.exports.htmlElementRe = htmlElementRe;
 
 // Regular expressions for range matching
-module.exports.bareUrlRe = /(?:http|ftp)s?:\/\/[^\s\]"']*(?:\/|[^\s\]"'\W])/ig;
 module.exports.listItemMarkerRe = /^([\s>]*)(?:[*+-]|\d+[.)])\s+/;
 module.exports.orderedListItemMarkerRe = /^[\s>]*0*(\d+)[.)]/;
 
@@ -14112,10 +14132,10 @@ module.exports.blockquotePrefixRe = blockquotePrefixRe;
 
 // Regular expression for reference links (full, collapsed, and shortcut)
 const referenceLinkRe =
-  /!?\\?\[((?:\[[^\]\0]*]|[^\]\0])*)](?:(?:\[([^\]\0]*)\])|([^(])|$)/g;
+  /!?\\?\[((?:\[[^\]\0]*\]|[^[\]\0])*)\](?:\[([^\]\0]*)\]|([^(])|$)/g;
 
 // Regular expression for link reference definitions
-const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])]:/;
+const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
 module.exports.linkReferenceDefinitionRe = linkReferenceDefinitionRe;
 
 // All punctuation characters (normal and full-width)
@@ -14218,6 +14238,12 @@ module.exports.includesSorted = function includesSorted(array, element) {
 // https://spec.commonmark.org/0.29/#html-comment
 const htmlCommentBegin = "<!--";
 const htmlCommentEnd = "-->";
+const safeCommentCharacter = ".";
+const startsWithPipeRe = /^ *\|/;
+const notCrLfRe = /[^\r\n]/g;
+const notSpaceCrLfRe = /[^ \r\n]/g;
+const trailingSpaceRe = / +[\r\n]/g;
+const replaceTrailingSpace = (s) => s.replace(notCrLfRe, safeCommentCharacter);
 module.exports.clearHtmlCommentText = function clearHtmlCommentText(text) {
   let i = 0;
   while ((i = text.indexOf(htmlCommentBegin, i)) !== -1) {
@@ -14228,24 +14254,30 @@ module.exports.clearHtmlCommentText = function clearHtmlCommentText(text) {
     }
     // If the comment has content...
     if (j > i + htmlCommentBegin.length) {
-      let k = i - 1;
-      while (text[k] === " ") {
-        k--;
-      }
-      // If comment is not within an indented code block...
-      if (k >= i - 4) {
-        const content = text.slice(i + htmlCommentBegin.length, j);
-        const isBlock = (k < 0) || (text[k] === "\n");
-        const isValid = isBlock ||
-          (!content.startsWith(">") && !content.startsWith("->") &&
-           !content.endsWith("-") && !content.includes("--"));
-        // If a valid block/inline comment...
-        if (isValid) {
-          text =
-            text.slice(0, i + htmlCommentBegin.length) +
-            content.replace(/[^\r\n]/g, ".") +
-            text.slice(j);
-        }
+      const content = text.slice(i + htmlCommentBegin.length, j);
+      const lastLf = text.lastIndexOf("\n", i) + 1;
+      const preText = text.slice(lastLf, i);
+      const isBlock = preText.trim().length === 0;
+      const couldBeTable = startsWithPipeRe.test(preText);
+      const spansTableCells = couldBeTable && content.includes("\n");
+      const isValid =
+        isBlock ||
+        !(
+          spansTableCells ||
+          content.startsWith(">") ||
+          content.startsWith("->") ||
+          content.endsWith("-") ||
+          content.includes("--")
+        );
+      // If a valid block/inline comment...
+      if (isValid) {
+        const clearedContent = content
+          .replace(notSpaceCrLfRe, safeCommentCharacter)
+          .replace(trailingSpaceRe, replaceTrailingSpace);
+        text =
+          text.slice(0, i + htmlCommentBegin.length) +
+          clearedContent +
+          text.slice(j);
       }
     }
     i = j + htmlCommentEnd.length;
@@ -14482,17 +14514,22 @@ module.exports.flattenLists = function flattenLists(tokens) {
   return flattenedLists;
 };
 
-// Calls the provided function for each specified inline child token
-module.exports.forEachInlineChild =
+/**
+ * Calls the provided function for each specified inline child token.
+ *
+ * @param {Object} params RuleParams instance.
+ * @param {string} type Token type identifier.
+ * @param {Function} handler Callback function.
+ * @returns {void}
+ */
 function forEachInlineChild(params, type, handler) {
-  filterTokens(params, "inline", function forToken(token) {
-    for (const child of token.children) {
-      if (child.type === type) {
-        handler(child, token);
-      }
+  filterTokens(params, "inline", (token) => {
+    for (const child of token.children.filter((c) => c.type === type)) {
+      handler(child, token);
     }
   });
-};
+}
+module.exports.forEachInlineChild = forEachInlineChild;
 
 // Calls the provided function for each heading's content
 module.exports.forEachHeading = function forEachHeading(params, handler) {
@@ -14672,6 +14709,7 @@ module.exports.codeBlockAndSpanRanges = (params, lineMetadata) => {
  */
 module.exports.htmlElementRanges = (params, lineMetadata) => {
   const exclusions = [];
+  // Match with htmlElementRe
   forEachLine(lineMetadata, (line, lineIndex, inCode) => {
     let match = null;
     // eslint-disable-next-line no-unmodified-loop-condition
@@ -14679,6 +14717,31 @@ module.exports.htmlElementRanges = (params, lineMetadata) => {
       exclusions.push([ lineIndex, match.index, match[0].length ]);
     }
   });
+  // Match with html_inline
+  forEachInlineChild(params, "html_inline", (token, parent) => {
+    const parentContent = parent.content;
+    let tokenContent = token.content;
+    const parentIndex = parentContent.indexOf(tokenContent);
+    let deltaLines = 0;
+    let indent = 0;
+    for (let i = parentIndex - 1; i >= 0; i--) {
+      if (parentContent[i] === "\n") {
+        deltaLines++;
+      } else if (deltaLines === 0) {
+        indent++;
+      }
+    }
+    let lineIndex = token.lineNumber - 1 + deltaLines;
+    do {
+      const index = tokenContent.indexOf("\n");
+      const length = (index === -1) ? tokenContent.length : index;
+      exclusions.push([ lineIndex, indent, length ]);
+      tokenContent = tokenContent.slice(length + 1);
+      lineIndex++;
+      indent = 0;
+    } while (tokenContent.length > 0);
+  });
+  // Return results
   return exclusions;
 };
 
@@ -14858,9 +14921,10 @@ module.exports.emphasisMarkersInContent = emphasisMarkersInContent;
 function getReferenceLinkImageData(lineMetadata) {
   // Initialize return values
   const references = new Map();
-  const shortcuts = new Set();
+  const shortcuts = new Map();
   const definitions = new Map();
   const duplicateDefinitions = [];
+  const definitionLineIndices = [];
   // Define helper functions
   const normalizeLabel = (s) => s.toLowerCase().trim().replace(/\s+/g, " ");
   const exclusions = [];
@@ -14900,7 +14964,13 @@ function getReferenceLinkImageData(lineMetadata) {
         } else {
           definitions.set(label, lineIndex);
         }
-        exclusions.push([ 0, lineOffsets[lineIndex], line.length ]);
+        const labelLength = linkReferenceDefinitionMatch[0].length;
+        exclusions.push([ 0, lineOffsets[lineIndex], labelLength ]);
+        const hasDefinition = line.slice(labelLength).trim().length > 0;
+        definitionLineIndices.push(lineIndex);
+        if (!hasDefinition) {
+          definitionLineIndices.push(lineIndex + 1);
+        }
       }
     }
   });
@@ -14947,17 +15017,22 @@ function getReferenceLinkImageData(lineMetadata) {
           }
           const referenceIndex = referenceindex +
             (topLevel ? -lineOffsets[lineIndex] : contentIndex);
+          const referenceDatum = [
+            lineIndex,
+            referenceIndex,
+            matchString.length,
+            matchText.length,
+            (matchLabel || "").length
+          ];
           if (shortcutLink) {
             // Track separately due to ambiguity in "text [text] text"
-            shortcuts.add(label);
+            const shortcutData = shortcuts.get(label) || [];
+            shortcutData.push(referenceDatum);
+            shortcuts.set(label, shortcutData);
           } else {
             // Track reference and location
             const referenceData = references.get(label) || [];
-            referenceData.push([
-              lineIndex,
-              referenceIndex,
-              matchString.length
-            ]);
+            referenceData.push(referenceDatum);
             references.set(label, referenceData);
           }
           // Check for links embedded in brackets
@@ -14977,7 +15052,8 @@ function getReferenceLinkImageData(lineMetadata) {
     references,
     shortcuts,
     definitions,
-    duplicateDefinitions
+    duplicateDefinitions,
+    definitionLineIndices
   };
 }
 module.exports.getReferenceLinkImageData = getReferenceLinkImageData;
@@ -15065,7 +15141,7 @@ module.exports.applyFix = applyFix;
  * @returns {string} Corrected content.
  */
 function applyFixes(input, errors) {
-  const lineEnding = getPreferredLineEnding(input, __nccwpck_require__(2037));
+  const lineEnding = getPreferredLineEnding(input, __nccwpck_require__(612));
   const lines = input.split(newLineRe);
   // Normalize fixInfo objects
   let fixInfos = errors
@@ -15208,6 +15284,113 @@ function expandTildePath(file, os) {
   return homedir ? file.replace(/^~($|\/|\\)/, `${homedir}$1`) : file;
 }
 module.exports.expandTildePath = expandTildePath;
+
+/**
+ * RegExp.exec-style implementation of function expressions.
+ *
+ * @param {Function} funcExp Function that takes string and returns
+ * [index, length] or null.
+ * @param {string} input String to search.
+ * @returns {string[] | null} RegExp.exec-style [match] with an index property.
+ */
+function funcExpExec(funcExp, input) {
+  // Start or resume match
+  // @ts-ignore
+  const lastIndex = funcExp.lastIndex || 0;
+  const result = funcExp(input.slice(lastIndex));
+  if (result) {
+    // Update lastIndex and return match
+    const [ subIndex, length ] = result;
+    const index = lastIndex + subIndex;
+    // @ts-ignore
+    funcExp.lastIndex = index + length;
+    const match = [ input.slice(index, index + length) ];
+    // @ts-ignore
+    match.index = index;
+    return match;
+  }
+  // Reset lastIndex and return no match
+  // @ts-ignore
+  funcExp.lastIndex = 0;
+  return null;
+}
+module.exports.funcExpExec = funcExpExec;
+
+const urlFeProtocolRe = /(?:http|ftp)s?:\/\//i;
+const urlFeAutolinkTerminalsRe = / |$/;
+const urlFeBareTerminalsRe = /[ ,!`'"\]]|$/;
+const urlFeNonTerminalsRe = "-#/";
+const urlFePunctuationRe = /\p{Punctuation}/u;
+const urlFePrefixToPostfix = new Map([
+  [ " ", " " ],
+  [ "`", "`" ],
+  [ "'", "'" ],
+  [ "\"", "\"" ],
+  [ "‘", "’" ],
+  [ "“", "”" ],
+  [ "«", "»" ],
+  [ "*", "*" ],
+  [ "_", "_" ],
+  [ "(", ")" ],
+  [ "[", "]" ],
+  [ "{", "}" ],
+  [ "<", ">" ],
+  [ ">", "<" ]
+]);
+
+/**
+ * Function expression that matches URLs.
+ *
+ * @param {string} input Substring to search for a URL.
+ * @returns {Array | null} [index, length] of URL or null.
+ */
+function urlFe(input) {
+  // Find start of URL by searching for protocol
+  const match = input.match(urlFeProtocolRe);
+  if (match) {
+    // Look for matching pre/postfix characters (ex: <...>)
+    const start = match.index || 0;
+    const length = match[0].length;
+    const prefix = input[start - 1] || " ";
+    const postfix = urlFePrefixToPostfix.get(prefix);
+    // @ts-ignore
+    let endPostfix = input.indexOf(postfix, start + length);
+    if (endPostfix === -1) {
+      endPostfix = input.length;
+    }
+    // Look for characters that terminate a URL
+    const terminalsRe =
+      (prefix === "<") ? urlFeAutolinkTerminalsRe : urlFeBareTerminalsRe;
+    const endTerminal = start + input.slice(start).search(terminalsRe);
+    // Determine tentative end of URL
+    let end = Math.min(endPostfix, endTerminal);
+    if (prefix === " ") {
+      // If the URL used " " as pre/postfix characters, trim the end
+      if (input[end - 1] === ")") {
+        // Trim any ")" beyond the last "(...)" pair
+        const lastOpenParen = input.lastIndexOf("(", end - 2);
+        if (lastOpenParen <= start) {
+          end--;
+        } else {
+          const nextCloseParen = input.indexOf(")", lastOpenParen + 1);
+          end = nextCloseParen + 1;
+        }
+      } else {
+        // Trim unwanted punctuation
+        while (
+          !urlFeNonTerminalsRe.includes(input[end - 1]) &&
+          urlFePunctuationRe.test(input[end - 1])
+        ) {
+          end--;
+        }
+      }
+    }
+    return [ start, end - start ];
+  }
+  // No match
+  return null;
+}
+module.exports.urlFe = urlFe;
 
 
 /***/ }),
@@ -20087,6 +20270,14 @@ module.exports = require("node:url");
 
 /***/ }),
 
+/***/ 7261:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:util");
+
+/***/ }),
+
 /***/ 2037:
 /***/ ((module) => {
 
@@ -20195,7 +20386,7 @@ const resolveAndRequire = __nccwpck_require__(5317);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.5.1";
+const packageVersion = "0.6.0";
 const libraryName = "markdownlint";
 const libraryVersion = markdownlintLibrary.getVersion();
 const dotOnlySubstitute = "*.{md,markdown}";
@@ -20207,9 +20398,8 @@ const noop = () => null;
 // Gets a synchronous function to parse JSONC text
 const getJsoncParse = async () => {
   const { "default": stripJsonComments } =
-    // eslint-disable-next-line max-len
-    // eslint-disable-next-line no-inline-comments, node/no-unsupported-features/es-syntax
-    await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 1519));
+    // eslint-disable-next-line no-inline-comments
+    await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 6177));
   return (text) => JSON.parse(stripJsonComments(text));
 };
 
@@ -20252,8 +20442,7 @@ const importOrRequireResolve = async (dir, id) => {
     try {
       const fileUrlString =
         pathToFileURL(path.resolve(dir, expandId)).toString();
-      // eslint-disable-next-line max-len
-      // eslint-disable-next-line no-inline-comments, node/no-unsupported-features/es-syntax
+      // eslint-disable-next-line no-inline-comments
       const module = await import(/* webpackIgnore: true */ fileUrlString);
       return module.default;
     } catch (error) {
@@ -20619,8 +20808,7 @@ async (fs, baseDirSystem, baseDir, globPatterns, dirToDirInfo, noErrors, noRequi
     })
   );
   // Process glob patterns
-  // eslint-disable-next-line max-len
-  // eslint-disable-next-line no-inline-comments, node/no-unsupported-features/es-syntax
+  // eslint-disable-next-line no-inline-comments
   const { globby } = await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 277));
   const files = [
     ...await globby(expandedDirectories, globbyOptions),
@@ -20851,7 +21039,7 @@ const lintFiles = async (fs, dirInfos, fileContents) => {
       "files": filteredFiles,
       "strings": filteredStrings,
       "config": markdownlintConfig || markdownlintOptions.config,
-      "configParsers": [ jsoncParse ],
+      "configParsers": [ jsoncParse, yamlParse ],
       "customRules": markdownlintOptions.customRules,
       "frontMatter": markdownlintOptions.frontMatter
         ? new RegExp(markdownlintOptions.frontMatter, "u")
@@ -21207,8 +21395,15 @@ module.exports.referenceLinkImageData =
 
 
 module.exports.deprecatedRuleNames = [ "MD002", "MD006" ];
+module.exports.fixableRuleNames = [
+  "MD004", "MD005", "MD006", "MD007", "MD009", "MD010",
+  "MD011", "MD012", "MD014", "MD018", "MD019", "MD020",
+  "MD021", "MD022", "MD023", "MD026", "MD027", "MD030",
+  "MD031", "MD032", "MD034", "MD037", "MD038", "MD039",
+  "MD044", "MD047", "MD049", "MD050", "MD051", "MD053"
+];
 module.exports.homepage = "https://github.com/DavidAnson/markdownlint";
-module.exports.version = "0.26.2";
+module.exports.version = "0.27.0";
 
 
 /***/ }),
@@ -21221,8 +21416,8 @@ module.exports.version = "0.26.2";
 
 
 
-const path = __nccwpck_require__(1017);
-const { promisify } = __nccwpck_require__(3837);
+const path = __nccwpck_require__(9411);
+const { promisify } = __nccwpck_require__(7261);
 const markdownIt = __nccwpck_require__(8561);
 const { deprecatedRuleNames } = __nccwpck_require__(983);
 const rules = __nccwpck_require__(1796);
@@ -22093,7 +22288,7 @@ function lintInput(options, synchronous, callback) {
     // @ts-ignore
     md.use(...plugin);
   }
-  const fs = options.fs || __nccwpck_require__(7147);
+  const fs = options.fs || __nccwpck_require__(7561);
   const results = newResults(ruleList);
   let done = false;
   let concurrency = 0;
@@ -22299,10 +22494,10 @@ function readConfig(file, parsers, fs, callback) {
     }
   }
   if (!fs) {
-    fs = __nccwpck_require__(7147);
+    fs = __nccwpck_require__(7561);
   }
   // Read file
-  const os = __nccwpck_require__(2037);
+  const os = __nccwpck_require__(612);
   file = helpers.expandTildePath(file, os);
   fs.readFile(file, "utf8", (err, content) => {
     if (err) {
@@ -22374,10 +22569,10 @@ function readConfigPromise(file, parsers, fs) {
  */
 function readConfigSync(file, parsers, fs) {
   if (!fs) {
-    fs = __nccwpck_require__(7147);
+    fs = __nccwpck_require__(7561);
   }
   // Read file
-  const os = __nccwpck_require__(2037);
+  const os = __nccwpck_require__(612);
   file = helpers.expandTildePath(file, os);
   const content = fs.readFileSync(file, "utf8");
   // Try to parse file
@@ -23163,7 +23358,7 @@ const { addError, forEachLine, withinAnyRange } = __nccwpck_require__(2935);
 const { codeBlockAndSpanRanges, lineMetadata } = __nccwpck_require__(2260);
 
 const reversedLinkRe =
-  /(^|[^\\])\(([^)]+)\)\[([^\]^][^\]]*)](?!\()/g;
+  /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
 
 module.exports = {
   "names": [ "MD011", "no-reversed-links" ],
@@ -23187,7 +23382,7 @@ module.exports = {
               onError,
               lineIndex + 1,
               reversedLink.slice(preChar.length),
-              null,
+              undefined,
               [ index + 1, length ],
               {
                 "editColumn": index + 1,
@@ -23254,14 +23449,14 @@ module.exports = {
 
 
 const { addErrorDetailIf, filterTokens, forEachHeading, forEachLine,
-  includesSorted, linkReferenceDefinitionRe } = __nccwpck_require__(2935);
-const { lineMetadata } = __nccwpck_require__(2260);
+  includesSorted } = __nccwpck_require__(2935);
+const { lineMetadata, referenceLinkImageData } = __nccwpck_require__(2260);
 
 const longLineRePrefix = "^.{";
 const longLineRePostfixRelaxed = "}.*\\s.*$";
 const longLineRePostfixStrict = "}.+$";
-const linkOrImageOnlyLineRe = /^[es]*(lT?L|I)[ES]*$/;
-const sternModeRe = /^([#>\s]*\s)?\S*$/;
+const linkOrImageOnlyLineRe = /^[es]*(?:lT?L|I)[ES]*$/;
+const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
 const tokenTypeMap = {
   "em_open": "e",
   "em_close": "E",
@@ -23318,6 +23513,7 @@ module.exports = {
         linkOnlyLineNumbers.push(token.lineNumber);
       }
     });
+    const { definitionLineIndices } = referenceLinkImageData();
     forEachLine(lineMetadata(), (line, lineIndex, inCode, onFence, inTable) => {
       const lineNumber = lineIndex + 1;
       const isHeading = includesSorted(headingLineNumbers, lineNumber);
@@ -23330,10 +23526,10 @@ module.exports = {
       if ((includeCodeBlocks || !inCode) &&
           (includeTables || !inTable) &&
           (includeHeadings || !isHeading) &&
+          !includesSorted(definitionLineIndices, lineIndex) &&
           (strict ||
            (!(stern && sternModeRe.test(line)) &&
-            !includesSorted(linkOnlyLineNumbers, lineNumber) &&
-            !linkReferenceDefinitionRe.test(line))) &&
+            !includesSorted(linkOnlyLineNumbers, lineNumber))) &&
           lengthRe.test(line)) {
         addErrorDetailIf(
           onError,
@@ -23473,7 +23669,7 @@ module.exports = {
     filterTokens(params, "heading_open", (token) => {
       if (headingStyleFor(token) === "atx") {
         const { line, lineNumber } = token;
-        const match = /^(#+)([ \t]{2,})(?:\S)/.exec(line);
+        const match = /^(#+)([ \t]{2,})\S/.exec(line);
         if (match) {
           const [
             ,
@@ -23649,7 +23845,17 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, filterTokens, isBlankLine } = __nccwpck_require__(2935);
+const { addErrorDetailIf, blockquotePrefixRe, filterTokens, isBlankLine } =
+  __nccwpck_require__(2935);
+
+const getBlockQuote = (str, count) => (
+  (str || "")
+    .match(blockquotePrefixRe)[0]
+    .trimEnd()
+    // eslint-disable-next-line unicorn/prefer-spread
+    .concat("\n")
+    .repeat(count)
+);
 
 module.exports = {
   "names": [ "MD022", "blanks-around-headings", "blanks-around-headers" ],
@@ -23678,7 +23884,8 @@ module.exports = {
         lines[topIndex].trim(),
         null,
         {
-          "insertText": "".padEnd(linesAbove - actualAbove, "\n")
+          "insertText":
+            getBlockQuote(lines[topIndex - 1], linesAbove - actualAbove)
         });
       let actualBelow = 0;
       for (let i = 0; i < linesBelow; i++) {
@@ -23696,7 +23903,8 @@ module.exports = {
         null,
         {
           "lineNumber": nextIndex + 1,
-          "insertText": "".padEnd(linesBelow - actualBelow, "\n")
+          "insertText":
+            getBlockQuote(lines[nextIndex], linesBelow - actualBelow)
         });
     });
   }
@@ -23715,7 +23923,7 @@ module.exports = {
 
 const { addErrorContext, filterTokens } = __nccwpck_require__(2935);
 
-const spaceBeforeHeadingRe = /^((?:\s+)|(?:[>\s]+\s\s))[^>\s]/;
+const spaceBeforeHeadingRe = /^(\s+|[>\s]+\s\s)[^>\s]/;
 
 module.exports = {
   "names": [ "MD023", "heading-start-left", "header-start-left" ],
@@ -23848,7 +24056,7 @@ module.exports = {
 const { addError, allPunctuationNoQuestion, escapeForRegExp, forEachHeading } =
   __nccwpck_require__(2935);
 
-const endOfLineHtmlEntityRe = /&#?[0-9a-zA-Z]+;$/;
+const endOfLineHtmlEntityRe = /&#?[\da-zA-Z]+;$/;
 
 module.exports = {
   "names": [ "MD026", "no-trailing-punctuation" ],
@@ -24240,13 +24448,14 @@ module.exports = {
 const {
   addError, forEachLine, htmlElementRe, withinAnyRange, unescapeMarkdown
 } = __nccwpck_require__(2935);
-const { codeBlockAndSpanRanges, lineMetadata } = __nccwpck_require__(2260);
+const { codeBlockAndSpanRanges, lineMetadata, referenceLinkImageData } =
+  __nccwpck_require__(2260);
 
-const linkDestinationRe = /]\(\s*$/;
+const linkDestinationRe = /\]\(\s*$/;
 // See https://spec.commonmark.org/0.29/#autolinks
 const emailAddressRe =
   // eslint-disable-next-line max-len
-  /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  /^[\w.!#$%&'*+/=?^`{|}~-]+@[a-zA-Z\d](?:[a-zA-Z\d-]{0,61}[a-zA-Z\d])?(?:\.[a-zA-Z\d](?:[a-zA-Z\d-]{0,61}[a-zA-Z\d])?)*$/;
 
 module.exports = {
   "names": [ "MD033", "no-inline-html" ],
@@ -24257,6 +24466,15 @@ module.exports = {
     allowedElements = Array.isArray(allowedElements) ? allowedElements : [];
     allowedElements = allowedElements.map((element) => element.toLowerCase());
     const exclusions = codeBlockAndSpanRanges();
+    const { references, definitionLineIndices } = referenceLinkImageData();
+    for (const datas of references.values()) {
+      for (const data of datas) {
+        const [ lineIndex, index, , textLength, labelLength ] = data;
+        if (labelLength > 0) {
+          exclusions.push([ lineIndex, index + 3 + textLength, labelLength ]);
+        }
+      }
+    }
     forEachLine(lineMetadata(), (line, lineIndex, inCode) => {
       let match = null;
       // eslint-disable-next-line no-unmodified-loop-condition
@@ -24266,7 +24484,8 @@ module.exports = {
           !allowedElements.includes(element.toLowerCase()) &&
           !tag.endsWith("\\>") &&
           !emailAddressRe.test(content) &&
-          !withinAnyRange(exclusions, lineIndex, match.index, match[0].length)
+          !withinAnyRange(exclusions, lineIndex, match.index, tag.length) &&
+          !definitionLineIndices.includes(lineIndex)
         ) {
           const prefix = line.substring(0, match.index);
           if (!linkDestinationRe.test(prefix)) {
@@ -24293,61 +24512,86 @@ module.exports = {
 
 
 
-const { addErrorContext, bareUrlRe, filterTokens } = __nccwpck_require__(2935);
+const { addErrorContext, filterTokens, funcExpExec, urlFe, withinAnyRange } =
+  __nccwpck_require__(2935);
+const { codeBlockAndSpanRanges, htmlElementRanges, referenceLinkImageData } =
+  __nccwpck_require__(2260);
+
+const htmlLinkRe = /<a(?:\s[^>]*)?>[^<>]*<\/a\s*>/gi;
 
 module.exports = {
   "names": [ "MD034", "no-bare-urls" ],
   "description": "Bare URL used",
   "tags": [ "links", "url" ],
   "function": function MD034(params, onError) {
-    filterTokens(params, "inline", (token) => {
-      let inLink = false;
-      for (const child of token.children) {
-        const { content, line, lineNumber, type } = child;
+    const { lines } = params;
+    const codeExclusions = [
+      ...codeBlockAndSpanRanges(),
+      ...htmlElementRanges()
+    ];
+    filterTokens(params, "html_block", (token) => {
+      for (let i = token.map[0]; i < token.map[1]; i++) {
+        codeExclusions.push([ i, 0, lines[i].length ]);
+      }
+    });
+    const { definitionLineIndices } = referenceLinkImageData();
+    for (const [ lineIndex, line ] of lines.entries()) {
+      if (definitionLineIndices[0] === lineIndex) {
+        definitionLineIndices.shift();
+      } else {
         let match = null;
-        if (type === "link_open") {
-          inLink = true;
-        } else if (type === "link_close") {
-          inLink = false;
-        } else if ((type === "text") && !inLink) {
-          while ((match = bareUrlRe.exec(content)) !== null) {
-            const [ bareUrl ] = match;
-            const matchIndex = match.index;
-            const bareUrlLength = bareUrl.length;
-            // Allow "[https://example.com]" to avoid conflicts with
-            // MD011/no-reversed-links; allow quoting as another way
-            // of deliberately including a bare URL
-            const leftChar = content[matchIndex - 1];
-            const rightChar = content[matchIndex + bareUrlLength];
-            if (
-              !((leftChar === "[") && (rightChar === "]")) &&
-              !((leftChar === "\"") && (rightChar === "\"")) &&
-              !((leftChar === "'") && (rightChar === "'"))
-            ) {
-              const index = line.indexOf(content);
-              const range = (index === -1) ? null : [
-                index + matchIndex + 1,
-                bareUrlLength
-              ];
-              const fixInfo = range ? {
-                "editColumn": range[0],
-                "deleteCount": range[1],
-                "insertText": `<${bareUrl}>`
-              } : null;
-              addErrorContext(
-                onError,
-                lineNumber,
-                bareUrl,
-                null,
-                null,
-                range,
-                fixInfo
-              );
-            }
+        const lineExclusions = [];
+        while ((match = htmlLinkRe.exec(line)) !== null) {
+          lineExclusions.push([ lineIndex, match.index, match[0].length ]);
+        }
+        while ((match = funcExpExec(urlFe, line)) !== null) {
+          const [ bareUrl ] = match;
+          // @ts-ignore
+          const matchIndex = match.index;
+          const bareUrlLength = bareUrl.length;
+          const prefix = line.slice(0, matchIndex);
+          const postfix = line.slice(matchIndex + bareUrlLength);
+          if (
+            // Allow <...> to avoid reporting non-bare links
+            !(prefix.endsWith("<") && postfix.startsWith(">")) &&
+            // Allow >...</ to avoid reporting <code>...</code>
+            !(prefix.endsWith(">") && postfix.startsWith("</")) &&
+            // Allow "..." and '...' to allow quoting a bare link
+            !(prefix.endsWith("\"") && postfix.startsWith("\"")) &&
+            !(prefix.endsWith("'") && postfix.startsWith("'")) &&
+            // Allow ](... to avoid reporting Markdown-style links
+            !(/\]\(\s*$/.test(prefix)) &&
+            // Allow [...] to avoid MD011/no-reversed-links and nested links
+            !(/\[[^\]]*$/.test(prefix) && /^[^[]*\]/.test(postfix)) &&
+            !withinAnyRange(
+              lineExclusions, lineIndex, matchIndex, bareUrlLength
+            ) &&
+            !withinAnyRange(
+              codeExclusions, lineIndex, matchIndex, bareUrlLength
+            )
+          ) {
+            const range = [
+              matchIndex + 1,
+              bareUrlLength
+            ];
+            const fixInfo = {
+              "editColumn": range[0],
+              "deleteCount": range[1],
+              "insertText": `<${bareUrl}>`
+            };
+            addErrorContext(
+              onError,
+              lineIndex + 1,
+              bareUrl,
+              null,
+              null,
+              range,
+              fixInfo
+            );
           }
         }
       }
-    });
+    }
   }
 };
 
@@ -24373,7 +24617,7 @@ module.exports = {
     filterTokens(params, "hr", (token) => {
       const { line, lineNumber } = token;
       let { markup } = token;
-      const match = line.match(/[_*\-\s\t]+$/);
+      const match = line.match(/[_*\-\s]+$/);
       if (match) {
         markup = match[0].trim();
       }
@@ -24464,8 +24708,8 @@ const { addErrorContext, emphasisMarkersInContent, forEachLine, isBlankLine,
   withinAnyRange } = __nccwpck_require__(2935);
 const { htmlElementRanges, lineMetadata } = __nccwpck_require__(2260);
 
-const emphasisRe = /(^|[^\\]|\\\\)(?:(\*\*?\*?)|(__?_?))/g;
-const embeddedUnderscoreRe = /([A-Za-z0-9])_([A-Za-z0-9])/g;
+const emphasisRe = /(^|[^\\]|\\\\)(?:(\*{1,3})|(_{1,3}))/g;
+const embeddedUnderscoreRe = /([A-Za-z\d])_([A-Za-z\d])/g;
 const asteriskListItemMarkerRe = /^([\s>]*)\*(\s+)/;
 const leftSpaceRe = /^\s+/;
 const rightSpaceRe = /\s+$/;
@@ -24652,7 +24896,7 @@ module.exports = {
 const { addErrorContext, filterTokens, forEachInlineCodeSpan, newLineRe } =
   __nccwpck_require__(2935);
 
-const leftSpaceRe = /^\s([^`]|$)/;
+const leftSpaceRe = /^\s(?:[^`]|$)/;
 const rightSpaceRe = /[^`]\s$/;
 
 const spaceInsideCodeInline = (token) => (
@@ -24731,7 +24975,7 @@ module.exports = {
 const { addErrorContext, filterTokens } = __nccwpck_require__(2935);
 
 const spaceInLinkRe =
-  /\[(?:\s+(?:[^\]]*?)\s*|(?:[^\]]*?)\s+)](?=((?:\([^)]*\))|(?:\[[^\]]*\])))/;
+  /\[(?:\s[^\]]*|[^\]]*?\s)\](?=(\([^)]*\)|\[[^\]]*\]))/;
 
 module.exports = {
   "names": [ "MD039", "no-space-in-links" ],
@@ -24803,16 +25047,35 @@ module.exports = {
 
 
 
-const { addErrorContext, filterTokens } = __nccwpck_require__(2935);
+const { addError, addErrorContext, filterTokens } = __nccwpck_require__(2935);
 
 module.exports = {
   "names": [ "MD040", "fenced-code-language" ],
   "description": "Fenced code blocks should have a language specified",
   "tags": [ "code", "language" ],
   "function": function MD040(params, onError) {
+    let allowed = params.config.allowed_languages;
+    allowed = Array.isArray(allowed) ? allowed : [];
+    const languageOnly = !!params.config.language_only;
+
     filterTokens(params, "fence", function forToken(token) {
-      if (!token.info.trim()) {
+      const lang = token.info.trim().split(/\s+/u).shift();
+      if (lang === "") {
         addErrorContext(onError, token.lineNumber, token.line);
+      } else if ((allowed.length > 0) && !allowed.includes(lang)) {
+        addError(
+          onError,
+          token.lineNumber,
+          `"${lang}" is not allowed`
+        );
+      }
+
+      if (languageOnly && (token.info !== lang)) {
+        addError(
+          onError,
+          token.lineNumber,
+          `Info string contains more than language: "${token.info}"`
+        );
       }
     });
   }
@@ -24945,6 +25208,7 @@ module.exports = {
   "tags": [ "headings", "headers" ],
   "function": function MD043(params, onError) {
     const requiredHeadings = params.config.headings || params.config.headers;
+    const matchCase = params.config.match_case || false;
     if (Array.isArray(requiredHeadings)) {
       const levels = {};
       for (const level of [ 1, 2, 3, 4, 5, 6 ]) {
@@ -24955,6 +25219,7 @@ module.exports = {
       let hasError = false;
       let anyHeadings = false;
       const getExpected = () => requiredHeadings[i++] || "[None]";
+      const handleCase = (str) => (matchCase ? str : str.toLowerCase());
       forEachHeading(params, (heading, content) => {
         if (!hasError) {
           anyHeadings = true;
@@ -24962,13 +25227,13 @@ module.exports = {
           const expected = getExpected();
           if (expected === "*") {
             const nextExpected = getExpected();
-            if (nextExpected.toLowerCase() !== actual.toLowerCase()) {
+            if (handleCase(nextExpected) !== handleCase(actual)) {
               matchAny = true;
               i--;
             }
           } else if (expected === "+") {
             matchAny = true;
-          } else if (expected.toLowerCase() === actual.toLowerCase()) {
+          } else if (handleCase(expected) === handleCase(actual)) {
             matchAny = false;
           } else if (matchAny) {
             i--;
@@ -25004,8 +25269,8 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, bareUrlRe, escapeForRegExp, forEachLine,
-  forEachLink, withinAnyRange, linkReferenceDefinitionRe } =
+const { addErrorDetailIf, escapeForRegExp, forEachLine, forEachLink,
+  funcExpExec, linkReferenceDefinitionRe, urlFe, withinAnyRange } =
   __nccwpck_require__(2935);
 const { codeBlockAndSpanRanges, htmlElementRanges, lineMetadata } =
   __nccwpck_require__(2260);
@@ -25030,7 +25295,8 @@ module.exports = {
         exclusions.push([ lineIndex, 0, line.length ]);
       } else {
         let match = null;
-        while ((match = bareUrlRe.exec(line)) !== null) {
+        while ((match = funcExpExec(urlFe, line)) !== null) {
+          // @ts-ignore
           exclusions.push([ lineIndex, match.index, match[0].length ]);
         }
         forEachLink(line, (index, _, text, destination) => {
@@ -25320,8 +25586,8 @@ module.exports = [
 
 
 
-const { addError, escapeForRegExp, filterTokens, forEachInlineChild,
-  forEachHeading, htmlElementRe } = __nccwpck_require__(2935);
+const { addError, addErrorDetailIf, escapeForRegExp, filterTokens,
+  forEachInlineChild, forEachHeading, htmlElementRe } = __nccwpck_require__(2935);
 
 // Regular expression for identifying HTML anchor names
 const idRe = /\sid\s*=\s*['"]?([^'"\s>]+)/iu;
@@ -25391,14 +25657,46 @@ module.exports = {
       if (id && (id.length > 1) && (id[0] === "#") && !fragments.has(id)) {
         let context = id;
         let range = null;
+        let fixInfo = null;
         const match = line.match(
           new RegExp(`\\[.*?\\]\\(${escapeForRegExp(context)}\\)`)
         );
         if (match) {
-          context = match[0];
-          range = [ match.index + 1, match[0].length ];
+          [ context ] = match;
+          const index = match.index;
+          const length = context.length;
+          range = [ index + 1, length ];
+          fixInfo = {
+            "editColumn": index + (length - id.length),
+            "deleteCount": id.length,
+            "insertText": null
+          };
         }
-        addError(onError, lineNumber, undefined, context, range);
+        const idLower = id.toLowerCase();
+        const mixedCaseKey = [ ...fragments.keys() ]
+          .find((key) => idLower === key.toLowerCase());
+        if (mixedCaseKey) {
+          (fixInfo || {}).insertText = mixedCaseKey;
+          addErrorDetailIf(
+            onError,
+            lineNumber,
+            mixedCaseKey,
+            id,
+            undefined,
+            context,
+            range,
+            fixInfo
+          );
+        } else {
+          addError(
+            onError,
+            lineNumber,
+            undefined,
+            context,
+            // @ts-ignore
+            range
+          );
+        }
       }
     });
   }
@@ -25581,7 +25879,7 @@ for (const rule of rules) {
   const name = rule.names[0].toLowerCase();
   // eslint-disable-next-line dot-notation
   rule["information"] =
-    new URL(`${homepage}/blob/v${version}/doc/Rules.md#${name}`);
+    new URL(`${homepage}/blob/v${version}/doc/${name}.md`);
 }
 module.exports = rules;
 
@@ -25769,7 +26067,7 @@ function composeNode(ctx, token, props, onError) {
         node.srcToken = token;
     return node;
 }
-function composeEmptyNode(ctx, offset, before, pos, { spaceBefore, comment, anchor, tag }, onError) {
+function composeEmptyNode(ctx, offset, before, pos, { spaceBefore, comment, anchor, tag, end }, onError) {
     const token = {
         type: 'scalar',
         offset: utilEmptyScalarPosition.emptyScalarPosition(offset, before, pos),
@@ -25784,8 +26082,10 @@ function composeEmptyNode(ctx, offset, before, pos, { spaceBefore, comment, anch
     }
     if (spaceBefore)
         node.spaceBefore = true;
-    if (comment)
+    if (comment) {
         node.comment = comment;
+        node.range[2] = end;
+    }
     return node;
 }
 function composeAlias({ options }, { offset, source, end }, onError) {
@@ -26146,6 +26446,7 @@ function resolveBlockMap({ composeNode, composeEmptyNode }, ctx, bm, onError) {
     if (ctx.atRoot)
         ctx.atRoot = false;
     let offset = bm.offset;
+    let commentEnd = null;
     for (const collItem of bm.items) {
         const { start, key, sep, value } = collItem;
         // key properties
@@ -26165,7 +26466,7 @@ function resolveBlockMap({ composeNode, composeEmptyNode }, ctx, bm, onError) {
                     onError(offset, 'BAD_INDENT', startColMsg);
             }
             if (!keyProps.anchor && !keyProps.tag && !sep) {
-                // TODO: assert being at last item?
+                commentEnd = keyProps.end;
                 if (keyProps.comment) {
                     if (map.comment)
                         map.comment += '\n' + keyProps.comment;
@@ -26235,7 +26536,9 @@ function resolveBlockMap({ composeNode, composeEmptyNode }, ctx, bm, onError) {
             map.items.push(pair);
         }
     }
-    map.range = [bm.offset, offset, offset];
+    if (commentEnd && commentEnd < offset)
+        onError(commentEnd, 'IMPOSSIBLE', 'Map comment with trailing content');
+    map.range = [bm.offset, offset, commentEnd ?? offset];
     return map;
 }
 
@@ -26463,6 +26766,7 @@ function resolveBlockSeq({ composeNode, composeEmptyNode }, ctx, bs, onError) {
     if (ctx.atRoot)
         ctx.atRoot = false;
     let offset = bs.offset;
+    let commentEnd = null;
     for (const { start, value } of bs.items) {
         const props = resolveProps.resolveProps(start, {
             indicator: 'seq-item-ind',
@@ -26471,16 +26775,15 @@ function resolveBlockSeq({ composeNode, composeEmptyNode }, ctx, bs, onError) {
             onError,
             startOnNewline: true
         });
-        offset = props.end;
         if (!props.found) {
             if (props.anchor || props.tag || value) {
                 if (value && value.type === 'block-seq')
-                    onError(offset, 'BAD_INDENT', 'All sequence items must start at the same column');
+                    onError(props.end, 'BAD_INDENT', 'All sequence items must start at the same column');
                 else
                     onError(offset, 'MISSING_CHAR', 'Sequence item without - indicator');
             }
             else {
-                // TODO: assert being at last item?
+                commentEnd = props.end;
                 if (props.comment)
                     seq.comment = props.comment;
                 continue;
@@ -26488,13 +26791,13 @@ function resolveBlockSeq({ composeNode, composeEmptyNode }, ctx, bs, onError) {
         }
         const node = value
             ? composeNode(ctx, value, props, onError)
-            : composeEmptyNode(ctx, offset, start, null, props, onError);
+            : composeEmptyNode(ctx, props.end, start, null, props, onError);
         if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bs.indent, value, onError);
         offset = node.range[2];
         seq.items.push(node);
     }
-    seq.range = [bs.offset, offset, offset];
+    seq.range = [bs.offset, offset, commentEnd ?? offset];
     return seq;
 }
 
@@ -27795,7 +28098,7 @@ function createNode(value, tagName, ctx) {
     if (value instanceof String ||
         value instanceof Number ||
         value instanceof Boolean ||
-        (typeof BigInt === 'function' && value instanceof BigInt) // not supported everywhere
+        (typeof BigInt !== 'undefined' && value instanceof BigInt) // not supported everywhere
     ) {
         // https://tc39.es/ecma262/#sec-serializejsonproperty
         value = value.valueOf();
@@ -28632,12 +28935,12 @@ function findPair(items, key) {
     return undefined;
 }
 class YAMLMap extends Collection.Collection {
+    static get tagName() {
+        return 'tag:yaml.org,2002:map';
+    }
     constructor(schema) {
         super(Node.MAP, schema);
         this.items = [];
-    }
-    static get tagName() {
-        return 'tag:yaml.org,2002:map';
     }
     /**
      * Adds a value to the collection.
@@ -28746,12 +29049,12 @@ var Scalar = __nccwpck_require__(9338);
 var toJS = __nccwpck_require__(2463);
 
 class YAMLSeq extends Collection.Collection {
+    static get tagName() {
+        return 'tag:yaml.org,2002:seq';
+    }
     constructor(schema) {
         super(Node.SEQ, schema);
         this.items = [];
-    }
-    static get tagName() {
-        return 'tag:yaml.org,2002:seq';
     }
     add(value) {
         this.items.push(value);
@@ -32378,7 +32681,8 @@ class YAMLSet extends YAMLMap.YAMLMap {
         let pair;
         if (Node.isPair(key))
             pair = key;
-        else if (typeof key === 'object' &&
+        else if (key &&
+            typeof key === 'object' &&
             'key' in key &&
             'value' in key &&
             key.value === null)
@@ -32743,6 +33047,7 @@ function createStringifyContext(doc, options) {
         doubleQuotedAsJSON: false,
         doubleQuotedMinMultiLineLength: 40,
         falseStr: 'false',
+        flowCollectionPadding: true,
         indentSeq: true,
         lineWidth: 80,
         minContentWidth: 20,
@@ -32766,6 +33071,7 @@ function createStringifyContext(doc, options) {
     return {
         anchors: new Set(),
         doc,
+        flowCollectionPadding: opt.flowCollectionPadding ? ' ' : '',
         indent: '',
         indentStep: typeof opt.indent === 'number' ? ' '.repeat(opt.indent) : '  ',
         inFlow,
@@ -32923,7 +33229,7 @@ function stringifyBlockCollection({ comment, items }, ctx, { blockItemPrefix, fl
     return str;
 }
 function stringifyFlowCollection({ comment, items }, ctx, { flowChars, itemIndent, onComment }) {
-    const { indent, indentStep, options: { commentString } } = ctx;
+    const { indent, indentStep, flowCollectionPadding: fcPadding, options: { commentString } } = ctx;
     itemIndent += indentStep;
     const itemCtx = Object.assign({}, ctx, {
         indent: itemIndent,
@@ -32992,7 +33298,7 @@ function stringifyFlowCollection({ comment, items }, ctx, { flowChars, itemInden
             str += `\n${indent}${end}`;
         }
         else {
-            str = `${start} ${lines.join(' ')} ${end}`;
+            str = `${start}${fcPadding}${lines.join(' ')}${fcPadding}${end}`;
         }
     }
     if (comment) {
@@ -33248,19 +33554,18 @@ function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
         if (keyComment)
             str += stringifyComment.lineComment(str, ctx.indent, commentString(keyComment));
     }
-    let vcb = '';
-    let valueComment = null;
+    let vsb, vcb, valueComment;
     if (Node.isNode(value)) {
-        if (value.spaceBefore)
-            vcb = '\n';
-        if (value.commentBefore) {
-            const cs = commentString(value.commentBefore);
-            vcb += `\n${stringifyComment.indentComment(cs, ctx.indent)}`;
-        }
+        vsb = !!value.spaceBefore;
+        vcb = value.commentBefore;
         valueComment = value.comment;
     }
-    else if (value && typeof value === 'object') {
-        value = doc.createNode(value);
+    else {
+        vsb = false;
+        vcb = null;
+        valueComment = null;
+        if (value && typeof value === 'object')
+            value = doc.createNode(value);
     }
     ctx.implicitKey = false;
     if (!explicitKey && !keyComment && Node.isScalar(value))
@@ -33275,24 +33580,50 @@ function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
         !value.tag &&
         !value.anchor) {
         // If indentSeq === false, consider '- ' as part of indentation where possible
-        ctx.indent = ctx.indent.substr(2);
+        ctx.indent = ctx.indent.substring(2);
     }
     let valueCommentDone = false;
     const valueStr = stringify.stringify(value, ctx, () => (valueCommentDone = true), () => (chompKeep = true));
     let ws = ' ';
-    if (vcb || keyComment) {
-        if (valueStr === '' && !ctx.inFlow)
-            ws = vcb === '\n' ? '\n\n' : vcb;
-        else
-            ws = `${vcb}\n${ctx.indent}`;
+    if (keyComment || vsb || vcb) {
+        ws = vsb ? '\n' : '';
+        if (vcb) {
+            const cs = commentString(vcb);
+            ws += `\n${stringifyComment.indentComment(cs, ctx.indent)}`;
+        }
+        if (valueStr === '' && !ctx.inFlow) {
+            if (ws === '\n')
+                ws = '\n\n';
+        }
+        else {
+            ws += `\n${ctx.indent}`;
+        }
     }
     else if (!explicitKey && Node.isCollection(value)) {
-        const flow = valueStr[0] === '[' || valueStr[0] === '{';
-        if (!flow || valueStr.includes('\n'))
-            ws = `\n${ctx.indent}`;
+        const vs0 = valueStr[0];
+        const nl0 = valueStr.indexOf('\n');
+        const hasNewline = nl0 !== -1;
+        const flow = ctx.inFlow ?? value.flow ?? value.items.length === 0;
+        if (hasNewline || !flow) {
+            let hasPropsLine = false;
+            if (hasNewline && (vs0 === '&' || vs0 === '!')) {
+                let sp0 = valueStr.indexOf(' ');
+                if (vs0 === '&' &&
+                    sp0 !== -1 &&
+                    sp0 < nl0 &&
+                    valueStr[sp0 + 1] === '!') {
+                    sp0 = valueStr.indexOf(' ', sp0 + 1);
+                }
+                if (sp0 === -1 || nl0 < sp0)
+                    hasPropsLine = true;
+            }
+            if (!hasPropsLine)
+                ws = `\n${ctx.indent}`;
+        }
     }
-    else if (valueStr === '' || valueStr[0] === '\n')
+    else if (valueStr === '' || valueStr[0] === '\n') {
         ws = '';
+    }
     str += ws + valueStr;
     if (ctx.inFlow) {
         if (valueCommentDone && onComment)
@@ -33550,7 +33881,7 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
 }
 function plainString(item, ctx, onComment, onChompKeep) {
     const { type, value } = item;
-    const { actualString, implicitKey, indent, inFlow } = ctx;
+    const { actualString, implicitKey, indent, indentStep, inFlow } = ctx;
     if ((implicitKey && /[\n[\]{},]/.test(value)) ||
         (inFlow && /[[\]{},]/.test(value))) {
         return quotedString(value, ctx);
@@ -33574,9 +33905,14 @@ function plainString(item, ctx, onComment, onChompKeep) {
         // Where allowed & type not set explicitly, prefer block style for multiline strings
         return blockString(item, ctx, onComment, onChompKeep);
     }
-    if (indent === '' && containsDocumentMarker(value)) {
-        ctx.forceBlockIndent = true;
-        return blockString(item, ctx, onComment, onChompKeep);
+    if (containsDocumentMarker(value)) {
+        if (indent === '') {
+            ctx.forceBlockIndent = true;
+            return blockString(item, ctx, onComment, onChompKeep);
+        }
+        else if (implicitKey && indent === indentStep) {
+            return quotedString(value, ctx);
+        }
     }
     const str = value.replace(/\n+/g, `$&\n${indent}`);
     // Verify that output will be parsed as a string, as e.g. plain numbers and
@@ -34003,7 +34339,7 @@ const getIsIgnoredPredicate = (files, cwd) => {
 	return fileOrDirectory => {
 		fileOrDirectory = toPath(fileOrDirectory);
 		fileOrDirectory = toRelativePath(fileOrDirectory, cwd);
-		return ignores.ignores(slash(fileOrDirectory));
+		return fileOrDirectory ? ignores.ignores(slash(fileOrDirectory)) : false;
 	};
 };
 
@@ -34267,7 +34603,7 @@ const generateGlobTasksSync = normalizeArgumentsSync(generateTasksSync);
 
 /***/ }),
 
-/***/ 1519:
+/***/ 6177:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
