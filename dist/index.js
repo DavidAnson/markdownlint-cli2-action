@@ -34808,31 +34808,44 @@ const core = __nccwpck_require__(2186);
 const {"main": markdownlintCli2} = __nccwpck_require__(9247);
 
 const logMessage = core.info;
-const logError = (error) => {
-  // eslint-disable-next-line init-declarations
-  let annotation;
-  const match = error.match(/^([^:]+):(\d+)(?::(\d+))?\s(\S+)\s(.+)$/u);
-  if (match) {
-    const [
-      ,
-      file,
-      startLineString,
-      startColumnString,
-      ,
-      title
-    ] = match;
-    const startLine = Number(startLineString);
-    annotation = {
-      title,
-      file,
-      startLine
+const outputFormatter = (options) => {
+  const {results} = options;
+  for (const lintError of results) {
+    const {
+      errorContext,
+      errorDetail,
+      errorRange,
+      fileName,
+      lineNumber,
+      ruleDescription,
+      ruleInformation,
+      ruleNames
+    } = lintError;
+    const line = `:${lineNumber}`;
+    const column = errorRange ? `:${errorRange[0]}` : "";
+    const name = ruleNames.join("/");
+    const detail = errorDetail ? ` [${errorDetail}]` : "";
+    const context = errorContext ? ` [Context: "${errorContext}"]` : "";
+    const information = ruleInformation ? ` ${ruleInformation}` : "";
+    const message =
+      // eslint-disable-next-line max-len
+      `${fileName}${line}${column} ${name} ${ruleDescription}${detail}${context}${information}`;
+    const annotation = {
+      "title": ruleDescription,
+      "file": fileName,
+      "startLine": lineNumber,
+      "endLine": lineNumber
     };
-    if (startColumnString) {
-      // @ts-ignore
-      annotation.startColumn = Number(startColumnString);
+    if (errorRange) {
+      const [
+        errorColumn,
+        errorLength
+      ] = errorRange;
+      annotation.startColumn = errorColumn;
+      annotation.endColumn = errorColumn + errorLength - 1;
     }
+    core.error(message, annotation);
   }
-  core.error(error, annotation);
 };
 
 const separator = core.getInput("separator") || "\n";
@@ -34844,7 +34857,9 @@ const argv =
 const parameters = {
   argv,
   logMessage,
-  logError
+  "optionsOverride": {
+    "outputFormatters": [[outputFormatter]]
+  }
 };
 let invoke = true;
 const command = core.getInput("command");
