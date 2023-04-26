@@ -1726,6 +1726,10 @@ function checkBypass(reqUrl) {
     if (!reqUrl.hostname) {
         return false;
     }
+    const reqHost = reqUrl.hostname;
+    if (isLoopbackAddress(reqHost)) {
+        return true;
+    }
     const noProxy = process.env['no_proxy'] || process.env['NO_PROXY'] || '';
     if (!noProxy) {
         return false;
@@ -1751,13 +1755,24 @@ function checkBypass(reqUrl) {
         .split(',')
         .map(x => x.trim().toUpperCase())
         .filter(x => x)) {
-        if (upperReqHosts.some(x => x === upperNoProxyItem)) {
+        if (upperNoProxyItem === '*' ||
+            upperReqHosts.some(x => x === upperNoProxyItem ||
+                x.endsWith(`.${upperNoProxyItem}`) ||
+                (upperNoProxyItem.startsWith('.') &&
+                    x.endsWith(`${upperNoProxyItem}`)))) {
             return true;
         }
     }
     return false;
 }
 exports.checkBypass = checkBypass;
+function isLoopbackAddress(host) {
+    const hostLower = host.toLowerCase();
+    return (hostLower === 'localhost' ||
+        hostLower.startsWith('127.') ||
+        hostLower.startsWith('[::1]') ||
+        hostLower.startsWith('[0:0:0:0:0:0:0:1]'));
+}
 //# sourceMappingURL=proxy.js.map
 
 /***/ }),
@@ -14099,6 +14114,8 @@ module.exports = outputFormatter;
 
 
 
+const micromark = __nccwpck_require__(5673);
+
 // Regular expression for matching common newline characters
 // See NEWLINES_RE in markdown-it/lib/rules_core/normalize.js
 const newLineRe = /\r\n?|\n/g;
@@ -14129,10 +14146,6 @@ const emphasisMarkersRe = /[_*]/g;
 // Regular expression for blockquote prefixes
 const blockquotePrefixRe = /^[>\s]*/;
 module.exports.blockquotePrefixRe = blockquotePrefixRe;
-
-// Regular expression for reference links (full, collapsed, and shortcut)
-const referenceLinkRe =
-  /!?\\?\[((?:\[[^\]\0]*\]|[^[\]\0])*)\](?:\[([^\]\0]*)\]|([^(])|$)/g;
 
 // Regular expression for link reference definitions
 const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
@@ -14290,19 +14303,6 @@ module.exports.escapeForRegExp = function escapeForRegExp(str) {
   return str.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 };
 
-// Un-escapes Markdown content (simple algorithm; not a parser)
-const escapedMarkdownRe = /\\./g;
-module.exports.unescapeMarkdown =
-  function unescapeMarkdown(markdown, replacement) {
-    return markdown.replace(escapedMarkdownRe, (match) => {
-      const char = match[1];
-      if ("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~".includes(char)) {
-        return replacement || char;
-      }
-      return match;
-    });
-  };
-
 /**
  * Return the string representation of a fence markup character.
  *
@@ -14385,7 +14385,7 @@ module.exports.unorderedListStyleFor = function unorderedListStyleFor(token) {
  * @returns {void}
  */
 function filterTokens(params, type, handler) {
-  for (const token of params.tokens) {
+  for (const token of params.parsers.markdownit.tokens) {
     if (token.type === type) {
       handler(token);
     }
@@ -14440,7 +14440,7 @@ module.exports.getLineMetadata = function getLineMetadata(params) {
   filterTokens(params, "hr", (token) => {
     lineMetadata[token.map[0]][6] = true;
   });
-  for (const token of params.tokens.filter(isMathBlock)) {
+  for (const token of params.parsers.markdownit.tokens.filter(isMathBlock)) {
     for (let i = token.map[0]; i < token.map[1]; i++) {
       lineMetadata[i][7] = true;
     }
@@ -14534,7 +14534,7 @@ module.exports.forEachInlineChild = forEachInlineChild;
 // Calls the provided function for each heading's content
 module.exports.forEachHeading = function forEachHeading(params, handler) {
   let heading = null;
-  for (const token of params.tokens) {
+  for (const token of params.parsers.markdownit.tokens) {
     if (token.type === "heading_open") {
       heading = token;
     } else if (token.type === "heading_close") {
@@ -14915,137 +14915,117 @@ module.exports.emphasisMarkersInContent = emphasisMarkersInContent;
 /**
  * Returns an object with information about reference links and images.
  *
- * @param {Object} lineMetadata Line metadata object.
+ * @param {Object} params RuleParams instance.
  * @returns {Object} Reference link/image data.
  */
-function getReferenceLinkImageData(lineMetadata) {
-  // Initialize return values
+function getReferenceLinkImageData(params) {
+  const normalizeReference = (s) => s.toLowerCase().trim().replace(/\s+/g, " ");
+  const definitions = new Map();
+  const definitionLineIndices = [];
+  const duplicateDefinitions = [];
   const references = new Map();
   const shortcuts = new Map();
-  const definitions = new Map();
-  const duplicateDefinitions = [];
-  const definitionLineIndices = [];
-  // Define helper functions
-  const normalizeLabel = (s) => s.toLowerCase().trim().replace(/\s+/g, " ");
-  const exclusions = [];
-  const excluded = (match) => withinAnyRange(
-    exclusions, 0, match.index, match[0].length - (match[3] || "").length
-  );
-  // Convert input to single-line so multi-line links/images are easier
-  const lineOffsets = [];
-  let currentOffset = 0;
-  const contentLines = [];
-  forEachLine(lineMetadata, (line, lineIndex, inCode) => {
-    lineOffsets[lineIndex] = currentOffset;
-    if (!inCode) {
-      line = line.replace(blockquotePrefixRe, "");
-      if (line.trim().length === 0) {
-        // Allow RegExp to detect the end of a block
-        line = "\0";
-      }
-      contentLines.push(line);
-      currentOffset += line.length + 1;
-    }
-  });
-  lineOffsets.push(currentOffset);
-  const contentLine = contentLines.join(" ");
-  // Determine single-line exclusions for inline code spans
-  forEachInlineCodeSpan(contentLine, (code, lineIndex, columnIndex) => {
-    exclusions.push([ 0, columnIndex, code.length ]);
-  });
-  // Identify all link/image reference definitions
-  forEachLine(lineMetadata, (line, lineIndex, inCode) => {
-    if (!inCode) {
-      const linkReferenceDefinitionMatch = linkReferenceDefinitionRe.exec(line);
-      if (linkReferenceDefinitionMatch) {
-        const label = normalizeLabel(linkReferenceDefinitionMatch[1]);
-        if (definitions.has(label)) {
-          duplicateDefinitions.push([ label, lineIndex ]);
-        } else {
-          definitions.set(label, lineIndex);
+  const filteredTokens =
+    micromark.filterByTypes(
+      params.parsers.micromark.tokens,
+      [
+        // definitionLineIndices
+        "definition", "gfmFootnoteDefinition",
+        // definitions and definitionLineIndices
+        "definitionLabelString", "gfmFootnoteDefinitionLabelString",
+        // references and shortcuts
+        "gfmFootnoteCall", "image", "link"
+      ]
+    );
+  for (const token of filteredTokens) {
+    let labelPrefix = "";
+    // eslint-disable-next-line default-case
+    switch (token.type) {
+      case "definition":
+      case "gfmFootnoteDefinition":
+        // definitionLineIndices
+        for (let i = token.startLine; i <= token.endLine; i++) {
+          definitionLineIndices.push(i - 1);
         }
-        const labelLength = linkReferenceDefinitionMatch[0].length;
-        exclusions.push([ 0, lineOffsets[lineIndex], labelLength ]);
-        const hasDefinition = line.slice(labelLength).trim().length > 0;
-        definitionLineIndices.push(lineIndex);
-        if (!hasDefinition) {
-          definitionLineIndices.push(lineIndex + 1);
-        }
-      }
-    }
-  });
-  // Identify all link and image references
-  let lineIndex = 0;
-  const pendingContents = [
-    {
-      "content": contentLine,
-      "contentLineIndex": 0,
-      "contentIndex": 0,
-      "topLevel": true
-    }
-  ];
-  let pendingContent = null;
-  while ((pendingContent = pendingContents.shift())) {
-    const { content, contentLineIndex, contentIndex, topLevel } =
-      pendingContent;
-    let referenceLinkMatch = null;
-    while ((referenceLinkMatch = referenceLinkRe.exec(content)) !== null) {
-      const [ matchString, matchText, matchLabel ] = referenceLinkMatch;
-      if (
-        !matchString.startsWith("\\") &&
-        !matchString.startsWith("!\\") &&
-        !matchText.endsWith("\\") &&
-        !(matchLabel || "").endsWith("\\") &&
-        !(topLevel && excluded(referenceLinkMatch))
-      ) {
-        const shortcutLink = (matchLabel === undefined);
-        const collapsedLink =
-          (!shortcutLink && (matchLabel.length === 0));
-        const label = normalizeLabel(
-          (shortcutLink || collapsedLink) ? matchText : matchLabel
-        );
-        if (label.length > 0) {
-          const referenceindex = referenceLinkMatch.index;
-          if (topLevel) {
-            // Calculate line index
-            while (lineOffsets[lineIndex + 1] <= referenceindex) {
-              lineIndex++;
-            }
+        break;
+      case "gfmFootnoteDefinitionLabelString":
+        labelPrefix = "^";
+      case "definitionLabelString": // eslint-disable-line no-fallthrough
+        {
+          // definitions and definitionLineIndices
+          const reference = normalizeReference(`${labelPrefix}${token.text}`);
+          if (definitions.has(reference)) {
+            duplicateDefinitions.push([ reference, token.startLine - 1 ]);
           } else {
-            // Use provided line index
-            lineIndex = contentLineIndex;
+            definitions.set(reference, token.startLine - 1);
           }
-          const referenceIndex = referenceindex +
-            (topLevel ? -lineOffsets[lineIndex] : contentIndex);
-          const referenceDatum = [
-            lineIndex,
-            referenceIndex,
-            matchString.length,
-            matchText.length,
-            (matchLabel || "").length
-          ];
-          if (shortcutLink) {
-            // Track separately due to ambiguity in "text [text] text"
-            const shortcutData = shortcuts.get(label) || [];
-            shortcutData.push(referenceDatum);
-            shortcuts.set(label, shortcutData);
-          } else {
-            // Track reference and location
-            const referenceData = references.get(label) || [];
+        }
+        break;
+      case "gfmFootnoteCall":
+      case "image":
+      case "link":
+        {
+          let isShortcut = false;
+          let isFullOrCollapsed = false;
+          let labelText = null;
+          let referenceStringText = null;
+          const shortcutCandidate =
+            micromark.matchAndGetTokensByType(token.children, [ "label" ]);
+          if (shortcutCandidate) {
+            labelText =
+              micromark.getTokenTextByType(
+                shortcutCandidate[0].children, "labelText"
+              );
+            isShortcut = (labelText !== null);
+          }
+          const fullAndCollapsedCandidate =
+            micromark.matchAndGetTokensByType(
+              token.children, [ "label", "reference" ]
+            );
+          if (fullAndCollapsedCandidate) {
+            labelText =
+              micromark.getTokenTextByType(
+                fullAndCollapsedCandidate[0].children, "labelText"
+              );
+            referenceStringText =
+              micromark.getTokenTextByType(
+                fullAndCollapsedCandidate[1].children, "referenceString"
+              );
+            isFullOrCollapsed = (labelText !== null);
+          }
+          const footnote = micromark.matchAndGetTokensByType(
+            token.children,
+            [
+              "gfmFootnoteCallLabelMarker", "gfmFootnoteCallMarker",
+              "gfmFootnoteCallString", "gfmFootnoteCallLabelMarker"
+            ],
+            [ "gfmFootnoteCallMarker", "gfmFootnoteCallString" ]
+          );
+          if (footnote) {
+            const callMarkerText = footnote[0].text;
+            const callString = footnote[1].text;
+            labelText = `${callMarkerText}${callString}`;
+            isShortcut = true;
+          }
+          // Track shortcuts separately due to ambiguity in "text [text] text"
+          if (isShortcut || isFullOrCollapsed) {
+            const referenceDatum = [
+              token.startLine - 1,
+              token.startColumn - 1,
+              token.text.length,
+              // @ts-ignore
+              labelText.length,
+              (referenceStringText || "").length
+            ];
+            const reference =
+              normalizeReference(referenceStringText || labelText);
+            const dictionary = isShortcut ? shortcuts : references;
+            const referenceData = dictionary.get(reference) || [];
             referenceData.push(referenceDatum);
-            references.set(label, referenceData);
-          }
-          // Check for links embedded in brackets
-          if (!matchString.startsWith("!")) {
-            pendingContents.push({
-              "content": matchText,
-              "contentLineIndex": lineIndex,
-              "contentIndex": referenceIndex + 1,
-              "topLevel": false
-            });
+            dictionary.set(reference, referenceData);
           }
         }
-      }
+        break;
     }
   }
   return {
@@ -15284,113 +15264,6 @@ function expandTildePath(file, os) {
   return homedir ? file.replace(/^~($|\/|\\)/, `${homedir}$1`) : file;
 }
 module.exports.expandTildePath = expandTildePath;
-
-/**
- * RegExp.exec-style implementation of function expressions.
- *
- * @param {Function} funcExp Function that takes string and returns
- * [index, length] or null.
- * @param {string} input String to search.
- * @returns {string[] | null} RegExp.exec-style [match] with an index property.
- */
-function funcExpExec(funcExp, input) {
-  // Start or resume match
-  // @ts-ignore
-  const lastIndex = funcExp.lastIndex || 0;
-  const result = funcExp(input.slice(lastIndex));
-  if (result) {
-    // Update lastIndex and return match
-    const [ subIndex, length ] = result;
-    const index = lastIndex + subIndex;
-    // @ts-ignore
-    funcExp.lastIndex = index + length;
-    const match = [ input.slice(index, index + length) ];
-    // @ts-ignore
-    match.index = index;
-    return match;
-  }
-  // Reset lastIndex and return no match
-  // @ts-ignore
-  funcExp.lastIndex = 0;
-  return null;
-}
-module.exports.funcExpExec = funcExpExec;
-
-const urlFeProtocolRe = /(?:http|ftp)s?:\/\//i;
-const urlFeAutolinkTerminalsRe = / |$/;
-const urlFeBareTerminalsRe = /[ ,!`'"\]]|$/;
-const urlFeNonTerminalsRe = "-#/";
-const urlFePunctuationRe = /\p{Punctuation}/u;
-const urlFePrefixToPostfix = new Map([
-  [ " ", " " ],
-  [ "`", "`" ],
-  [ "'", "'" ],
-  [ "\"", "\"" ],
-  [ "‘", "’" ],
-  [ "“", "”" ],
-  [ "«", "»" ],
-  [ "*", "*" ],
-  [ "_", "_" ],
-  [ "(", ")" ],
-  [ "[", "]" ],
-  [ "{", "}" ],
-  [ "<", ">" ],
-  [ ">", "<" ]
-]);
-
-/**
- * Function expression that matches URLs.
- *
- * @param {string} input Substring to search for a URL.
- * @returns {Array | null} [index, length] of URL or null.
- */
-function urlFe(input) {
-  // Find start of URL by searching for protocol
-  const match = input.match(urlFeProtocolRe);
-  if (match) {
-    // Look for matching pre/postfix characters (ex: <...>)
-    const start = match.index || 0;
-    const length = match[0].length;
-    const prefix = input[start - 1] || " ";
-    const postfix = urlFePrefixToPostfix.get(prefix);
-    // @ts-ignore
-    let endPostfix = input.indexOf(postfix, start + length);
-    if (endPostfix === -1) {
-      endPostfix = input.length;
-    }
-    // Look for characters that terminate a URL
-    const terminalsRe =
-      (prefix === "<") ? urlFeAutolinkTerminalsRe : urlFeBareTerminalsRe;
-    const endTerminal = start + input.slice(start).search(terminalsRe);
-    // Determine tentative end of URL
-    let end = Math.min(endPostfix, endTerminal);
-    if (prefix === " ") {
-      // If the URL used " " as pre/postfix characters, trim the end
-      if (input[end - 1] === ")") {
-        // Trim any ")" beyond the last "(...)" pair
-        const lastOpenParen = input.lastIndexOf("(", end - 2);
-        if (lastOpenParen <= start) {
-          end--;
-        } else {
-          const nextCloseParen = input.indexOf(")", lastOpenParen + 1);
-          end = nextCloseParen + 1;
-        }
-      } else {
-        // Trim unwanted punctuation
-        while (
-          !urlFeNonTerminalsRe.includes(input[end - 1]) &&
-          urlFePunctuationRe.test(input[end - 1])
-        ) {
-          end--;
-        }
-      }
-    }
-    return [ start, end - start ];
-  }
-  // No match
-  return null;
-}
-module.exports.urlFe = urlFe;
 
 
 /***/ }),
@@ -20377,8 +20250,11 @@ const dynamicRequire = (typeof require === "undefined") ? require : /* c8 ignore
 const path = __nccwpck_require__(9411);
 const { pathToFileURL } = __nccwpck_require__(1041);
 const markdownlintLibrary = __nccwpck_require__(8397);
-const { markdownlint, "readConfig": markdownlintReadConfig } =
-  markdownlintLibrary.promises;
+const {
+  markdownlint,
+  "extendConfig": markdownlintExtendConfig,
+  "readConfig": markdownlintReadConfig
+} = markdownlintLibrary.promises;
 const markdownlintRuleHelpers = __nccwpck_require__(2935);
 const appendToArray = __nccwpck_require__(7314);
 const mergeOptions = __nccwpck_require__(8446);
@@ -20386,7 +20262,7 @@ const resolveAndRequire = __nccwpck_require__(5317);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.6.0";
+const packageVersion = "0.7.0";
 const libraryName = "markdownlint";
 const libraryVersion = markdownlintLibrary.getVersion();
 const dotOnlySubstitute = "*.{md,markdown}";
@@ -20606,105 +20482,121 @@ $ markdownlint-cli2 "**/*.md" "#node_modules"`
 
 // Get (creating if necessary) and process a directory's info object
 const getAndProcessDirInfo =
-(fs, tasks, dirToDirInfo, dir, relativeDir, noRequire, func) => {
-  let dirInfo = dirToDirInfo[dir];
-  if (!dirInfo) {
-    dirInfo = {
-      dir,
-      relativeDir,
-      "parent": null,
-      "files": [],
-      "markdownlintConfig": null,
-      "markdownlintOptions": null
-    };
-    dirToDirInfo[dir] = dirInfo;
+  (fs, tasks, dirToDirInfo, dir, relativeDir, noRequire, func) => {
+    let dirInfo = dirToDirInfo[dir];
+    if (!dirInfo) {
+      dirInfo = {
+        dir,
+        relativeDir,
+        "parent": null,
+        "files": [],
+        "markdownlintConfig": null,
+        "markdownlintOptions": null
+      };
+      dirToDirInfo[dir] = dirInfo;
 
-    // Load markdownlint-cli2 object(s)
-    const markdownlintCli2Jsonc =
-      path.posix.join(dir, ".markdownlint-cli2.jsonc");
-    const markdownlintCli2Yaml =
-      path.posix.join(dir, ".markdownlint-cli2.yaml");
-    tasks.push(
-      fs.promises.access(markdownlintCli2Jsonc).
-        then(
-          () => fs.promises.
-            readFile(markdownlintCli2Jsonc, utf8).
-            then(
-              (content) => getJsoncParse().
-                then((jsoncParse) => jsoncParse(content))
-            ),
-          () => fs.promises.access(markdownlintCli2Yaml).
-            then(
-              () => fs.promises.
-                readFile(markdownlintCli2Yaml, utf8).
-                then(yamlParse),
-              importOrRequireConfig(
-                fs,
-                dir,
-                ".markdownlint-cli2.cjs",
-                noRequire,
+      // Load markdownlint-cli2 object(s)
+      const markdownlintCli2Jsonc =
+        path.posix.join(dir, ".markdownlint-cli2.jsonc");
+      const markdownlintCli2Yaml =
+        path.posix.join(dir, ".markdownlint-cli2.yaml");
+      tasks.push(
+        fs.promises.access(markdownlintCli2Jsonc).
+          then(
+            () => fs.promises.
+              readFile(markdownlintCli2Jsonc, utf8).
+              then(
+                (content) => getJsoncParse().
+                  then((jsoncParse) => jsoncParse(content))
+              ),
+            () => fs.promises.access(markdownlintCli2Yaml).
+              then(
+                () => fs.promises.
+                  readFile(markdownlintCli2Yaml, utf8).
+                  then(yamlParse),
                 importOrRequireConfig(
                   fs,
                   dir,
-                  ".markdownlint-cli2.mjs",
+                  ".markdownlint-cli2.cjs",
                   noRequire,
-                  noop
+                  importOrRequireConfig(
+                    fs,
+                    dir,
+                    ".markdownlint-cli2.mjs",
+                    noRequire,
+                    noop
+                  )
                 )
               )
-            )
-        ).
-        then((options) => {
-          dirInfo.markdownlintOptions = options;
-        })
-    );
+          ).
+          then((options) => {
+            dirInfo.markdownlintOptions = options;
+            return options &&
+              options.config &&
+              options.config.extends &&
+              getJsoncParse().
+                then(
+                  (jsoncParse) => markdownlintExtendConfig(
+                    options.config,
+                    // Just needs to identify a file in the right directory
+                    markdownlintCli2Jsonc,
+                    [ jsoncParse, yamlParse ],
+                    fs
+                  )
+                ).
+                then((config) => {
+                  options.config = config;
+                });
+          })
+      );
 
-    // Load markdownlint object(s)
-    const readConfigs =
-      readConfig(
-        fs,
-        dir,
-        ".markdownlint.jsonc",
+      // Load markdownlint object(s)
+      const readConfigs =
         readConfig(
           fs,
           dir,
-          ".markdownlint.json",
+          ".markdownlint.jsonc",
           readConfig(
             fs,
             dir,
-            ".markdownlint.yaml",
+            ".markdownlint.json",
             readConfig(
               fs,
               dir,
-              ".markdownlint.yml",
-              importOrRequireConfig(
+              ".markdownlint.yaml",
+              readConfig(
                 fs,
                 dir,
-                ".markdownlint.cjs",
-                noRequire,
+                ".markdownlint.yml",
                 importOrRequireConfig(
                   fs,
                   dir,
-                  ".markdownlint.mjs",
+                  ".markdownlint.cjs",
                   noRequire,
-                  noop
+                  importOrRequireConfig(
+                    fs,
+                    dir,
+                    ".markdownlint.mjs",
+                    noRequire,
+                    noop
+                  )
                 )
               )
             )
           )
-        )
+        );
+      tasks.push(
+        readConfigs().
+          then((config) => {
+            dirInfo.markdownlintConfig = config;
+          })
       );
-    tasks.push(
-      readConfigs().
-        then((config) => {
-          dirInfo.markdownlintConfig = config;
-        })
-    );
-  }
-  if (func) {
-    func(dirInfo);
-  }
-  return dirInfo;
-};
+    }
+    if (func) {
+      func(dirInfo);
+    }
+    return dirInfo;
+  };
 
 // Get base markdownlint-cli2 options object
 const getBaseOptions = async (
@@ -20731,7 +20623,10 @@ const getBaseOptions = async (
   // eslint-disable-next-line no-multi-assign
   const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions =
     mergeOptions(
-      mergeOptions(options, { "fix": fixDefault }),
+      mergeOptions(
+        { "fix": fixDefault },
+        options
+      ),
       dirToDirInfo[baseDir].markdownlintOptions
     );
 
@@ -20755,81 +20650,81 @@ const getBaseOptions = async (
 
 // Enumerate files from globs and build directory infos
 const enumerateFiles =
-// eslint-disable-next-line max-len
-async (fs, baseDirSystem, baseDir, globPatterns, dirToDirInfo, noErrors, noRequire) => {
-  const tasks = [];
-  const globbyOptions = {
-    "absolute": true,
-    "cwd": baseDir,
-    "dot": true,
-    "expandDirectories": false,
-    fs
-  };
-  if (noErrors) {
-    globbyOptions.suppressErrors = true;
-  }
-  // Special-case literal files
-  const literalFiles = [];
-  const filteredGlobPatterns = globPatterns.filter(
-    (globPattern) => {
-      if (globPattern.startsWith(":")) {
-        literalFiles.push(
-          posixPath(path.resolve(baseDirSystem, globPattern.slice(1)))
-        );
-        return false;
-      }
-      return true;
+  // eslint-disable-next-line max-len
+  async (fs, baseDirSystem, baseDir, globPatterns, dirToDirInfo, noErrors, noRequire) => {
+    const tasks = [];
+    const globbyOptions = {
+      "absolute": true,
+      "cwd": baseDir,
+      "dot": true,
+      "expandDirectories": false,
+      fs
+    };
+    if (noErrors) {
+      globbyOptions.suppressErrors = true;
     }
-  ).map((globPattern) => globPattern.replace(/^\\:/u, ":"));
-  const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions;
-  const globsForIgnore =
-    (baseMarkdownlintOptions.globs || []).
-      filter((glob) => glob.startsWith("!"));
-  const filteredLiteralFiles =
-    ((literalFiles.length > 0) && (globsForIgnore.length > 0))
-      ? removeIgnoredFiles(baseDir, literalFiles, globsForIgnore)
-      : literalFiles;
-  // Manually expand directories to avoid globby call to dir-glob.sync
-  const expandedDirectories = await Promise.all(
-    filteredGlobPatterns.map((globPattern) => {
-      const barePattern =
-        globPattern.startsWith("!")
-          ? globPattern.slice(1)
-          : globPattern;
-      const globPath =
-        (path.posix.isAbsolute(barePattern) || path.isAbsolute(barePattern))
-          ? barePattern
-          : path.posix.join(baseDir, barePattern);
-      return fs.promises.stat(globPath).
-        then((stats) => (stats.isDirectory()
-          ? path.posix.join(globPattern, "**")
-          : globPattern)).
-        catch(() => globPattern);
-    })
-  );
-  // Process glob patterns
-  // eslint-disable-next-line no-inline-comments
-  const { globby } = await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 277));
-  const files = [
-    ...await globby(expandedDirectories, globbyOptions),
-    ...filteredLiteralFiles
-  ];
-  for (const file of files) {
-    const dir = path.posix.dirname(file);
-    getAndProcessDirInfo(
-      fs,
-      tasks,
-      dirToDirInfo,
-      dir,
-      null,
-      noRequire,
-      (dirInfo) => {
-        dirInfo.files.push(file);
+    // Special-case literal files
+    const literalFiles = [];
+    const filteredGlobPatterns = globPatterns.filter(
+      (globPattern) => {
+        if (globPattern.startsWith(":")) {
+          literalFiles.push(
+            posixPath(path.resolve(baseDirSystem, globPattern.slice(1)))
+          );
+          return false;
+        }
+        return true;
       }
+    ).map((globPattern) => globPattern.replace(/^\\:/u, ":"));
+    const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions;
+    const globsForIgnore =
+      (baseMarkdownlintOptions.globs || []).
+        filter((glob) => glob.startsWith("!"));
+    const filteredLiteralFiles =
+      ((literalFiles.length > 0) && (globsForIgnore.length > 0))
+        ? removeIgnoredFiles(baseDir, literalFiles, globsForIgnore)
+        : literalFiles;
+    // Manually expand directories to avoid globby call to dir-glob.sync
+    const expandedDirectories = await Promise.all(
+      filteredGlobPatterns.map((globPattern) => {
+        const barePattern =
+          globPattern.startsWith("!")
+            ? globPattern.slice(1)
+            : globPattern;
+        const globPath =
+          (path.posix.isAbsolute(barePattern) || path.isAbsolute(barePattern))
+            ? barePattern
+            : path.posix.join(baseDir, barePattern);
+        return fs.promises.stat(globPath).
+          then((stats) => (stats.isDirectory()
+            ? path.posix.join(globPattern, "**")
+            : globPattern)).
+          catch(() => globPattern);
+      })
     );
-  }
-  await Promise.all(tasks);
-};
+    // Process glob patterns
+    // eslint-disable-next-line no-inline-comments
+    const { globby } = await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 277));
+    const files = [
+      ...await globby(expandedDirectories, globbyOptions),
+      ...filteredLiteralFiles
+    ];
+    for (const file of files) {
+      const dir = path.posix.dirname(file);
+      getAndProcessDirInfo(
+        fs,
+        tasks,
+        dirToDirInfo,
+        dir,
+        null,
+        noRequire,
+        (dirInfo) => {
+          dirInfo.files.push(file);
+        }
+      );
+    }
+    await Promise.all(tasks);
+  };
 
 // Enumerate (possibly missing) parent directories and update directory infos
 const enumerateParents = async (fs, baseDir, dirToDirInfo, noRequire) => {
@@ -20878,135 +20773,135 @@ const enumerateParents = async (fs, baseDir, dirToDirInfo, noRequire) => {
 
 // Create directory info objects by enumerating file globs
 const createDirInfos =
-// eslint-disable-next-line max-len
-async (fs, baseDirSystem, baseDir, globPatterns, dirToDirInfo, optionsOverride, noErrors, noRequire) => {
-  await enumerateFiles(
-    fs,
-    baseDirSystem,
-    baseDir,
-    globPatterns,
-    dirToDirInfo,
-    noErrors,
-    noRequire
-  );
-  await enumerateParents(
-    fs,
-    baseDir,
-    dirToDirInfo,
-    noRequire
-  );
-
-  // Merge file lists with identical configuration
-  const dirs = Object.keys(dirToDirInfo);
-  dirs.sort((a, b) => b.length - a.length);
-  const dirInfos = [];
-  const noConfigDirInfo =
-    // eslint-disable-next-line unicorn/consistent-function-scoping
-    (dirInfo) => (
-      dirInfo.parent &&
-      !dirInfo.markdownlintConfig &&
-      !dirInfo.markdownlintOptions
+  // eslint-disable-next-line max-len
+  async (fs, baseDirSystem, baseDir, globPatterns, dirToDirInfo, optionsOverride, noErrors, noRequire) => {
+    await enumerateFiles(
+      fs,
+      baseDirSystem,
+      baseDir,
+      globPatterns,
+      dirToDirInfo,
+      noErrors,
+      noRequire
     );
-  const tasks = [];
-  for (const dir of dirs) {
-    const dirInfo = dirToDirInfo[dir];
-    if (noConfigDirInfo(dirInfo)) {
-      if (dirInfo.parent) {
-        appendToArray(dirInfo.parent.files, dirInfo.files);
-      }
-      dirToDirInfo[dir] = null;
-    } else {
-      const { markdownlintOptions, relativeDir } = dirInfo;
-      if (markdownlintOptions && markdownlintOptions.customRules) {
-        tasks.push(
-          importOrRequireIds(
-            relativeDir || dir,
-            markdownlintOptions.customRules,
-            noRequire
-          ).then((customRules) => {
-            // Expand nested arrays (for packages that export multiple rules)
-            markdownlintOptions.customRules = customRules.flat();
-          })
-        );
-      }
-      if (markdownlintOptions && markdownlintOptions.markdownItPlugins) {
-        tasks.push(
-          importOrRequireIdsAndParams(
-            relativeDir || dir,
-            markdownlintOptions.markdownItPlugins,
-            noRequire
-          ).then((markdownItPlugins) => {
-            markdownlintOptions.markdownItPlugins = markdownItPlugins;
-          })
-        );
-      }
-      dirInfos.push(dirInfo);
-    }
-  }
-  await Promise.all(tasks);
-  for (const dirInfo of dirInfos) {
-    while (dirInfo.parent && !dirToDirInfo[dirInfo.parent.dir]) {
-      dirInfo.parent = dirInfo.parent.parent;
-    }
-  }
-
-  // Verify dirInfos is simplified
-  // if (
-  //   dirInfos.filter(
-  //     (di) => di.parent && !dirInfos.includes(di.parent)
-  //   ).length > 0
-  // ) {
-  //   throw new Error("Extra parent");
-  // }
-  // if (
-  //   dirInfos.filter(
-  //     (di) => !di.parent && (di.dir !== baseDir)
-  //   ).length > 0
-  // ) {
-  //   throw new Error("Missing parent");
-  // }
-  // if (
-  //   dirInfos.filter(
-  //     (di) => di.parent &&
-  //       !((di.markdownlintConfig ? 1 : 0) ^ (di.markdownlintOptions ? 1 : 0))
-  //   ).length > 0
-  // ) {
-  //   throw new Error("Missing object");
-  // }
-  // if (dirInfos.filter((di) => di.dir === "/").length > 0) {
-  //   throw new Error("Includes root");
-  // }
-
-  // Merge configuration by inheritance
-  for (const dirInfo of dirInfos) {
-    let markdownlintOptions = dirInfo.markdownlintOptions || {};
-    let { markdownlintConfig } = dirInfo;
-    let parent = dirInfo;
-    // eslint-disable-next-line prefer-destructuring
-    while ((parent = parent.parent)) {
-      if (parent.markdownlintOptions) {
-        markdownlintOptions = mergeOptions(
-          parent.markdownlintOptions,
-          markdownlintOptions
-        );
-      }
-      if (
-        !markdownlintConfig &&
-        parent.markdownlintConfig &&
-        !markdownlintOptions.config
-      ) {
-        // eslint-disable-next-line prefer-destructuring
-        markdownlintConfig = parent.markdownlintConfig;
-      }
-    }
-    dirInfo.markdownlintOptions = mergeOptions(
-      markdownlintOptions,
-      optionsOverride
+    await enumerateParents(
+      fs,
+      baseDir,
+      dirToDirInfo,
+      noRequire
     );
-    dirInfo.markdownlintConfig = markdownlintConfig;
-  }
-  return dirInfos;
-};
+
+    // Merge file lists with identical configuration
+    const dirs = Object.keys(dirToDirInfo);
+    dirs.sort((a, b) => b.length - a.length);
+    const dirInfos = [];
+    const noConfigDirInfo =
+      // eslint-disable-next-line unicorn/consistent-function-scoping
+      (dirInfo) => (
+        dirInfo.parent &&
+        !dirInfo.markdownlintConfig &&
+        !dirInfo.markdownlintOptions
+      );
+    const tasks = [];
+    for (const dir of dirs) {
+      const dirInfo = dirToDirInfo[dir];
+      if (noConfigDirInfo(dirInfo)) {
+        if (dirInfo.parent) {
+          appendToArray(dirInfo.parent.files, dirInfo.files);
+        }
+        dirToDirInfo[dir] = null;
+      } else {
+        const { markdownlintOptions, relativeDir } = dirInfo;
+        if (markdownlintOptions && markdownlintOptions.customRules) {
+          tasks.push(
+            importOrRequireIds(
+              relativeDir || dir,
+              markdownlintOptions.customRules,
+              noRequire
+            ).then((customRules) => {
+              // Expand nested arrays (for packages that export multiple rules)
+              markdownlintOptions.customRules = customRules.flat();
+            })
+          );
+        }
+        if (markdownlintOptions && markdownlintOptions.markdownItPlugins) {
+          tasks.push(
+            importOrRequireIdsAndParams(
+              relativeDir || dir,
+              markdownlintOptions.markdownItPlugins,
+              noRequire
+            ).then((markdownItPlugins) => {
+              markdownlintOptions.markdownItPlugins = markdownItPlugins;
+            })
+          );
+        }
+        dirInfos.push(dirInfo);
+      }
+    }
+    await Promise.all(tasks);
+    for (const dirInfo of dirInfos) {
+      while (dirInfo.parent && !dirToDirInfo[dirInfo.parent.dir]) {
+        dirInfo.parent = dirInfo.parent.parent;
+      }
+    }
+
+    // Verify dirInfos is simplified
+    // if (
+    //   dirInfos.filter(
+    //     (di) => di.parent && !dirInfos.includes(di.parent)
+    //   ).length > 0
+    // ) {
+    //   throw new Error("Extra parent");
+    // }
+    // if (
+    //   dirInfos.filter(
+    //     (di) => !di.parent && (di.dir !== baseDir)
+    //   ).length > 0
+    // ) {
+    //   throw new Error("Missing parent");
+    // }
+    // if (
+    //   dirInfos.filter(
+    //     (di) => di.parent &&
+    //     !((di.markdownlintConfig ? 1 : 0) ^ (di.markdownlintOptions ? 1 : 0))
+    //   ).length > 0
+    // ) {
+    //   throw new Error("Missing object");
+    // }
+    // if (dirInfos.filter((di) => di.dir === "/").length > 0) {
+    //   throw new Error("Includes root");
+    // }
+
+    // Merge configuration by inheritance
+    for (const dirInfo of dirInfos) {
+      let markdownlintOptions = dirInfo.markdownlintOptions || {};
+      let { markdownlintConfig } = dirInfo;
+      let parent = dirInfo;
+      // eslint-disable-next-line prefer-destructuring
+      while ((parent = parent.parent)) {
+        if (parent.markdownlintOptions) {
+          markdownlintOptions = mergeOptions(
+            parent.markdownlintOptions,
+            markdownlintOptions
+          );
+        }
+        if (
+          !markdownlintConfig &&
+          parent.markdownlintConfig &&
+          !markdownlintOptions.config
+        ) {
+          // eslint-disable-next-line prefer-destructuring
+          markdownlintConfig = parent.markdownlintConfig;
+        }
+      }
+      dirInfo.markdownlintOptions = mergeOptions(
+        markdownlintOptions,
+        optionsOverride
+      );
+      dirInfo.markdownlintConfig = markdownlintConfig;
+    }
+    return dirInfos;
+  };
 
 // Lint files in groups by shared configuration
 const lintFiles = async (fs, dirInfos, fileContents) => {
@@ -21403,7 +21298,7 @@ module.exports.fixableRuleNames = [
   "MD044", "MD047", "MD049", "MD050", "MD051", "MD053"
 ];
 module.exports.homepage = "https://github.com/DavidAnson/markdownlint";
-module.exports.version = "0.27.0";
+module.exports.version = "0.28.1";
 
 
 /***/ }),
@@ -21418,7 +21313,8 @@ module.exports.version = "0.27.0";
 
 const path = __nccwpck_require__(9411);
 const { promisify } = __nccwpck_require__(7261);
-const markdownIt = __nccwpck_require__(8561);
+const markdownit = __nccwpck_require__(8561);
+const micromark = __nccwpck_require__(5673);
 const { deprecatedRuleNames } = __nccwpck_require__(983);
 const rules = __nccwpck_require__(1796);
 const helpers = __nccwpck_require__(2935);
@@ -21580,7 +21476,7 @@ function newResults(ruleList) {
  * Remove front matter (if present at beginning of content).
  *
  * @param {string} content Markdown content.
- * @param {RegExp} frontMatter Regular expression to match front matter.
+ * @param {RegExp | null} frontMatter Regular expression to match front matter.
  * @returns {Object} Trimmed content and front matter lines.
  */
 function removeFrontMatter(content, frontMatter) {
@@ -21922,12 +21818,14 @@ function getEnabledRulesPerLineNumber(
  * Lints a string containing Markdown content.
  *
  * @param {Rule[]} ruleList List of rules.
+ * @param {Object.<string, string[]>} aliasToRuleNames Map of alias to rule
+ * names.
  * @param {string} name Identifier for the content.
  * @param {string} content Markdown content.
  * @param {Object} md Instance of markdown-it.
  * @param {Configuration} config Configuration object.
  * @param {ConfigurationParser[] | null} configParsers Configuration parsers.
- * @param {RegExp} frontMatter Regular expression for front matter.
+ * @param {RegExp | null} frontMatter Regular expression for front matter.
  * @param {boolean} handleRuleFailures Whether to handle exceptions in rules.
  * @param {boolean} noInlineConfig Whether to allow inline configuration.
  * @param {number} resultVersion Version of the LintResults object to return.
@@ -21936,6 +21834,7 @@ function getEnabledRulesPerLineNumber(
  */
 function lintContent(
   ruleList,
+  aliasToRuleNames,
   name,
   content,
   md,
@@ -21961,18 +21860,29 @@ function lintContent(
       noInlineConfig,
       config,
       configParsers,
-      mapAliasToRuleNames(ruleList)
+      aliasToRuleNames
     );
-  // Hide the content of HTML comments from rules, etc.
+  // Parse content into parser tokens
+  const markdownitTokens = md.parse(content, {});
+  const micromarkTokens = micromark.parse(content);
+  // Hide the content of HTML comments from rules
   content = helpers.clearHtmlCommentText(content);
-  // Parse content into tokens and lines
-  const tokens = md.parse(content, {});
+  // Parse content into lines and update markdown-it tokens
   const lines = content.split(helpers.newLineRe);
-  annotateAndFreezeTokens(tokens, lines);
+  annotateAndFreezeTokens(markdownitTokens, lines);
   // Create (frozen) parameters for rules
+  const parsers = Object.freeze({
+    "markdownit": Object.freeze({
+      "tokens": markdownitTokens
+    }),
+    "micromark": Object.freeze({
+      "tokens": micromarkTokens
+    })
+  });
   const paramsBase = {
     name,
-    tokens,
+    parsers,
+    "tokens": markdownitTokens,
     "lines": Object.freeze(lines),
     "frontMatterLines": Object.freeze(frontMatterLines)
   };
@@ -21981,11 +21891,11 @@ function lintContent(
   const codeBlockAndSpanRanges =
     helpers.codeBlockAndSpanRanges(paramsBase, lineMetadata);
   const flattenedLists =
-    helpers.flattenLists(paramsBase.tokens);
+    helpers.flattenLists(paramsBase.parsers.markdownit.tokens);
   const htmlElementRanges =
     helpers.htmlElementRanges(paramsBase, lineMetadata);
   const referenceLinkImageData =
-    helpers.getReferenceLinkImageData(lineMetadata);
+    helpers.getReferenceLinkImageData(paramsBase);
   cache.set({
     codeBlockAndSpanRanges,
     flattenedLists,
@@ -22194,11 +22104,13 @@ function lintContent(
  * Lints a file containing Markdown content.
  *
  * @param {Rule[]} ruleList List of rules.
+ * @param {Object.<string, string[]>} aliasToRuleNames Map of alias to rule
+ * names.
  * @param {string} file Path of file to lint.
  * @param {Object} md Instance of markdown-it.
  * @param {Configuration} config Configuration object.
  * @param {ConfigurationParser[] | null} configParsers Configuration parsers.
- * @param {RegExp} frontMatter Regular expression for front matter.
+ * @param {RegExp | null} frontMatter Regular expression for front matter.
  * @param {boolean} handleRuleFailures Whether to handle exceptions in rules.
  * @param {boolean} noInlineConfig Whether to allow inline configuration.
  * @param {number} resultVersion Version of the LintResults object to return.
@@ -22209,6 +22121,7 @@ function lintContent(
  */
 function lintFile(
   ruleList,
+  aliasToRuleNames,
   file,
   md,
   config,
@@ -22227,6 +22140,7 @@ function lintFile(
     }
     return lintContent(
       ruleList,
+      aliasToRuleNames,
       file,
       content,
       md,
@@ -22250,7 +22164,7 @@ function lintFile(
 /**
  * Lint files and strings specified in the Options object.
  *
- * @param {Options} options Options object.
+ * @param {Options | null} options Options object.
  * @param {boolean} synchronous Whether to execute synchronously.
  * @param {Function} callback Callback (err, result) function.
  * @returns {void}
@@ -22282,13 +22196,14 @@ function lintInput(options, synchronous, callback) {
   const noInlineConfig = !!options.noInlineConfig;
   const resultVersion = (options.resultVersion === undefined) ?
     3 : options.resultVersion;
-  const md = markdownIt({ "html": true });
+  const md = markdownit({ "html": true });
   const markdownItPlugins = options.markdownItPlugins || [];
   for (const plugin of markdownItPlugins) {
     // @ts-ignore
     md.use(...plugin);
   }
   const fs = options.fs || __nccwpck_require__(7561);
+  const aliasToRuleNames = mapAliasToRuleNames(ruleList);
   const results = newResults(ruleList);
   let done = false;
   let concurrency = 0;
@@ -22316,6 +22231,7 @@ function lintInput(options, synchronous, callback) {
       currentItem = files.shift();
       lintFile(
         ruleList,
+        aliasToRuleNames,
         currentItem,
         md,
         config,
@@ -22333,6 +22249,7 @@ function lintInput(options, synchronous, callback) {
       concurrency++;
       lintContent(
         ruleList,
+        aliasToRuleNames,
         currentItem,
         strings[currentItem] || "",
         md,
@@ -22373,7 +22290,7 @@ function lintInput(options, synchronous, callback) {
 /**
  * Lint specified Markdown files.
  *
- * @param {Options} options Configuration options.
+ * @param {Options | null} options Configuration options.
  * @param {LintCallback} callback Callback (err, result) function.
  * @returns {void}
  */
@@ -22397,7 +22314,7 @@ function markdownlintPromise(options) {
 /**
  * Lint specified Markdown files synchronously.
  *
- * @param {Options} options Configuration options.
+ * @param {Options | null} options Configuration options.
  * @returns {LintResults} Results object.
  */
 function markdownlintSync(options) {
@@ -22472,6 +22389,63 @@ function resolveConfigExtendsSync(configFile, referenceId, fs) {
 }
 
 /**
+ * Extend specified configuration object.
+ *
+ * @param {Configuration} config Configuration object.
+ * @param {string} file Configuration file name.
+ * @param {ConfigurationParser[]} parsers Parsing
+ * function(s).
+ * @param {Object} fs File system implementation.
+ * @param {ReadConfigCallback} callback Callback (err, result) function.
+ * @returns {void}
+ */
+function extendConfig(config, file, parsers, fs, callback) {
+  const configExtends = config.extends;
+  if (configExtends) {
+    return resolveConfigExtends(
+      file,
+      helpers.expandTildePath(configExtends, __nccwpck_require__(612)),
+      fs,
+      // eslint-disable-next-line no-use-before-define
+      (_, resolvedExtends) => readConfig(
+        // @ts-ignore
+        resolvedExtends,
+        parsers,
+        fs,
+        (err, extendsConfig) => {
+          if (err) {
+            return callback(err);
+          }
+          const result = {
+            ...extendsConfig,
+            ...config
+          };
+          delete result.extends;
+          return callback(null, result);
+        }
+      )
+    );
+  }
+  return callback(null, config);
+}
+
+const extendConfigPromisify = promisify && promisify(extendConfig);
+
+/**
+ * Extend specified configuration object.
+ *
+ * @param {Configuration} config Configuration object.
+ * @param {string} file Configuration file name.
+ * @param {ConfigurationParser[]} [parsers] Parsing function(s).
+ * @param {Object} [fs] File system implementation.
+ * @returns {Promise<Configuration>} Configuration object.
+ */
+function extendConfigPromise(config, file, parsers, fs) {
+  // @ts-ignore
+  return extendConfigPromisify(config, file, parsers, fs);
+}
+
+/**
  * Read specified configuration file.
  *
  * @param {string} file Configuration file name.
@@ -22497,8 +22471,7 @@ function readConfig(file, parsers, fs, callback) {
     fs = __nccwpck_require__(7561);
   }
   // Read file
-  const os = __nccwpck_require__(612);
-  file = helpers.expandTildePath(file, os);
+  file = helpers.expandTildePath(file, __nccwpck_require__(612));
   fs.readFile(file, "utf8", (err, content) => {
     if (err) {
       // @ts-ignore
@@ -22512,34 +22485,8 @@ function readConfig(file, parsers, fs, callback) {
       return callback(new Error(message));
     }
     // Extend configuration
-    const configExtends = config.extends;
-    if (configExtends) {
-      delete config.extends;
-      return resolveConfigExtends(
-        file,
-        helpers.expandTildePath(configExtends, os),
-        fs,
-        (_, resolvedExtends) => readConfig(
-          // @ts-ignore
-          resolvedExtends,
-          parsers,
-          fs,
-          (errr, extendsConfig) => {
-            if (errr) {
-              // @ts-ignore
-              return callback(errr);
-            }
-            // @ts-ignore
-            return callback(null, {
-              ...extendsConfig,
-              ...config
-            });
-          }
-        )
-      );
-    }
     // @ts-ignore
-    return callback(null, config);
+    return extendConfig(config, file, parsers, fs, callback);
   });
 }
 
@@ -22613,6 +22560,7 @@ markdownlint.readConfigSync = readConfigSync;
 markdownlint.getVersion = getVersion;
 markdownlint.promises = {
   "markdownlint": markdownlintPromise,
+  "extendConfig": extendConfigPromise,
   "readConfig": readConfigPromise
 };
 module.exports = markdownlint;
@@ -22709,7 +22657,7 @@ module.exports = markdownlint;
  * @property {ConfigurationParser[]} [configParsers] Configuration parsers.
  * @property {Rule[] | Rule} [customRules] Custom rules.
  * @property {string[] | string} [files] Files to lint.
- * @property {RegExp} [frontMatter] Front matter pattern.
+ * @property {RegExp | null} [frontMatter] Front matter pattern.
  * @property {Object} [fs] File system implementation.
  * @property {boolean} [handleRuleFailures] True to catch exceptions.
  * @property {Plugin[]} [markdownItPlugins] Additional plugins.
@@ -22861,7 +22809,7 @@ module.exports = {
   "function": function MD002(params, onError) {
     const level = Number(params.config.level || 1);
     const tag = "h" + level;
-    params.tokens.every(function forToken(token) {
+    params.parsers.markdownit.tokens.every(function forToken(token) {
       if (token.type === "heading_open") {
         addErrorDetailIf(onError, token.lineNumber, tag, token.tag);
         return false;
@@ -24115,7 +24063,7 @@ module.exports = {
   "function": function MD027(params, onError) {
     let blockquoteNesting = 0;
     let listItemNesting = 0;
-    for (const token of params.tokens) {
+    for (const token of params.parsers.markdownit.tokens) {
       const { content, lineNumber, type } = token;
       if (type === "blockquote_open") {
         blockquoteNesting++;
@@ -24177,7 +24125,7 @@ module.exports = {
   "function": function MD028(params, onError) {
     let prevToken = {};
     let prevLineNumber = null;
-    for (const token of params.tokens) {
+    for (const token of params.parsers.markdownit.tokens) {
       if ((token.type === "blockquote_open") &&
           (prevToken.type === "blockquote_close")) {
         for (
@@ -24445,17 +24393,11 @@ module.exports = {
 
 
 
-const {
-  addError, forEachLine, htmlElementRe, withinAnyRange, unescapeMarkdown
-} = __nccwpck_require__(2935);
-const { codeBlockAndSpanRanges, lineMetadata, referenceLinkImageData } =
-  __nccwpck_require__(2260);
+const { addError } = __nccwpck_require__(2935);
+const { filterByTypes, getHtmlTagInfo, parse } =
+  __nccwpck_require__(5673);
 
-const linkDestinationRe = /\]\(\s*$/;
-// See https://spec.commonmark.org/0.29/#autolinks
-const emailAddressRe =
-  // eslint-disable-next-line max-len
-  /^[\w.!#$%&'*+/=?^`{|}~-]+@[a-zA-Z\d](?:[a-zA-Z\d-]{0,61}[a-zA-Z\d])?(?:\.[a-zA-Z\d](?:[a-zA-Z\d-]{0,61}[a-zA-Z\d])?)*$/;
+const nextLinesRe = /[\r\n][\s\S]*$/;
 
 module.exports = {
   "names": [ "MD033", "no-inline-html" ],
@@ -24465,39 +24407,52 @@ module.exports = {
     let allowedElements = params.config.allowed_elements;
     allowedElements = Array.isArray(allowedElements) ? allowedElements : [];
     allowedElements = allowedElements.map((element) => element.toLowerCase());
-    const exclusions = codeBlockAndSpanRanges();
-    const { references, definitionLineIndices } = referenceLinkImageData();
-    for (const datas of references.values()) {
-      for (const data of datas) {
-        const [ lineIndex, index, , textLength, labelLength ] = data;
-        if (labelLength > 0) {
-          exclusions.push([ lineIndex, index + 3 + textLength, labelLength ]);
+    const pending = [ [ 0, params.parsers.micromark.tokens ] ];
+    let current = null;
+    while ((current = pending.shift())) {
+      const [ offset, tokens ] = current;
+      for (const token of filterByTypes(tokens, [ "htmlFlow", "htmlText" ])) {
+        if (token.type === "htmlText") {
+          const htmlTagInfo = getHtmlTagInfo(token);
+          if (
+            htmlTagInfo &&
+            !htmlTagInfo.close &&
+            !allowedElements.includes(htmlTagInfo.name.toLowerCase())
+          ) {
+            const range = [
+              token.startColumn,
+              token.text.replace(nextLinesRe, "").length
+            ];
+            addError(
+              onError,
+              token.startLine + offset,
+              "Element: " + htmlTagInfo.name,
+              undefined,
+              range
+            );
+          }
+        } else {
+          // token.type === "htmlFlow"
+          // Re-parse without "htmlFlow" to get only "htmlText" tokens
+          const options = {
+            "extensions": [
+              {
+                "disable": {
+                  "null": [ "codeIndented", "htmlFlow" ]
+                }
+              }
+            ]
+          };
+          // Use lines instead of token.text for accurate columns
+          const lines =
+            params.lines.slice(token.startLine - 1, token.endLine).join("\n");
+          const flowTokens = parse(lines, options);
+          pending.push(
+            [ token.startLine - 1, flowTokens ]
+          );
         }
       }
     }
-    forEachLine(lineMetadata(), (line, lineIndex, inCode) => {
-      let match = null;
-      // eslint-disable-next-line no-unmodified-loop-condition
-      while (!inCode && ((match = htmlElementRe.exec(line)) !== null)) {
-        const [ tag, content, element ] = match;
-        if (
-          !allowedElements.includes(element.toLowerCase()) &&
-          !tag.endsWith("\\>") &&
-          !emailAddressRe.test(content) &&
-          !withinAnyRange(exclusions, lineIndex, match.index, tag.length) &&
-          !definitionLineIndices.includes(lineIndex)
-        ) {
-          const prefix = line.substring(0, match.index);
-          if (!linkDestinationRe.test(prefix)) {
-            const unescaped = unescapeMarkdown(prefix + "<", "_");
-            if (!unescaped.endsWith("_")) {
-              addError(onError, lineIndex + 1, "Element: " + element,
-                undefined, [ match.index + 1, tag.length ]);
-            }
-          }
-        }
-      }
-    });
   }
 };
 
@@ -24512,85 +24467,67 @@ module.exports = {
 
 
 
-const { addErrorContext, filterTokens, funcExpExec, urlFe, withinAnyRange } =
-  __nccwpck_require__(2935);
-const { codeBlockAndSpanRanges, htmlElementRanges, referenceLinkImageData } =
-  __nccwpck_require__(2260);
-
-const htmlLinkRe = /<a(?:\s[^>]*)?>[^<>]*<\/a\s*>/gi;
+const { addErrorContext } = __nccwpck_require__(2935);
+const { filterByPredicate, getHtmlTagInfo } =
+  __nccwpck_require__(5673);
 
 module.exports = {
   "names": [ "MD034", "no-bare-urls" ],
   "description": "Bare URL used",
   "tags": [ "links", "url" ],
   "function": function MD034(params, onError) {
-    const { lines } = params;
-    const codeExclusions = [
-      ...codeBlockAndSpanRanges(),
-      ...htmlElementRanges()
-    ];
-    filterTokens(params, "html_block", (token) => {
-      for (let i = token.map[0]; i < token.map[1]; i++) {
-        codeExclusions.push([ i, 0, lines[i].length ]);
-      }
-    });
-    const { definitionLineIndices } = referenceLinkImageData();
-    for (const [ lineIndex, line ] of lines.entries()) {
-      if (definitionLineIndices[0] === lineIndex) {
-        definitionLineIndices.shift();
-      } else {
-        let match = null;
-        const lineExclusions = [];
-        while ((match = htmlLinkRe.exec(line)) !== null) {
-          lineExclusions.push([ lineIndex, match.index, match[0].length ]);
-        }
-        while ((match = funcExpExec(urlFe, line)) !== null) {
-          const [ bareUrl ] = match;
-          // @ts-ignore
-          const matchIndex = match.index;
-          const bareUrlLength = bareUrl.length;
-          const prefix = line.slice(0, matchIndex);
-          const postfix = line.slice(matchIndex + bareUrlLength);
-          if (
-            // Allow <...> to avoid reporting non-bare links
-            !(prefix.endsWith("<") && postfix.startsWith(">")) &&
-            // Allow >...</ to avoid reporting <code>...</code>
-            !(prefix.endsWith(">") && postfix.startsWith("</")) &&
-            // Allow "..." and '...' to allow quoting a bare link
-            !(prefix.endsWith("\"") && postfix.startsWith("\"")) &&
-            !(prefix.endsWith("'") && postfix.startsWith("'")) &&
-            // Allow ](... to avoid reporting Markdown-style links
-            !(/\]\(\s*$/.test(prefix)) &&
-            // Allow [...] to avoid MD011/no-reversed-links and nested links
-            !(/\[[^\]]*$/.test(prefix) && /^[^[]*\]/.test(postfix)) &&
-            !withinAnyRange(
-              lineExclusions, lineIndex, matchIndex, bareUrlLength
-            ) &&
-            !withinAnyRange(
-              codeExclusions, lineIndex, matchIndex, bareUrlLength
-            )
-          ) {
-            const range = [
-              matchIndex + 1,
-              bareUrlLength
-            ];
-            const fixInfo = {
-              "editColumn": range[0],
-              "deleteCount": range[1],
-              "insertText": `<${bareUrl}>`
-            };
-            addErrorContext(
-              onError,
-              lineIndex + 1,
-              bareUrl,
-              null,
-              null,
-              range,
-              fixInfo
-            );
+    const literalAutolinks =
+      filterByPredicate(
+        params.parsers.micromark.tokens,
+        (token) => token.type === "literalAutolink",
+        (token) => {
+          const { children } = token;
+          const result = [];
+          for (let i = 0; i < children.length; i++) {
+            const openToken = children[i];
+            const openTagInfo = getHtmlTagInfo(openToken);
+            if (openTagInfo && !openTagInfo.close) {
+              let count = 1;
+              for (let j = i + 1; j < children.length; j++) {
+                const closeToken = children[j];
+                const closeTagInfo = getHtmlTagInfo(closeToken);
+                if (closeTagInfo && (openTagInfo.name === closeTagInfo.name)) {
+                  if (closeTagInfo.close) {
+                    count--;
+                    if (count === 0) {
+                      i = j;
+                      break;
+                    }
+                  } else {
+                    count++;
+                  }
+                }
+              }
+            } else {
+              result.push(openToken);
+            }
           }
-        }
-      }
+          return result;
+        });
+    for (const token of literalAutolinks) {
+      const range = [
+        token.startColumn,
+        token.endColumn - token.startColumn
+      ];
+      const fixInfo = {
+        "editColumn": range[0],
+        "deleteCount": range[1],
+        "insertText": `<${token.text}>`
+      };
+      addErrorContext(
+        onError,
+        token.startLine,
+        token.text,
+        null,
+        null,
+        range,
+        fixInfo
+      );
     }
   }
 };
@@ -24606,7 +24543,8 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, filterTokens } = __nccwpck_require__(2935);
+const { addErrorDetailIf } = __nccwpck_require__(2935);
+const { filterByTypes } = __nccwpck_require__(5673);
 
 module.exports = {
   "names": [ "MD035", "hr-style" ],
@@ -24614,18 +24552,15 @@ module.exports = {
   "tags": [ "hr" ],
   "function": function MD035(params, onError) {
     let style = String(params.config.style || "consistent").trim();
-    filterTokens(params, "hr", (token) => {
-      const { line, lineNumber } = token;
-      let { markup } = token;
-      const match = line.match(/[_*\-\s]+$/);
-      if (match) {
-        markup = match[0].trim();
-      }
+    const thematicBreaks =
+      filterByTypes(params.parsers.micromark.tokens, [ "thematicBreak" ]);
+    for (const token of thematicBreaks) {
+      const { startLine, text } = token;
       if (style === "consistent") {
-        style = markup;
+        style = text;
       }
-      addErrorDetailIf(onError, lineNumber, style, markup);
-    });
+      addErrorDetailIf(onError, startLine, style, text);
+    }
   }
 };
 
@@ -24687,7 +24622,7 @@ module.exports = {
       return base;
     }
     let state = base;
-    for (const token of params.tokens) {
+    for (const token of params.parsers.markdownit.tokens) {
       state = state(token);
     }
   }
@@ -24893,71 +24828,96 @@ module.exports = {
 
 
 
-const { addErrorContext, filterTokens, forEachInlineCodeSpan, newLineRe } =
-  __nccwpck_require__(2935);
+const { addErrorContext } = __nccwpck_require__(2935);
+const { filterByTypes } = __nccwpck_require__(5673);
 
 const leftSpaceRe = /^\s(?:[^`]|$)/;
 const rightSpaceRe = /[^`]\s$/;
-
-const spaceInsideCodeInline = (token) => (
-  (token.type === "code_inline") &&
-  (leftSpaceRe.test(token.content) || rightSpaceRe.test(token.content))
-);
+const trimCodeText = (text, start, end) => {
+  text = text.replace(/^\s+$/, "");
+  if (start) {
+    text = text.replace(/^\s+?(\s`|\S)/, "$1");
+  }
+  if (end) {
+    text = text.replace(/(`\s|\S)\s+$/, "$1");
+  }
+  return text;
+};
+const tokenIfType = (token, type) => token && (token.type === type) && token;
 
 module.exports = {
   "names": [ "MD038", "no-space-in-code" ],
   "description": "Spaces inside code span elements",
   "tags": [ "whitespace", "code" ],
   "function": function MD038(params, onError) {
-    filterTokens(params, "inline", (token) => {
-      if (token.children.some(spaceInsideCodeInline)) {
-        const tokenLines = params.lines.slice(token.map[0], token.map[1]);
-        forEachInlineCodeSpan(
-          tokenLines.join("\n"),
-          (code, lineIndex, columnIndex, tickCount) => {
-            let rangeIndex = columnIndex - tickCount;
-            let rangeLength = code.length + (2 * tickCount);
-            let rangeLineOffset = 0;
-            let fixIndex = columnIndex;
-            let fixLength = code.length;
-            const codeLines = code.split(newLineRe);
-            const left = leftSpaceRe.test(code);
-            const right = !left && rightSpaceRe.test(code);
-            if (right && (codeLines.length > 1)) {
-              rangeIndex = 0;
-              rangeLineOffset = codeLines.length - 1;
-              fixIndex = 0;
-            }
-            if (left || right) {
-              const codeLinesRange = codeLines[rangeLineOffset];
-              if (codeLines.length > 1) {
-                rangeLength = codeLinesRange.length + tickCount;
-                fixLength = codeLinesRange.length;
-              }
-              const context = tokenLines[lineIndex + rangeLineOffset]
-                .substring(rangeIndex, rangeIndex + rangeLength);
-              const codeLinesRangeTrim = codeLinesRange.trim();
-              const fixText =
-                (codeLinesRangeTrim.startsWith("`") ? " " : "") +
-                codeLinesRangeTrim +
-                (codeLinesRangeTrim.endsWith("`") ? " " : "");
-              addErrorContext(
-                onError,
-                token.lineNumber + lineIndex + rangeLineOffset,
-                context,
-                left,
-                right,
-                [ rangeIndex + 1, rangeLength ],
-                {
-                  "editColumn": fixIndex + 1,
-                  "deleteCount": fixLength,
-                  "insertText": fixText
-                }
-              );
-            }
-          });
+    const codeTextTokens =
+      filterByTypes(params.parsers.micromark.tokens, [ "codeText" ]);
+    for (const token of codeTextTokens) {
+      const { children } = token;
+      const first = 0;
+      const last = children.length - 1;
+      const startSequence = tokenIfType(children[first], "codeTextSequence");
+      const endSequence = tokenIfType(children[last], "codeTextSequence");
+      const startData =
+        tokenIfType(children[first + 1], "codeTextData") ||
+        tokenIfType(children[first + 2], "codeTextData");
+      const endData =
+        tokenIfType(children[last - 1], "codeTextData") ||
+        tokenIfType(children[last - 2], "codeTextData");
+      if (startSequence && endSequence && startData && endData) {
+        const spaceLeft = leftSpaceRe.test(startData.text);
+        const spaceRight = !spaceLeft && rightSpaceRe.test(endData.text);
+        if (spaceLeft || spaceRight) {
+          let lineNumber = startSequence.startLine;
+          let range = null;
+          let fixInfo = null;
+          if (startSequence.startLine === endSequence.endLine) {
+            range = [
+              startSequence.startColumn,
+              endSequence.endColumn - startSequence.startColumn
+            ];
+            fixInfo = {
+              "editColumn": startSequence.endColumn,
+              "deleteCount": endSequence.startColumn - startSequence.endColumn,
+              "insertText": trimCodeText(startData.text, true, true)
+            };
+          } else if (spaceLeft) {
+            range = [
+              startSequence.startColumn,
+              startData.endColumn - startSequence.startColumn
+            ];
+            fixInfo = {
+              "editColumn": startSequence.endColumn,
+              "deleteCount": startData.endColumn - startData.startColumn,
+              "insertText": trimCodeText(startData.text, true, false)
+            };
+          } else {
+            lineNumber = endSequence.endLine;
+            range = [
+              endData.startColumn,
+              endSequence.endColumn - endData.startColumn
+            ];
+            fixInfo = {
+              "editColumn": endData.startColumn,
+              "deleteCount": endData.endColumn - endData.startColumn,
+              "insertText": trimCodeText(endData.text, false, true)
+            };
+          }
+          const context = params
+            .lines[lineNumber - 1]
+            .substring(range[0] - 1, range[0] - 1 + range[1]);
+          addErrorContext(
+            onError,
+            lineNumber,
+            context,
+            spaceLeft,
+            spaceRight,
+            range,
+            fixInfo
+          );
+        }
       }
-    });
+    }
   }
 };
 
@@ -25108,7 +25068,7 @@ module.exports = {
       );
     if (!foundFrontMatterTitle) {
       const htmlHeadingRe = new RegExp(`^<h${level}[ />]`, "i");
-      params.tokens.every((token) => {
+      params.parsers.markdownit.tokens.every((token) => {
         let isError = false;
         if (token.type === "html_block") {
           if (token.content.startsWith("<!--")) {
@@ -25269,11 +25229,14 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, escapeForRegExp, forEachLine, forEachLink,
-  funcExpExec, linkReferenceDefinitionRe, urlFe, withinAnyRange } =
+const { addErrorDetailIf, escapeForRegExp, withinAnyRange } =
   __nccwpck_require__(2935);
-const { codeBlockAndSpanRanges, htmlElementRanges, lineMetadata } =
-  __nccwpck_require__(2260);
+const { filterByPredicate, filterByTypes, parse } =
+  __nccwpck_require__(5673);
+
+const ignoredChildTypes = new Set(
+  [ "codeFencedFence", "definition", "reference", "resource" ]
+);
 
 module.exports = {
   "names": [ "MD044", "proper-names" ],
@@ -25289,31 +25252,25 @@ module.exports = {
     const htmlElements = params.config.html_elements;
     const includeHtmlElements =
       (htmlElements === undefined) ? true : !!htmlElements;
-    const exclusions = [];
-    forEachLine(lineMetadata(), (line, lineIndex) => {
-      if (linkReferenceDefinitionRe.test(line)) {
-        exclusions.push([ lineIndex, 0, line.length ]);
-      } else {
-        let match = null;
-        while ((match = funcExpExec(urlFe, line)) !== null) {
-          // @ts-ignore
-          exclusions.push([ lineIndex, match.index, match[0].length ]);
-        }
-        forEachLink(line, (index, _, text, destination) => {
-          if (destination) {
-            exclusions.push(
-              [ lineIndex, index + text.length, destination.length ]
-            );
+    const scannedTypes = new Set([ "data", "htmlFlowData" ]);
+    if (includeCodeBlocks) {
+      scannedTypes.add("codeFlowValue");
+      scannedTypes.add("codeTextData");
+    }
+    const contentTokens =
+      filterByPredicate(
+        params.parsers.micromark.tokens,
+        (token) => scannedTypes.has(token.type),
+        (token) => {
+          let { children } = token;
+          if (!includeHtmlElements && (token.type === "htmlFlow")) {
+            children = children.slice(1, -1);
           }
-        });
-      }
-    });
-    if (!includeCodeBlocks) {
-      exclusions.push(...codeBlockAndSpanRanges());
-    }
-    if (!includeHtmlElements) {
-      exclusions.push(...htmlElementRanges());
-    }
+          return children.filter((t) => !ignoredChildTypes.has(t.type));
+        }
+      );
+    const exclusions = [];
+    const autoLinked = new Set();
     for (const name of names) {
       const escapedName = escapeForRegExp(name);
       const startNamePattern = /^\W/.test(name) ? "" : "\\b_*";
@@ -25321,36 +25278,53 @@ module.exports = {
       const namePattern =
         `(${startNamePattern})(${escapedName})${endNamePattern}`;
       const nameRe = new RegExp(namePattern, "gi");
-      forEachLine(lineMetadata(), (line, lineIndex, inCode, onFence) => {
-        if (includeCodeBlocks || (!inCode && !onFence)) {
-          let match = null;
-          while ((match = nameRe.exec(line)) !== null) {
-            const [ , leftMatch, nameMatch ] = match;
-            const index = match.index + leftMatch.length;
-            const length = nameMatch.length;
-            if (
-              !withinAnyRange(exclusions, lineIndex, index, length) &&
-              !names.includes(nameMatch)
-            ) {
+      for (const token of contentTokens) {
+        let match = null;
+        while ((match = nameRe.exec(token.text)) !== null) {
+          const [ , leftMatch, nameMatch ] = match;
+          const index = token.startColumn - 1 + match.index + leftMatch.length;
+          const length = nameMatch.length;
+          const lineIndex = token.startLine - 1;
+          if (
+            !withinAnyRange(exclusions, lineIndex, index, length) &&
+            !names.includes(nameMatch)
+          ) {
+            let urlRanges = [];
+            if (!autoLinked.has(token)) {
+              urlRanges = filterByTypes(
+                parse(token.text),
+                [ "literalAutolink" ]
+              ).map(
+                (t) => [
+                  lineIndex,
+                  token.startColumn - 1 + t.startColumn - 1,
+                  t.endColumn - t.startColumn
+                ]
+              );
+              exclusions.push(...urlRanges);
+              autoLinked.add(token);
+            }
+            if (!withinAnyRange(urlRanges, lineIndex, index, length)) {
+              const column = index + 1;
               addErrorDetailIf(
                 onError,
-                lineIndex + 1,
+                token.startLine,
                 name,
                 nameMatch,
                 null,
                 null,
-                [ index + 1, length ],
+                [ column, length ],
                 {
-                  "editColumn": index + 1,
+                  "editColumn": column,
                   "deleteCount": length,
                   "insertText": name
                 }
               );
             }
-            exclusions.push([ lineIndex, index, length ]);
           }
+          exclusions.push([ lineIndex, index, length ]);
         }
-      });
+      }
     }
   }
 };
@@ -25405,7 +25379,7 @@ module.exports = {
   "tags": [ "code" ],
   "function": function MD046(params, onError) {
     let expectedStyle = String(params.config.style || "consistent");
-    const codeBlocksAndFences = params.tokens.filter(
+    const codeBlocksAndFences = params.parsers.markdownit.tokens.filter(
       (token) => (token.type === "code_block") || (token.type === "fence")
     );
     for (const token of codeBlocksAndFences) {
@@ -25478,7 +25452,9 @@ module.exports = {
   "function": function MD048(params, onError) {
     const style = String(params.config.style || "consistent");
     let expectedStyle = style;
-    const fenceTokens = params.tokens.filter((token) => token.type === "fence");
+    const fenceTokens = params.parsers.markdownit.tokens.filter(
+      (token) => token.type === "fence"
+    );
     for (const fenceToken of fenceTokens) {
       const { lineNumber, markup } = fenceToken;
       if (expectedStyle === "consistent") {
@@ -34216,6 +34192,230 @@ exports.visitAsync = visitAsync;
 
 /***/ }),
 
+/***/ 4117:
+/***/ ((__unused_webpack_module, exports) => {
+
+(()=>{"use strict";var e={d:(t,n)=>{for(var r in n)e.o(n,r)&&!e.o(t,r)&&Object.defineProperty(t,r,{enumerable:!0,get:n[r]})},o:(e,t)=>Object.prototype.hasOwnProperty.call(e,t),r:e=>{"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})}},t={};e.r(t),e.d(t,{gfmAutolinkLiteral:()=>F,gfmFootnote:()=>P,gfmTable:()=>G,parse:()=>ct,postprocess:()=>at,preprocess:()=>st});var n={};e.r(n),e.d(n,{attentionMarkers:()=>ot,contentInitial:()=>$e,disable:()=>ut,document:()=>Xe,flow:()=>tt,flowInitial:()=>et,insideSpan:()=>it,string:()=>nt,text:()=>rt});const r=g(/[A-Za-z]/),i=g(/\d/),o=g(/[\dA-Fa-f]/),u=g(/[\dA-Za-z]/),c=g(/[!-/:-@[-`{-~]/),a=g(/[#-'*+\--9=?A-Z^-~]/);function l(e){return null!==e&&(e<32||127===e)}function s(e){return null!==e&&(e<0||32===e)}function f(e){return null!==e&&e<-2}function p(e){return-2===e||-1===e||32===e}const d=g(/\s/),m=g(/[!-/:-@[-`{-~\u00A1\u00A7\u00AB\u00B6\u00B7\u00BB\u00BF\u037E\u0387\u055A-\u055F\u0589\u058A\u05BE\u05C0\u05C3\u05C6\u05F3\u05F4\u0609\u060A\u060C\u060D\u061B\u061E\u061F\u066A-\u066D\u06D4\u0700-\u070D\u07F7-\u07F9\u0830-\u083E\u085E\u0964\u0965\u0970\u09FD\u0A76\u0AF0\u0C77\u0C84\u0DF4\u0E4F\u0E5A\u0E5B\u0F04-\u0F12\u0F14\u0F3A-\u0F3D\u0F85\u0FD0-\u0FD4\u0FD9\u0FDA\u104A-\u104F\u10FB\u1360-\u1368\u1400\u166E\u169B\u169C\u16EB-\u16ED\u1735\u1736\u17D4-\u17D6\u17D8-\u17DA\u1800-\u180A\u1944\u1945\u1A1E\u1A1F\u1AA0-\u1AA6\u1AA8-\u1AAD\u1B5A-\u1B60\u1BFC-\u1BFF\u1C3B-\u1C3F\u1C7E\u1C7F\u1CC0-\u1CC7\u1CD3\u2010-\u2027\u2030-\u2043\u2045-\u2051\u2053-\u205E\u207D\u207E\u208D\u208E\u2308-\u230B\u2329\u232A\u2768-\u2775\u27C5\u27C6\u27E6-\u27EF\u2983-\u2998\u29D8-\u29DB\u29FC\u29FD\u2CF9-\u2CFC\u2CFE\u2CFF\u2D70\u2E00-\u2E2E\u2E30-\u2E4F\u2E52\u3001-\u3003\u3008-\u3011\u3014-\u301F\u3030\u303D\u30A0\u30FB\uA4FE\uA4FF\uA60D-\uA60F\uA673\uA67E\uA6F2-\uA6F7\uA874-\uA877\uA8CE\uA8CF\uA8F8-\uA8FA\uA8FC\uA92E\uA92F\uA95F\uA9C1-\uA9CD\uA9DE\uA9DF\uAA5C-\uAA5F\uAADE\uAADF\uAAF0\uAAF1\uABEB\uFD3E\uFD3F\uFE10-\uFE19\uFE30-\uFE52\uFE54-\uFE61\uFE63\uFE68\uFE6A\uFE6B\uFF01-\uFF03\uFF05-\uFF0A\uFF0C-\uFF0F\uFF1A\uFF1B\uFF1F\uFF20\uFF3B-\uFF3D\uFF3F\uFF5B\uFF5D\uFF5F-\uFF65]/);function g(e){return function(t){return null!==t&&e.test(String.fromCharCode(t))}}const h={tokenize:function(e,t,n){return function(t){return e.consume(t),r};function r(t){return 87===t||119===t?(e.consume(t),i):n(t)}function i(t){return 87===t||119===t?(e.consume(t),o):n(t)}function o(t){return 46===t?(e.consume(t),u):n(t)}function u(e){return null===e||f(e)?n(e):t(e)}},partial:!0},b={tokenize:function(e,t,n){let r,i;return o;function o(t){return 38===t?e.check(v,c,u)(t):46===t||95===t?e.check(k,c,u)(t):null===t||l(t)||d(t)||45!==t&&m(t)?c(t):(e.consume(t),o)}function u(t){return 46===t?(i=r,r=void 0,e.consume(t),o):(95===t&&(r=!0),e.consume(t),o)}function c(e){return i||r?n(e):t(e)}},partial:!0},x={tokenize:function(e,t){let n=0;return r;function r(u){return 38===u?e.check(v,t,i)(u):(40===u&&n++,41===u?e.check(k,o,i)(u):D(u)?t(u):A(u)?e.check(k,t,i)(u):(e.consume(u),r))}function i(t){return e.consume(t),r}function o(e){return n--,n<0?t(e):i(e)}},partial:!0},k={tokenize:function(e,t,n){return function(t){return e.consume(t),r};function r(i){return A(i)?(e.consume(i),r):D(i)?t(i):n(i)}},partial:!0},v={tokenize:function(e,t,n){return function(t){return e.consume(t),i};function i(t){return r(t)?(e.consume(t),i):59===t?(e.consume(t),o):n(t)}function o(e){return D(e)?t(e):n(e)}},partial:!0},y={tokenize:function(e,t,n){const r=this;return function(t){return 87!==t&&119!==t||!L(r.previous)||I(r.events)?n(t):(e.enter("literalAutolink"),e.enter("literalAutolinkWww"),e.check(h,e.attempt(b,e.attempt(x,i),n),n)(t))};function i(n){return e.exit("literalAutolinkWww"),e.exit("literalAutolink"),t(n)}},previous:L},w={tokenize:function(e,t,n){const r=this;return function(t){return 72!==t&&104!==t||!T(r.previous)||I(r.events)?n(t):(e.enter("literalAutolink"),e.enter("literalAutolinkHttp"),e.consume(t),i)};function i(t){return 84===t||116===t?(e.consume(t),o):n(t)}function o(t){return 84===t||116===t?(e.consume(t),u):n(t)}function u(t){return 80===t||112===t?(e.consume(t),c):n(t)}function c(t){return 83===t||115===t?(e.consume(t),a):a(t)}function a(t){return 58===t?(e.consume(t),s):n(t)}function s(t){return 47===t?(e.consume(t),f):n(t)}function f(t){return 47===t?(e.consume(t),p):n(t)}function p(t){return null===t||l(t)||d(t)||m(t)?n(t):e.attempt(b,e.attempt(x,g),n)(t)}function g(n){return e.exit("literalAutolinkHttp"),e.exit("literalAutolink"),t(n)}},previous:T},q={tokenize:function(e,t,n){const r=this;let o,c;return function(t){return C(t)&&z(r.previous)&&!I(r.events)?(e.enter("literalAutolink"),e.enter("literalAutolinkEmail"),a(t)):n(t)};function a(t){return C(t)?(e.consume(t),a):64===t?(e.consume(t),l):n(t)}function l(t){return 46===t?e.check(k,d,s)(t):45===t||95===t?e.check(k,n,f)(t):u(t)?(!c&&i(t)&&(c=!0),e.consume(t),l):d(t)}function s(t){return e.consume(t),o=!0,c=void 0,l}function f(t){return e.consume(t),p}function p(t){return 46===t?e.check(k,n,s)(t):l(t)}function d(r){return o&&!c?(e.exit("literalAutolinkEmail"),e.exit("literalAutolink"),t(r)):n(r)}},previous:z},S={},F={text:S};let E=48;for(;E<123;)S[E]=q,E++,58===E?E=65:91===E&&(E=97);function A(e){return 33===e||34===e||39===e||41===e||42===e||44===e||46===e||58===e||59===e||60===e||63===e||95===e||126===e}function D(e){return null===e||60===e||s(e)}function C(e){return 43===e||45===e||46===e||95===e||u(e)}function L(e){return null===e||40===e||42===e||95===e||126===e||s(e)}function T(e){return null===e||!r(e)}function z(e){return 47!==e&&T(e)}function I(e){let t=e.length,n=!1;for(;t--;){const r=e[t][1];if(("labelLink"===r.type||"labelImage"===r.type)&&!r._balanced){n=!0;break}if(r._gfmAutolinkLiteralWalkedInto){n=!1;break}}return e.length>0&&!n&&(e[e.length-1][1]._gfmAutolinkLiteralWalkedInto=!0),n}function B(e,t,n,r){const i=r?r-1:Number.POSITIVE_INFINITY;let o=0;return function(r){return p(r)?(e.enter(n),u(r)):t(r)};function u(r){return p(r)&&o++<i?(e.consume(r),u):(e.exit(n),t(r))}}S[43]=q,S[45]=q,S[46]=q,S[95]=q,S[72]=[q,w],S[104]=[q,w],S[87]=[q,y],S[119]=[q,y];const R={tokenize:function(e,t,n){return B(e,(function(e){return null===e||f(e)?t(e):n(e)}),"linePrefix")},partial:!0};function M(e){return e.replace(/[\t\n\r ]+/g," ").replace(/^ | $/g,"").toLowerCase().toUpperCase()}const N={tokenize:function(e,t,n){const r=this;return B(e,(function(e){const i=r.events[r.events.length-1];return i&&"gfmFootnoteDefinitionIndent"===i[1].type&&4===i[2].sliceSerialize(i[1],!0).length?t(e):n(e)}),"gfmFootnoteDefinitionIndent",5)},partial:!0};function P(){return{document:{91:{tokenize:H,continuation:{tokenize:j},exit:U}},text:{91:{tokenize:V},93:{add:"after",tokenize:O,resolveTo:_}}}}function O(e,t,n){const r=this;let i=r.events.length;const o=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let u;for(;i--;){const e=r.events[i][1];if("labelImage"===e.type){u=e;break}if("gfmFootnoteCall"===e.type||"labelLink"===e.type||"label"===e.type||"image"===e.type||"link"===e.type)break}return function(i){if(!u||!u._balanced)return n(i);const c=M(r.sliceSerialize({start:u.end,end:r.now()}));return 94===c.charCodeAt(0)&&o.includes(c.slice(1))?(e.enter("gfmFootnoteCallLabelMarker"),e.consume(i),e.exit("gfmFootnoteCallLabelMarker"),t(i)):n(i)}}function _(e,t){let n,r=e.length;for(;r--;)if("labelImage"===e[r][1].type&&"enter"===e[r][0]){n=e[r][1];break}e[r+1][1].type="data",e[r+3][1].type="gfmFootnoteCallLabelMarker";const i={type:"gfmFootnoteCall",start:Object.assign({},e[r+3][1].start),end:Object.assign({},e[e.length-1][1].end)},o={type:"gfmFootnoteCallMarker",start:Object.assign({},e[r+3][1].end),end:Object.assign({},e[r+3][1].end)};o.end.column++,o.end.offset++,o.end._bufferIndex++;const u={type:"gfmFootnoteCallString",start:Object.assign({},o.end),end:Object.assign({},e[e.length-1][1].start)},c={type:"chunkString",contentType:"string",start:Object.assign({},u.start),end:Object.assign({},u.end)},a=[e[r+1],e[r+2],["enter",i,t],e[r+3],e[r+4],["enter",o,t],["exit",o,t],["enter",u,t],["enter",c,t],["exit",c,t],["exit",u,t],e[e.length-2],e[e.length-1],["exit",i,t]];return e.splice(r,e.length-r+1,...a),e}function V(e,t,n){const r=this,i=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let o,u=0;return function(t){return e.enter("gfmFootnoteCall"),e.enter("gfmFootnoteCallLabelMarker"),e.consume(t),e.exit("gfmFootnoteCallLabelMarker"),c};function c(t){return 94!==t?n(t):(e.enter("gfmFootnoteCallMarker"),e.consume(t),e.exit("gfmFootnoteCallMarker"),e.enter("gfmFootnoteCallString"),e.enter("chunkString").contentType="string",a)}function a(c){let f;return null===c||91===c||u++>999?n(c):93===c?o?(e.exit("chunkString"),f=e.exit("gfmFootnoteCallString"),i.includes(M(r.sliceSerialize(f)))?function(n){return e.enter("gfmFootnoteCallLabelMarker"),e.consume(n),e.exit("gfmFootnoteCallLabelMarker"),e.exit("gfmFootnoteCall"),t}(c):n(c)):n(c):(e.consume(c),s(c)||(o=!0),92===c?l:a)}function l(t){return 91===t||92===t||93===t?(e.consume(t),u++,a):a(t)}}function H(e,t,n){const r=this,i=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let o,u,c=0;return function(t){return e.enter("gfmFootnoteDefinition")._container=!0,e.enter("gfmFootnoteDefinitionLabel"),e.enter("gfmFootnoteDefinitionLabelMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionLabelMarker"),a};function a(t){return 94===t?(e.enter("gfmFootnoteDefinitionMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionMarker"),e.enter("gfmFootnoteDefinitionLabelString"),l):n(t)}function l(t){let i;return null===t||91===t||c>999?n(t):93===t?u?(i=e.exit("gfmFootnoteDefinitionLabelString"),o=M(r.sliceSerialize(i)),e.enter("gfmFootnoteDefinitionLabelMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionLabelMarker"),e.exit("gfmFootnoteDefinitionLabel"),m):n(t):f(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),c++,l):(e.enter("chunkString").contentType="string",p(t))}function p(t){return null===t||f(t)||91===t||93===t||c>999?(e.exit("chunkString"),l(t)):(s(t)||(u=!0),c++,e.consume(t),92===t?d:p)}function d(t){return 91===t||92===t||93===t?(e.consume(t),c++,p):p(t)}function m(t){return 58===t?(e.enter("definitionMarker"),e.consume(t),e.exit("definitionMarker"),B(e,g,"gfmFootnoteDefinitionWhitespace")):n(t)}function g(e){return i.includes(o)||i.push(o),t(e)}}function j(e,t,n){return e.check(R,t,e.attempt(N,t,n))}function U(e){e.exit("gfmFootnoteDefinition")}const G={flow:{null:{tokenize:function(e,t,n){const r=this,i=[];let o,u,c=0;return function(t){return e.enter("table")._align=i,e.enter("tableHead"),e.enter("tableRow"),124===t?a(t):(c++,e.enter("temporaryTableCellContent"),m(t))};function a(t){return e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),o=!0,l}function l(t){return null===t||f(t)?function(t){if(null===t)return n(t);e.exit("tableRow"),e.exit("tableHead");const i=r.interrupt;return r.interrupt=!0,e.attempt({tokenize:T,partial:!0},(function(t){return r.interrupt=i,e.enter("tableDelimiterRow"),h(t)}),(function(e){return r.interrupt=i,n(e)}))(t)}(t):p(t)?(e.enter("whitespace"),e.consume(t),d):(o&&(o=void 0,c++),124===t?a(t):(e.enter("temporaryTableCellContent"),m(t)))}function d(t){return p(t)?(e.consume(t),d):(e.exit("whitespace"),l(t))}function m(t){return null===t||124===t||s(t)?(e.exit("temporaryTableCellContent"),l(t)):(e.consume(t),92===t?g:m)}function g(t){return 92===t||124===t?(e.consume(t),m):m(t)}function h(t){return null===t||f(t)?y(t):p(t)?(e.enter("whitespace"),e.consume(t),b):45===t?(e.enter("tableDelimiterFiller"),e.consume(t),u=!0,i.push("none"),x):58===t?(e.enter("tableDelimiterAlignment"),e.consume(t),e.exit("tableDelimiterAlignment"),i.push("left"),k):124===t?(e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),h):n(t)}function b(t){return p(t)?(e.consume(t),b):(e.exit("whitespace"),h(t))}function x(t){return 45===t?(e.consume(t),x):(e.exit("tableDelimiterFiller"),58===t?(e.enter("tableDelimiterAlignment"),e.consume(t),e.exit("tableDelimiterAlignment"),i[i.length-1]="left"===i[i.length-1]?"center":"right",v):h(t))}function k(t){return 45===t?(e.enter("tableDelimiterFiller"),e.consume(t),u=!0,x):n(t)}function v(t){return null===t||f(t)?y(t):p(t)?(e.enter("whitespace"),e.consume(t),b):124===t?(e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),h):n(t)}function y(t){return e.exit("tableDelimiterRow"),u&&c===i.length?null===t?w(t):e.check(Q,w,e.attempt({tokenize:T,partial:!0},B(e,q,"linePrefix",4),w))(t):n(t)}function w(n){return e.exit("table"),t(n)}function q(t){return e.enter("tableBody"),S(t)}function S(t){return e.enter("tableRow"),124===t?F(t):(e.enter("temporaryTableCellContent"),D(t))}function F(t){return e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),E}function E(t){return null===t||f(t)?function(t){return e.exit("tableRow"),null===t?L(t):e.check(Q,L,e.attempt({tokenize:T,partial:!0},B(e,S,"linePrefix",4),L))(t)}(t):p(t)?(e.enter("whitespace"),e.consume(t),A):124===t?F(t):(e.enter("temporaryTableCellContent"),D(t))}function A(t){return p(t)?(e.consume(t),A):(e.exit("whitespace"),E(t))}function D(t){return null===t||124===t||s(t)?(e.exit("temporaryTableCellContent"),E(t)):(e.consume(t),92===t?C:D)}function C(t){return 92===t||124===t?(e.consume(t),D):D(t)}function L(t){return e.exit("tableBody"),w(t)}function T(e,t,n){return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),B(e,i,"linePrefix")};function i(i){if(r.parser.lazy[r.now().line]||null===i||f(i))return n(i);const o=r.events[r.events.length-1];return!r.parser.constructs.disable.null.includes("codeIndented")&&o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?n(i):(r._gfmTableDynamicInterruptHack=!0,e.check(r.parser.constructs.flow,(function(e){return r._gfmTableDynamicInterruptHack=!1,n(e)}),(function(e){return r._gfmTableDynamicInterruptHack=!1,t(e)}))(i))}}},resolve:function(e,t){let n,r,i,o,u,c,a,l=-1;for(;++l<e.length;){const s=e[l][1];if(i&&("temporaryTableCellContent"===s.type&&(o=o||l,u=l),("tableCellDivider"===s.type||"tableRow"===s.type)&&u)){const n={type:"tableContent",start:e[o][1].start,end:e[u][1].end},r={type:"chunkText",start:n.start,end:n.end,contentType:"text"};e.splice(o,u-o+1,["enter",n,t],["enter",r,t],["exit",r,t],["exit",n,t]),l-=u-o-3,o=void 0,u=void 0}if("exit"===e[l][0]&&void 0!==c&&c+(a?0:1)<l&&("tableCellDivider"===s.type||"tableRow"===s.type&&(c+3<l||"whitespace"!==e[c][1].type))){const i={type:r?"tableDelimiter":n?"tableHeader":"tableData",start:e[c][1].start,end:e[l][1].end};e.splice(l+("tableCellDivider"===s.type?1:0),0,["exit",i,t]),e.splice(c,0,["enter",i,t]),l+=2,c=l+1,a=!0}"tableRow"===s.type&&(i="enter"===e[l][0],i&&(c=l+1,a=!1)),"tableDelimiterRow"===s.type&&(r="enter"===e[l][0],r&&(c=l+1,a=!1)),"tableHead"===s.type&&(n="enter"===e[l][0])}return e}}}},Q={tokenize:function(e,t,n){let r=0;return function(t){return e.enter("check"),e.consume(t),i};function i(o){return-1===o||32===o?(e.consume(o),r++,4===r?t:i):null===o||s(o)?t(o):n(o)}},partial:!0};function W(e,t,n,r){const i=e.length;let o,u=0;if(t=t<0?-t>i?0:i+t:t>i?i:t,n=n>0?n:0,r.length<1e4)o=Array.from(r),o.unshift(t,n),[].splice.apply(e,o);else for(n&&[].splice.apply(e,[t,n]);u<r.length;)o=r.slice(u,u+1e4),o.unshift(t,0),[].splice.apply(e,o),u+=1e4,t+=1e4}function Z(e,t){return e.length>0?(W(e,e.length,0,t),e):t}const J={}.hasOwnProperty;function Y(e,t){let n;for(n in t){const r=(J.call(e,n)?e[n]:void 0)||(e[n]={}),i=t[n];let o;for(o in i){J.call(r,o)||(r[o]=[]);const e=i[o];K(r[o],Array.isArray(e)?e:e?[e]:[])}}}function K(e,t){let n=-1;const r=[];for(;++n<t.length;)("after"===t[n].add?e:r).push(t[n]);W(e,0,0,r)}const X={tokenize:function(e){const t=e.attempt(this.parser.constructs.contentInitial,(function(n){if(null!==n)return e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),B(e,t,"linePrefix");e.consume(n)}),(function(t){return e.enter("paragraph"),r(t)}));let n;return t;function r(t){const r=e.enter("chunkText",{contentType:"text",previous:n});return n&&(n.next=r),n=r,i(t)}function i(t){return null===t?(e.exit("chunkText"),e.exit("paragraph"),void e.consume(t)):f(t)?(e.consume(t),e.exit("chunkText"),r):(e.consume(t),i)}}},$={tokenize:function(e){const t=this,n=[];let r,i,o,u=0;return c;function c(r){if(u<n.length){const i=n[u];return t.containerState=i[1],e.attempt(i[0].continuation,a,l)(r)}return l(r)}function a(e){if(u++,t.containerState._closeFlow){t.containerState._closeFlow=void 0,r&&k();const n=t.events.length;let i,o=n;for(;o--;)if("exit"===t.events[o][0]&&"chunkFlow"===t.events[o][1].type){i=t.events[o][1].end;break}x(u);let c=n;for(;c<t.events.length;)t.events[c][1].end=Object.assign({},i),c++;return W(t.events,o+1,0,t.events.slice(n)),t.events.length=c,l(e)}return c(e)}function l(i){if(u===n.length){if(!r)return d(i);if(r.currentConstruct&&r.currentConstruct.concrete)return g(i);t.interrupt=Boolean(r.currentConstruct&&!r._gfmTableDynamicInterruptHack)}return t.containerState={},e.check(ee,s,p)(i)}function s(e){return r&&k(),x(u),d(e)}function p(e){return t.parser.lazy[t.now().line]=u!==n.length,o=t.now().offset,g(e)}function d(n){return t.containerState={},e.attempt(ee,m,g)(n)}function m(e){return u++,n.push([t.currentConstruct,t.containerState]),d(e)}function g(n){return null===n?(r&&k(),x(0),void e.consume(n)):(r=r||t.parser.flow(t.now()),e.enter("chunkFlow",{contentType:"flow",previous:i,_tokenizer:r}),h(n))}function h(n){return null===n?(b(e.exit("chunkFlow"),!0),x(0),void e.consume(n)):f(n)?(e.consume(n),b(e.exit("chunkFlow")),u=0,t.interrupt=void 0,c):(e.consume(n),h)}function b(e,n){const c=t.sliceStream(e);if(n&&c.push(null),e.previous=i,i&&(i.next=e),i=e,r.defineSkip(e.start),r.write(c),t.parser.lazy[e.start.line]){let e=r.events.length;for(;e--;)if(r.events[e][1].start.offset<o&&(!r.events[e][1].end||r.events[e][1].end.offset>o))return;const n=t.events.length;let i,c,a=n;for(;a--;)if("exit"===t.events[a][0]&&"chunkFlow"===t.events[a][1].type){if(i){c=t.events[a][1].end;break}i=!0}for(x(u),e=n;e<t.events.length;)t.events[e][1].end=Object.assign({},c),e++;W(t.events,a+1,0,t.events.slice(n)),t.events.length=e}}function x(r){let i=n.length;for(;i-- >r;){const r=n[i];t.containerState=r[1],r[0].exit.call(t,e)}n.length=r}function k(){r.write([null]),i=void 0,r=void 0,t.containerState._closeFlow=void 0}}},ee={tokenize:function(e,t,n){return B(e,e.attempt(this.parser.constructs.document,t,n),"linePrefix",this.parser.constructs.disable.null.includes("codeIndented")?void 0:4)}};function te(e){const t={};let n,r,i,o,u,c,a,l=-1;for(;++l<e.length;){for(;l in t;)l=t[l];if(n=e[l],l&&"chunkFlow"===n[1].type&&"listItemPrefix"===e[l-1][1].type&&(c=n[1]._tokenizer.events,i=0,i<c.length&&"lineEndingBlank"===c[i][1].type&&(i+=2),i<c.length&&"content"===c[i][1].type))for(;++i<c.length&&"content"!==c[i][1].type;)"chunkText"===c[i][1].type&&(c[i][1]._isInFirstContentOfListItem=!0,i++);if("enter"===n[0])n[1].contentType&&(Object.assign(t,ne(e,l)),l=t[l],a=!0);else if(n[1]._container){for(i=l,r=void 0;i--&&(o=e[i],"lineEnding"===o[1].type||"lineEndingBlank"===o[1].type);)"enter"===o[0]&&(r&&(e[r][1].type="lineEndingBlank"),o[1].type="lineEnding",r=i);r&&(n[1].end=Object.assign({},e[r][1].start),u=e.slice(r,l),u.unshift(n),W(e,r,l-r+1,u))}}return!a}function ne(e,t){const n=e[t][1],r=e[t][2];let i=t-1;const o=[],u=n._tokenizer||r.parser[n.contentType](n.start),c=u.events,a=[],l={};let s,f,p=-1,d=n,m=0,g=0;const h=[g];for(;d;){for(;e[++i][1]!==d;);o.push(i),d._tokenizer||(s=r.sliceStream(d),d.next||s.push(null),f&&u.defineSkip(d.start),d._isInFirstContentOfListItem&&(u._gfmTasklistFirstContentOfListItem=!0),u.write(s),d._isInFirstContentOfListItem&&(u._gfmTasklistFirstContentOfListItem=void 0)),f=d,d=d.next}for(d=n;++p<c.length;)"exit"===c[p][0]&&"enter"===c[p-1][0]&&c[p][1].type===c[p-1][1].type&&c[p][1].start.line!==c[p][1].end.line&&(g=p+1,h.push(g),d._tokenizer=void 0,d.previous=void 0,d=d.next);for(u.events=[],d?(d._tokenizer=void 0,d.previous=void 0):h.pop(),p=h.length;p--;){const t=c.slice(h[p],h[p+1]),n=o.pop();a.unshift([n,n+t.length-1]),W(e,n,2,t)}for(p=-1;++p<a.length;)l[m+a[p][0]]=m+a[p][1],m+=a[p][1]-a[p][0]-1;return l}const re={tokenize:function(e,t){let n;return function(t){return e.enter("content"),n=e.enter("chunkContent",{contentType:"content"}),r(t)};function r(t){return null===t?i(t):f(t)?e.check(ie,o,i)(t):(e.consume(t),r)}function i(n){return e.exit("chunkContent"),e.exit("content"),t(n)}function o(t){return e.consume(t),e.exit("chunkContent"),n.next=e.enter("chunkContent",{contentType:"content",previous:n}),n=n.next,r}},resolve:function(e){return te(e),e}},ie={tokenize:function(e,t,n){const r=this;return function(t){return e.exit("chunkContent"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),B(e,i,"linePrefix")};function i(i){if(null===i||f(i))return n(i);const o=r.events[r.events.length-1];return!r.parser.constructs.disable.null.includes("codeIndented")&&o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?t(i):e.interrupt(r.parser.constructs.flow,n,t)(i)}},partial:!0},oe={tokenize:function(e){const t=this,n=e.attempt(R,(function(r){if(null!==r)return e.enter("lineEndingBlank"),e.consume(r),e.exit("lineEndingBlank"),t.currentConstruct=void 0,n;e.consume(r)}),e.attempt(this.parser.constructs.flowInitial,r,B(e,e.attempt(this.parser.constructs.flow,r,e.attempt(re,r)),"linePrefix")));return n;function r(r){if(null!==r)return e.enter("lineEnding"),e.consume(r),e.exit("lineEnding"),t.currentConstruct=void 0,n;e.consume(r)}}},ue={resolveAll:se()},ce=le("string"),ae=le("text");function le(e){return{tokenize:function(t){const n=this,r=this.parser.constructs[e],i=t.attempt(r,o,u);return o;function o(e){return a(e)?i(e):u(e)}function u(e){if(null!==e)return t.enter("data"),t.consume(e),c;t.consume(e)}function c(e){return a(e)?(t.exit("data"),i(e)):(t.consume(e),c)}function a(e){if(null===e)return!0;const t=r[e];let i=-1;if(t)for(;++i<t.length;){const e=t[i];if(!e.previous||e.previous.call(n,n.previous))return!0}return!1}},resolveAll:se("text"===e?fe:void 0)}}function se(e){return function(t,n){let r,i=-1;for(;++i<=t.length;)void 0===r?t[i]&&"data"===t[i][1].type&&(r=i,i++):t[i]&&"data"===t[i][1].type||(i!==r+2&&(t[r][1].end=t[i-1][1].end,t.splice(r+2,i-r-2),i=r+2),r=void 0);return e?e(t,n):t}}function fe(e,t){let n=0;for(;++n<=e.length;)if((n===e.length||"lineEnding"===e[n][1].type)&&"data"===e[n-1][1].type){const r=e[n-1][1],i=t.sliceStream(r);let o,u=i.length,c=-1,a=0;for(;u--;){const e=i[u];if("string"==typeof e){for(c=e.length;32===e.charCodeAt(c-1);)a++,c--;if(c)break;c=-1}else if(-2===e)o=!0,a++;else if(-1!==e){u++;break}}if(a){const i={type:n===e.length||o||a<2?"lineSuffix":"hardBreakTrailing",start:{line:r.end.line,column:r.end.column-a,offset:r.end.offset-a,_index:r.start._index+u,_bufferIndex:u?c:r.start._bufferIndex+c},end:Object.assign({},r.end)};r.end=Object.assign({},i.start),r.start.offset===r.end.offset?Object.assign(r,i):(e.splice(n,0,["enter",i,t],["exit",i,t]),n+=2)}n++}return e}function pe(e,t,n){const r=[];let i=-1;for(;++i<e.length;){const o=e[i].resolveAll;o&&!r.includes(o)&&(t=o(t,n),r.push(o))}return t}function de(e,t,n){let r=Object.assign(n?Object.assign({},n):{line:1,column:1,offset:0},{_index:0,_bufferIndex:-1});const i={},o=[];let u=[],c=[],a=!0;const l={consume:function(e){f(e)?(r.line++,r.column=1,r.offset+=-3===e?2:1,v()):-1!==e&&(r.column++,r.offset++),r._bufferIndex<0?r._index++:(r._bufferIndex++,r._bufferIndex===u[r._index].length&&(r._bufferIndex=-1,r._index++)),s.previous=e,a=!0},enter:function(e,t){const n=t||{};return n.type=e,n.start=g(),s.events.push(["enter",n,s]),c.push(n),n},exit:function(e){const t=c.pop();return t.end=g(),s.events.push(["exit",t,s]),t},attempt:x((function(e,t){k(e,t.from)})),check:x(b),interrupt:x(b,{interrupt:!0})},s={previous:null,code:null,containerState:{},events:[],parser:e,sliceStream:m,sliceSerialize:function(e,t){return function(e,t){let n=-1;const r=[];let i;for(;++n<e.length;){const o=e[n];let u;if("string"==typeof o)u=o;else switch(o){case-5:u="\r";break;case-4:u="\n";break;case-3:u="\r\n";break;case-2:u=t?" ":"\t";break;case-1:if(!t&&i)continue;u=" ";break;default:u=String.fromCharCode(o)}i=-2===o,r.push(u)}return r.join("")}(m(e),t)},now:g,defineSkip:function(e){i[e.line]=e.column,v()},write:function(e){return u=Z(u,e),function(){let e;for(;r._index<u.length;){const t=u[r._index];if("string"==typeof t)for(e=r._index,r._bufferIndex<0&&(r._bufferIndex=0);r._index===e&&r._bufferIndex<t.length;)h(t.charCodeAt(r._bufferIndex));else h(t)}}(),null!==u[u.length-1]?[]:(k(t,0),s.events=pe(o,s.events,s),s.events)}};let p,d=t.tokenize.call(s,l);return t.resolveAll&&o.push(t),s;function m(e){return function(e,t){const n=t.start._index,r=t.start._bufferIndex,i=t.end._index,o=t.end._bufferIndex;let u;return n===i?u=[e[n].slice(r,o)]:(u=e.slice(n,i),r>-1&&(u[0]=u[0].slice(r)),o>0&&u.push(e[i].slice(0,o))),u}(u,e)}function g(){return Object.assign({},r)}function h(e){a=void 0,p=e,d=d(e)}function b(e,t){t.restore()}function x(e,t){return function(n,i,o){let u,f,p,d;return Array.isArray(n)?h(n):"tokenize"in n?h([n]):(m=n,function(e){const t=null!==e&&m[e],n=null!==e&&m.null;return h([...Array.isArray(t)?t:t?[t]:[],...Array.isArray(n)?n:n?[n]:[]])(e)});var m;function h(e){return u=e,f=0,0===e.length?o:b(e[f])}function b(e){return function(n){return d=function(){const e=g(),t=s.previous,n=s.currentConstruct,i=s.events.length,o=Array.from(c);return{restore:function(){r=e,s.previous=t,s.currentConstruct=n,s.events.length=i,c=o,v()},from:i}}(),p=e,e.partial||(s.currentConstruct=e),e.name&&s.parser.constructs.disable.null.includes(e.name)?k():e.tokenize.call(t?Object.assign(Object.create(s),t):s,l,x,k)(n)}}function x(t){return a=!0,e(p,d),i}function k(e){return a=!0,d.restore(),++f<u.length?b(u[f]):o}}}function k(e,t){e.resolveAll&&!o.includes(e)&&o.push(e),e.resolve&&W(s.events,t,s.events.length-t,e.resolve(s.events.slice(t),s)),e.resolveTo&&(s.events=e.resolveTo(s.events,s))}function v(){r.line in i&&r.column<2&&(r.column=i[r.line],r.offset+=i[r.line]-1)}}const me={name:"thematicBreak",tokenize:function(e,t,n){let r,i=0;return function(t){return e.enter("thematicBreak"),r=t,o(t)};function o(c){return c===r?(e.enter("thematicBreakSequence"),u(c)):p(c)?B(e,o,"whitespace")(c):i<3||null!==c&&!f(c)?n(c):(e.exit("thematicBreak"),t(c))}function u(t){return t===r?(e.consume(t),i++,u):(e.exit("thematicBreakSequence"),o(t))}}},ge={name:"list",tokenize:function(e,t,n){const r=this,o=r.events[r.events.length-1];let u=o&&"linePrefix"===o[1].type?o[2].sliceSerialize(o[1],!0).length:0,c=0;return function(t){const o=r.containerState.type||(42===t||43===t||45===t?"listUnordered":"listOrdered");if("listUnordered"===o?!r.containerState.marker||t===r.containerState.marker:i(t)){if(r.containerState.type||(r.containerState.type=o,e.enter(o,{_container:!0})),"listUnordered"===o)return e.enter("listItemPrefix"),42===t||45===t?e.check(me,n,l)(t):l(t);if(!r.interrupt||49===t)return e.enter("listItemPrefix"),e.enter("listItemValue"),a(t)}return n(t)};function a(t){return i(t)&&++c<10?(e.consume(t),a):(!r.interrupt||c<2)&&(r.containerState.marker?t===r.containerState.marker:41===t||46===t)?(e.exit("listItemValue"),l(t)):n(t)}function l(t){return e.enter("listItemMarker"),e.consume(t),e.exit("listItemMarker"),r.containerState.marker=r.containerState.marker||t,e.check(R,r.interrupt?n:s,e.attempt(he,d,f))}function s(e){return r.containerState.initialBlankLine=!0,u++,d(e)}function f(t){return p(t)?(e.enter("listItemPrefixWhitespace"),e.consume(t),e.exit("listItemPrefixWhitespace"),d):n(t)}function d(n){return r.containerState.size=u+r.sliceSerialize(e.exit("listItemPrefix"),!0).length,t(n)}},continuation:{tokenize:function(e,t,n){const r=this;return r.containerState._closeFlow=void 0,e.check(R,(function(n){return r.containerState.furtherBlankLines=r.containerState.furtherBlankLines||r.containerState.initialBlankLine,B(e,t,"listItemIndent",r.containerState.size+1)(n)}),(function(n){return r.containerState.furtherBlankLines||!p(n)?(r.containerState.furtherBlankLines=void 0,r.containerState.initialBlankLine=void 0,i(n)):(r.containerState.furtherBlankLines=void 0,r.containerState.initialBlankLine=void 0,e.attempt(be,t,i)(n))}));function i(i){return r.containerState._closeFlow=!0,r.interrupt=void 0,B(e,e.attempt(ge,t,n),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(i)}}},exit:function(e){e.exit(this.containerState.type)}},he={tokenize:function(e,t,n){const r=this;return B(e,(function(e){const i=r.events[r.events.length-1];return!p(e)&&i&&"listItemPrefixWhitespace"===i[1].type?t(e):n(e)}),"listItemPrefixWhitespace",r.parser.constructs.disable.null.includes("codeIndented")?void 0:5)},partial:!0},be={tokenize:function(e,t,n){const r=this;return B(e,(function(e){const i=r.events[r.events.length-1];return i&&"listItemIndent"===i[1].type&&i[2].sliceSerialize(i[1],!0).length===r.containerState.size?t(e):n(e)}),"listItemIndent",r.containerState.size+1)},partial:!0},xe={name:"blockQuote",tokenize:function(e,t,n){const r=this;return function(t){if(62===t){const n=r.containerState;return n.open||(e.enter("blockQuote",{_container:!0}),n.open=!0),e.enter("blockQuotePrefix"),e.enter("blockQuoteMarker"),e.consume(t),e.exit("blockQuoteMarker"),i}return n(t)};function i(n){return p(n)?(e.enter("blockQuotePrefixWhitespace"),e.consume(n),e.exit("blockQuotePrefixWhitespace"),e.exit("blockQuotePrefix"),t):(e.exit("blockQuotePrefix"),t(n))}},continuation:{tokenize:function(e,t,n){return B(e,e.attempt(xe,t,n),"linePrefix",this.parser.constructs.disable.null.includes("codeIndented")?void 0:4)}},exit:function(e){e.exit("blockQuote")}};function ke(e,t,n,r,i,o,u,c,a){const p=a||Number.POSITIVE_INFINITY;let d=0;return function(t){return 60===t?(e.enter(r),e.enter(i),e.enter(o),e.consume(t),e.exit(o),m):null===t||41===t||l(t)?n(t):(e.enter(r),e.enter(u),e.enter(c),e.enter("chunkString",{contentType:"string"}),b(t))};function m(n){return 62===n?(e.enter(o),e.consume(n),e.exit(o),e.exit(i),e.exit(r),t):(e.enter(c),e.enter("chunkString",{contentType:"string"}),g(n))}function g(t){return 62===t?(e.exit("chunkString"),e.exit(c),m(t)):null===t||60===t||f(t)?n(t):(e.consume(t),92===t?h:g)}function h(t){return 60===t||62===t||92===t?(e.consume(t),g):g(t)}function b(i){return 40===i?++d>p?n(i):(e.consume(i),b):41===i?d--?(e.consume(i),b):(e.exit("chunkString"),e.exit(c),e.exit(u),e.exit(r),t(i)):null===i||s(i)?d?n(i):(e.exit("chunkString"),e.exit(c),e.exit(u),e.exit(r),t(i)):l(i)?n(i):(e.consume(i),92===i?x:b)}function x(t){return 40===t||41===t||92===t?(e.consume(t),b):b(t)}}function ve(e,t,n,r,i,o){const u=this;let c,a=0;return function(t){return e.enter(r),e.enter(i),e.consume(t),e.exit(i),e.enter(o),l};function l(p){return null===p||91===p||93===p&&!c||94===p&&!a&&"_hiddenFootnoteSupport"in u.parser.constructs||a>999?n(p):93===p?(e.exit(o),e.enter(i),e.consume(p),e.exit(i),e.exit(r),t):f(p)?(e.enter("lineEnding"),e.consume(p),e.exit("lineEnding"),l):(e.enter("chunkString",{contentType:"string"}),s(p))}function s(t){return null===t||91===t||93===t||f(t)||a++>999?(e.exit("chunkString"),l(t)):(e.consume(t),c=c||!p(t),92===t?d:s)}function d(t){return 91===t||92===t||93===t?(e.consume(t),a++,s):s(t)}}function ye(e,t,n,r,i,o){let u;return function(t){return e.enter(r),e.enter(i),e.consume(t),e.exit(i),u=40===t?41:t,c};function c(n){return n===u?(e.enter(i),e.consume(n),e.exit(i),e.exit(r),t):(e.enter(o),a(n))}function a(t){return t===u?(e.exit(o),c(u)):null===t?n(t):f(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),B(e,a,"linePrefix")):(e.enter("chunkString",{contentType:"string"}),l(t))}function l(t){return t===u||null===t||f(t)?(e.exit("chunkString"),a(t)):(e.consume(t),92===t?s:l)}function s(t){return t===u||92===t?(e.consume(t),l):l(t)}}function we(e,t){let n;return function r(i){return f(i)?(e.enter("lineEnding"),e.consume(i),e.exit("lineEnding"),n=!0,r):p(i)?B(e,r,n?"linePrefix":"lineSuffix")(i):t(i)}}const qe={name:"definition",tokenize:function(e,t,n){const r=this;let i;return function(t){return e.enter("definition"),ve.call(r,e,o,n,"definitionLabel","definitionLabelMarker","definitionLabelString")(t)};function o(t){return i=M(r.sliceSerialize(r.events[r.events.length-1][1]).slice(1,-1)),58===t?(e.enter("definitionMarker"),e.consume(t),e.exit("definitionMarker"),we(e,ke(e,e.attempt(Se,B(e,u,"whitespace"),B(e,u,"whitespace")),n,"definitionDestination","definitionDestinationLiteral","definitionDestinationLiteralMarker","definitionDestinationRaw","definitionDestinationString"))):n(t)}function u(o){return null===o||f(o)?(e.exit("definition"),r.parser.defined.includes(i)||r.parser.defined.push(i),t(o)):n(o)}}},Se={tokenize:function(e,t,n){return function(t){return s(t)?we(e,r)(t):n(t)};function r(t){return 34===t||39===t||40===t?ye(e,B(e,i,"whitespace"),n,"definitionTitle","definitionTitleMarker","definitionTitleString")(t):n(t)}function i(e){return null===e||f(e)?t(e):n(e)}},partial:!0},Fe={name:"codeIndented",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("codeIndented"),B(e,i,"linePrefix",5)(t)};function i(e){const t=r.events[r.events.length-1];return t&&"linePrefix"===t[1].type&&t[2].sliceSerialize(t[1],!0).length>=4?o(e):n(e)}function o(t){return null===t?c(t):f(t)?e.attempt(Ee,o,c)(t):(e.enter("codeFlowValue"),u(t))}function u(t){return null===t||f(t)?(e.exit("codeFlowValue"),o(t)):(e.consume(t),u)}function c(n){return e.exit("codeIndented"),t(n)}}},Ee={tokenize:function(e,t,n){const r=this;return i;function i(t){return r.parser.lazy[r.now().line]?n(t):f(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i):B(e,o,"linePrefix",5)(t)}function o(e){const o=r.events[r.events.length-1];return o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?t(e):f(e)?i(e):n(e)}},partial:!0},Ae={name:"headingAtx",tokenize:function(e,t,n){const r=this;let i=0;return function(t){return e.enter("atxHeading"),e.enter("atxHeadingSequence"),o(t)};function o(c){return 35===c&&i++<6?(e.consume(c),o):null===c||s(c)?(e.exit("atxHeadingSequence"),r.interrupt?t(c):u(c)):n(c)}function u(n){return 35===n?(e.enter("atxHeadingSequence"),c(n)):null===n||f(n)?(e.exit("atxHeading"),t(n)):p(n)?B(e,u,"whitespace")(n):(e.enter("atxHeadingText"),a(n))}function c(t){return 35===t?(e.consume(t),c):(e.exit("atxHeadingSequence"),u(t))}function a(t){return null===t||35===t||s(t)?(e.exit("atxHeadingText"),u(t)):(e.consume(t),a)}},resolve:function(e,t){let n,r,i=e.length-2,o=3;return"whitespace"===e[o][1].type&&(o+=2),i-2>o&&"whitespace"===e[i][1].type&&(i-=2),"atxHeadingSequence"===e[i][1].type&&(o===i-1||i-4>o&&"whitespace"===e[i-2][1].type)&&(i-=o+1===i?2:4),i>o&&(n={type:"atxHeadingText",start:e[o][1].start,end:e[i][1].end},r={type:"chunkText",start:e[o][1].start,end:e[i][1].end,contentType:"text"},W(e,o,i-o+1,[["enter",n,t],["enter",r,t],["exit",r,t],["exit",n,t]])),e}},De={name:"setextUnderline",tokenize:function(e,t,n){const r=this;let i,o,u=r.events.length;for(;u--;)if("lineEnding"!==r.events[u][1].type&&"linePrefix"!==r.events[u][1].type&&"content"!==r.events[u][1].type){o="paragraph"===r.events[u][1].type;break}return function(t){return r.parser.lazy[r.now().line]||!r.interrupt&&!o?n(t):(e.enter("setextHeadingLine"),e.enter("setextHeadingLineSequence"),i=t,c(t))};function c(t){return t===i?(e.consume(t),c):(e.exit("setextHeadingLineSequence"),B(e,a,"lineSuffix")(t))}function a(r){return null===r||f(r)?(e.exit("setextHeadingLine"),t(r)):n(r)}},resolveTo:function(e,t){let n,r,i,o=e.length;for(;o--;)if("enter"===e[o][0]){if("content"===e[o][1].type){n=o;break}"paragraph"===e[o][1].type&&(r=o)}else"content"===e[o][1].type&&e.splice(o,1),i||"definition"!==e[o][1].type||(i=o);const u={type:"setextHeading",start:Object.assign({},e[r][1].start),end:Object.assign({},e[e.length-1][1].end)};return e[r][1].type="setextHeadingText",i?(e.splice(r,0,["enter",u,t]),e.splice(i+1,0,["exit",e[n][1],t]),e[n][1].end=Object.assign({},e[i][1].end)):e[n][1]=u,e.push(["exit",u,t]),e}},Ce=["address","article","aside","base","basefont","blockquote","body","caption","center","col","colgroup","dd","details","dialog","dir","div","dl","dt","fieldset","figcaption","figure","footer","form","frame","frameset","h1","h2","h3","h4","h5","h6","head","header","hr","html","iframe","legend","li","link","main","menu","menuitem","nav","noframes","ol","optgroup","option","p","param","section","summary","table","tbody","td","tfoot","th","thead","title","tr","track","ul"],Le=["pre","script","style","textarea"],Te={name:"htmlFlow",tokenize:function(e,t,n){const i=this;let o,c,a,l,d;return function(t){return e.enter("htmlFlow"),e.enter("htmlFlowData"),e.consume(t),m};function m(u){return 33===u?(e.consume(u),g):47===u?(e.consume(u),x):63===u?(e.consume(u),o=3,i.interrupt?t:O):r(u)?(e.consume(u),a=String.fromCharCode(u),c=!0,k):n(u)}function g(u){return 45===u?(e.consume(u),o=2,h):91===u?(e.consume(u),o=5,a="CDATA[",l=0,b):r(u)?(e.consume(u),o=4,i.interrupt?t:O):n(u)}function h(r){return 45===r?(e.consume(r),i.interrupt?t:O):n(r)}function b(r){return r===a.charCodeAt(l++)?(e.consume(r),l===a.length?i.interrupt?t:T:b):n(r)}function x(t){return r(t)?(e.consume(t),a=String.fromCharCode(t),k):n(t)}function k(r){return null===r||47===r||62===r||s(r)?47!==r&&c&&Le.includes(a.toLowerCase())?(o=1,i.interrupt?t(r):T(r)):Ce.includes(a.toLowerCase())?(o=6,47===r?(e.consume(r),v):i.interrupt?t(r):T(r)):(o=7,i.interrupt&&!i.parser.lazy[i.now().line]?n(r):c?w(r):y(r)):45===r||u(r)?(e.consume(r),a+=String.fromCharCode(r),k):n(r)}function v(r){return 62===r?(e.consume(r),i.interrupt?t:T):n(r)}function y(t){return p(t)?(e.consume(t),y):C(t)}function w(t){return 47===t?(e.consume(t),C):58===t||95===t||r(t)?(e.consume(t),q):p(t)?(e.consume(t),w):C(t)}function q(t){return 45===t||46===t||58===t||95===t||u(t)?(e.consume(t),q):S(t)}function S(t){return 61===t?(e.consume(t),F):p(t)?(e.consume(t),S):w(t)}function F(t){return null===t||60===t||61===t||62===t||96===t?n(t):34===t||39===t?(e.consume(t),d=t,E):p(t)?(e.consume(t),F):(d=null,A(t))}function E(t){return null===t||f(t)?n(t):t===d?(e.consume(t),D):(e.consume(t),E)}function A(t){return null===t||34===t||39===t||60===t||61===t||62===t||96===t||s(t)?S(t):(e.consume(t),A)}function D(e){return 47===e||62===e||p(e)?w(e):n(e)}function C(t){return 62===t?(e.consume(t),L):n(t)}function L(t){return p(t)?(e.consume(t),L):null===t||f(t)?T(t):n(t)}function T(t){return 45===t&&2===o?(e.consume(t),R):60===t&&1===o?(e.consume(t),M):62===t&&4===o?(e.consume(t),_):63===t&&3===o?(e.consume(t),O):93===t&&5===o?(e.consume(t),P):!f(t)||6!==o&&7!==o?null===t||f(t)?z(t):(e.consume(t),T):e.check(ze,_,z)(t)}function z(t){return e.exit("htmlFlowData"),I(t)}function I(t){return null===t?V(t):f(t)?e.attempt({tokenize:B,partial:!0},I,V)(t):(e.enter("htmlFlowData"),T(t))}function B(e,t,n){return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),r};function r(e){return i.parser.lazy[i.now().line]?n(e):t(e)}}function R(t){return 45===t?(e.consume(t),O):T(t)}function M(t){return 47===t?(e.consume(t),a="",N):T(t)}function N(t){return 62===t&&Le.includes(a.toLowerCase())?(e.consume(t),_):r(t)&&a.length<8?(e.consume(t),a+=String.fromCharCode(t),N):T(t)}function P(t){return 93===t?(e.consume(t),O):T(t)}function O(t){return 62===t?(e.consume(t),_):45===t&&2===o?(e.consume(t),O):T(t)}function _(t){return null===t||f(t)?(e.exit("htmlFlowData"),V(t)):(e.consume(t),_)}function V(n){return e.exit("htmlFlow"),t(n)}},resolveTo:function(e){let t=e.length;for(;t--&&("enter"!==e[t][0]||"htmlFlow"!==e[t][1].type););return t>1&&"linePrefix"===e[t-2][1].type&&(e[t][1].start=e[t-2][1].start,e[t+1][1].start=e[t-2][1].start,e.splice(t-2,2)),e},concrete:!0},ze={tokenize:function(e,t,n){return function(r){return e.exit("htmlFlowData"),e.enter("lineEndingBlank"),e.consume(r),e.exit("lineEndingBlank"),e.attempt(R,t,n)}},partial:!0},Ie={name:"codeFenced",tokenize:function(e,t,n){const r=this,i={tokenize:function(e,t,n){let r=0;return B(e,(function(t){return e.enter("codeFencedFence"),e.enter("codeFencedFenceSequence"),i(t)}),"linePrefix",this.parser.constructs.disable.null.includes("codeIndented")?void 0:4);function i(t){return t===a?(e.consume(t),r++,i):r<l?n(t):(e.exit("codeFencedFenceSequence"),B(e,o,"whitespace")(t))}function o(r){return null===r||f(r)?(e.exit("codeFencedFence"),t(r)):n(r)}},partial:!0},o={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},u=this.events[this.events.length-1],c=u&&"linePrefix"===u[1].type?u[2].sliceSerialize(u[1],!0).length:0;let a,l=0;return function(t){return e.enter("codeFenced"),e.enter("codeFencedFence"),e.enter("codeFencedFenceSequence"),a=t,p(t)};function p(t){return t===a?(e.consume(t),l++,p):(e.exit("codeFencedFenceSequence"),l<3?n(t):B(e,d,"whitespace")(t))}function d(t){return null===t||f(t)?b(t):(e.enter("codeFencedFenceInfo"),e.enter("chunkString",{contentType:"string"}),m(t))}function m(t){return null===t||s(t)?(e.exit("chunkString"),e.exit("codeFencedFenceInfo"),B(e,g,"whitespace")(t)):96===t&&t===a?n(t):(e.consume(t),m)}function g(t){return null===t||f(t)?b(t):(e.enter("codeFencedFenceMeta"),e.enter("chunkString",{contentType:"string"}),h(t))}function h(t){return null===t||f(t)?(e.exit("chunkString"),e.exit("codeFencedFenceMeta"),b(t)):96===t&&t===a?n(t):(e.consume(t),h)}function b(n){return e.exit("codeFencedFence"),r.interrupt?t(n):x(n)}function x(t){return null===t?v(t):f(t)?e.attempt(o,e.attempt(i,v,c?B(e,x,"linePrefix",c+1):x),v)(t):(e.enter("codeFlowValue"),k(t))}function k(t){return null===t||f(t)?(e.exit("codeFlowValue"),x(t)):(e.consume(t),k)}function v(n){return e.exit("codeFenced"),t(n)}},concrete:!0},Be={AElig:"Æ",AMP:"&",Aacute:"Á",Abreve:"Ă",Acirc:"Â",Acy:"А",Afr:"𝔄",Agrave:"À",Alpha:"Α",Amacr:"Ā",And:"⩓",Aogon:"Ą",Aopf:"𝔸",ApplyFunction:"⁡",Aring:"Å",Ascr:"𝒜",Assign:"≔",Atilde:"Ã",Auml:"Ä",Backslash:"∖",Barv:"⫧",Barwed:"⌆",Bcy:"Б",Because:"∵",Bernoullis:"ℬ",Beta:"Β",Bfr:"𝔅",Bopf:"𝔹",Breve:"˘",Bscr:"ℬ",Bumpeq:"≎",CHcy:"Ч",COPY:"©",Cacute:"Ć",Cap:"⋒",CapitalDifferentialD:"ⅅ",Cayleys:"ℭ",Ccaron:"Č",Ccedil:"Ç",Ccirc:"Ĉ",Cconint:"∰",Cdot:"Ċ",Cedilla:"¸",CenterDot:"·",Cfr:"ℭ",Chi:"Χ",CircleDot:"⊙",CircleMinus:"⊖",CirclePlus:"⊕",CircleTimes:"⊗",ClockwiseContourIntegral:"∲",CloseCurlyDoubleQuote:"”",CloseCurlyQuote:"’",Colon:"∷",Colone:"⩴",Congruent:"≡",Conint:"∯",ContourIntegral:"∮",Copf:"ℂ",Coproduct:"∐",CounterClockwiseContourIntegral:"∳",Cross:"⨯",Cscr:"𝒞",Cup:"⋓",CupCap:"≍",DD:"ⅅ",DDotrahd:"⤑",DJcy:"Ђ",DScy:"Ѕ",DZcy:"Џ",Dagger:"‡",Darr:"↡",Dashv:"⫤",Dcaron:"Ď",Dcy:"Д",Del:"∇",Delta:"Δ",Dfr:"𝔇",DiacriticalAcute:"´",DiacriticalDot:"˙",DiacriticalDoubleAcute:"˝",DiacriticalGrave:"`",DiacriticalTilde:"˜",Diamond:"⋄",DifferentialD:"ⅆ",Dopf:"𝔻",Dot:"¨",DotDot:"⃜",DotEqual:"≐",DoubleContourIntegral:"∯",DoubleDot:"¨",DoubleDownArrow:"⇓",DoubleLeftArrow:"⇐",DoubleLeftRightArrow:"⇔",DoubleLeftTee:"⫤",DoubleLongLeftArrow:"⟸",DoubleLongLeftRightArrow:"⟺",DoubleLongRightArrow:"⟹",DoubleRightArrow:"⇒",DoubleRightTee:"⊨",DoubleUpArrow:"⇑",DoubleUpDownArrow:"⇕",DoubleVerticalBar:"∥",DownArrow:"↓",DownArrowBar:"⤓",DownArrowUpArrow:"⇵",DownBreve:"̑",DownLeftRightVector:"⥐",DownLeftTeeVector:"⥞",DownLeftVector:"↽",DownLeftVectorBar:"⥖",DownRightTeeVector:"⥟",DownRightVector:"⇁",DownRightVectorBar:"⥗",DownTee:"⊤",DownTeeArrow:"↧",Downarrow:"⇓",Dscr:"𝒟",Dstrok:"Đ",ENG:"Ŋ",ETH:"Ð",Eacute:"É",Ecaron:"Ě",Ecirc:"Ê",Ecy:"Э",Edot:"Ė",Efr:"𝔈",Egrave:"È",Element:"∈",Emacr:"Ē",EmptySmallSquare:"◻",EmptyVerySmallSquare:"▫",Eogon:"Ę",Eopf:"𝔼",Epsilon:"Ε",Equal:"⩵",EqualTilde:"≂",Equilibrium:"⇌",Escr:"ℰ",Esim:"⩳",Eta:"Η",Euml:"Ë",Exists:"∃",ExponentialE:"ⅇ",Fcy:"Ф",Ffr:"𝔉",FilledSmallSquare:"◼",FilledVerySmallSquare:"▪",Fopf:"𝔽",ForAll:"∀",Fouriertrf:"ℱ",Fscr:"ℱ",GJcy:"Ѓ",GT:">",Gamma:"Γ",Gammad:"Ϝ",Gbreve:"Ğ",Gcedil:"Ģ",Gcirc:"Ĝ",Gcy:"Г",Gdot:"Ġ",Gfr:"𝔊",Gg:"⋙",Gopf:"𝔾",GreaterEqual:"≥",GreaterEqualLess:"⋛",GreaterFullEqual:"≧",GreaterGreater:"⪢",GreaterLess:"≷",GreaterSlantEqual:"⩾",GreaterTilde:"≳",Gscr:"𝒢",Gt:"≫",HARDcy:"Ъ",Hacek:"ˇ",Hat:"^",Hcirc:"Ĥ",Hfr:"ℌ",HilbertSpace:"ℋ",Hopf:"ℍ",HorizontalLine:"─",Hscr:"ℋ",Hstrok:"Ħ",HumpDownHump:"≎",HumpEqual:"≏",IEcy:"Е",IJlig:"Ĳ",IOcy:"Ё",Iacute:"Í",Icirc:"Î",Icy:"И",Idot:"İ",Ifr:"ℑ",Igrave:"Ì",Im:"ℑ",Imacr:"Ī",ImaginaryI:"ⅈ",Implies:"⇒",Int:"∬",Integral:"∫",Intersection:"⋂",InvisibleComma:"⁣",InvisibleTimes:"⁢",Iogon:"Į",Iopf:"𝕀",Iota:"Ι",Iscr:"ℐ",Itilde:"Ĩ",Iukcy:"І",Iuml:"Ï",Jcirc:"Ĵ",Jcy:"Й",Jfr:"𝔍",Jopf:"𝕁",Jscr:"𝒥",Jsercy:"Ј",Jukcy:"Є",KHcy:"Х",KJcy:"Ќ",Kappa:"Κ",Kcedil:"Ķ",Kcy:"К",Kfr:"𝔎",Kopf:"𝕂",Kscr:"𝒦",LJcy:"Љ",LT:"<",Lacute:"Ĺ",Lambda:"Λ",Lang:"⟪",Laplacetrf:"ℒ",Larr:"↞",Lcaron:"Ľ",Lcedil:"Ļ",Lcy:"Л",LeftAngleBracket:"⟨",LeftArrow:"←",LeftArrowBar:"⇤",LeftArrowRightArrow:"⇆",LeftCeiling:"⌈",LeftDoubleBracket:"⟦",LeftDownTeeVector:"⥡",LeftDownVector:"⇃",LeftDownVectorBar:"⥙",LeftFloor:"⌊",LeftRightArrow:"↔",LeftRightVector:"⥎",LeftTee:"⊣",LeftTeeArrow:"↤",LeftTeeVector:"⥚",LeftTriangle:"⊲",LeftTriangleBar:"⧏",LeftTriangleEqual:"⊴",LeftUpDownVector:"⥑",LeftUpTeeVector:"⥠",LeftUpVector:"↿",LeftUpVectorBar:"⥘",LeftVector:"↼",LeftVectorBar:"⥒",Leftarrow:"⇐",Leftrightarrow:"⇔",LessEqualGreater:"⋚",LessFullEqual:"≦",LessGreater:"≶",LessLess:"⪡",LessSlantEqual:"⩽",LessTilde:"≲",Lfr:"𝔏",Ll:"⋘",Lleftarrow:"⇚",Lmidot:"Ŀ",LongLeftArrow:"⟵",LongLeftRightArrow:"⟷",LongRightArrow:"⟶",Longleftarrow:"⟸",Longleftrightarrow:"⟺",Longrightarrow:"⟹",Lopf:"𝕃",LowerLeftArrow:"↙",LowerRightArrow:"↘",Lscr:"ℒ",Lsh:"↰",Lstrok:"Ł",Lt:"≪",Map:"⤅",Mcy:"М",MediumSpace:" ",Mellintrf:"ℳ",Mfr:"𝔐",MinusPlus:"∓",Mopf:"𝕄",Mscr:"ℳ",Mu:"Μ",NJcy:"Њ",Nacute:"Ń",Ncaron:"Ň",Ncedil:"Ņ",Ncy:"Н",NegativeMediumSpace:"​",NegativeThickSpace:"​",NegativeThinSpace:"​",NegativeVeryThinSpace:"​",NestedGreaterGreater:"≫",NestedLessLess:"≪",NewLine:"\n",Nfr:"𝔑",NoBreak:"⁠",NonBreakingSpace:" ",Nopf:"ℕ",Not:"⫬",NotCongruent:"≢",NotCupCap:"≭",NotDoubleVerticalBar:"∦",NotElement:"∉",NotEqual:"≠",NotEqualTilde:"≂̸",NotExists:"∄",NotGreater:"≯",NotGreaterEqual:"≱",NotGreaterFullEqual:"≧̸",NotGreaterGreater:"≫̸",NotGreaterLess:"≹",NotGreaterSlantEqual:"⩾̸",NotGreaterTilde:"≵",NotHumpDownHump:"≎̸",NotHumpEqual:"≏̸",NotLeftTriangle:"⋪",NotLeftTriangleBar:"⧏̸",NotLeftTriangleEqual:"⋬",NotLess:"≮",NotLessEqual:"≰",NotLessGreater:"≸",NotLessLess:"≪̸",NotLessSlantEqual:"⩽̸",NotLessTilde:"≴",NotNestedGreaterGreater:"⪢̸",NotNestedLessLess:"⪡̸",NotPrecedes:"⊀",NotPrecedesEqual:"⪯̸",NotPrecedesSlantEqual:"⋠",NotReverseElement:"∌",NotRightTriangle:"⋫",NotRightTriangleBar:"⧐̸",NotRightTriangleEqual:"⋭",NotSquareSubset:"⊏̸",NotSquareSubsetEqual:"⋢",NotSquareSuperset:"⊐̸",NotSquareSupersetEqual:"⋣",NotSubset:"⊂⃒",NotSubsetEqual:"⊈",NotSucceeds:"⊁",NotSucceedsEqual:"⪰̸",NotSucceedsSlantEqual:"⋡",NotSucceedsTilde:"≿̸",NotSuperset:"⊃⃒",NotSupersetEqual:"⊉",NotTilde:"≁",NotTildeEqual:"≄",NotTildeFullEqual:"≇",NotTildeTilde:"≉",NotVerticalBar:"∤",Nscr:"𝒩",Ntilde:"Ñ",Nu:"Ν",OElig:"Œ",Oacute:"Ó",Ocirc:"Ô",Ocy:"О",Odblac:"Ő",Ofr:"𝔒",Ograve:"Ò",Omacr:"Ō",Omega:"Ω",Omicron:"Ο",Oopf:"𝕆",OpenCurlyDoubleQuote:"“",OpenCurlyQuote:"‘",Or:"⩔",Oscr:"𝒪",Oslash:"Ø",Otilde:"Õ",Otimes:"⨷",Ouml:"Ö",OverBar:"‾",OverBrace:"⏞",OverBracket:"⎴",OverParenthesis:"⏜",PartialD:"∂",Pcy:"П",Pfr:"𝔓",Phi:"Φ",Pi:"Π",PlusMinus:"±",Poincareplane:"ℌ",Popf:"ℙ",Pr:"⪻",Precedes:"≺",PrecedesEqual:"⪯",PrecedesSlantEqual:"≼",PrecedesTilde:"≾",Prime:"″",Product:"∏",Proportion:"∷",Proportional:"∝",Pscr:"𝒫",Psi:"Ψ",QUOT:'"',Qfr:"𝔔",Qopf:"ℚ",Qscr:"𝒬",RBarr:"⤐",REG:"®",Racute:"Ŕ",Rang:"⟫",Rarr:"↠",Rarrtl:"⤖",Rcaron:"Ř",Rcedil:"Ŗ",Rcy:"Р",Re:"ℜ",ReverseElement:"∋",ReverseEquilibrium:"⇋",ReverseUpEquilibrium:"⥯",Rfr:"ℜ",Rho:"Ρ",RightAngleBracket:"⟩",RightArrow:"→",RightArrowBar:"⇥",RightArrowLeftArrow:"⇄",RightCeiling:"⌉",RightDoubleBracket:"⟧",RightDownTeeVector:"⥝",RightDownVector:"⇂",RightDownVectorBar:"⥕",RightFloor:"⌋",RightTee:"⊢",RightTeeArrow:"↦",RightTeeVector:"⥛",RightTriangle:"⊳",RightTriangleBar:"⧐",RightTriangleEqual:"⊵",RightUpDownVector:"⥏",RightUpTeeVector:"⥜",RightUpVector:"↾",RightUpVectorBar:"⥔",RightVector:"⇀",RightVectorBar:"⥓",Rightarrow:"⇒",Ropf:"ℝ",RoundImplies:"⥰",Rrightarrow:"⇛",Rscr:"ℛ",Rsh:"↱",RuleDelayed:"⧴",SHCHcy:"Щ",SHcy:"Ш",SOFTcy:"Ь",Sacute:"Ś",Sc:"⪼",Scaron:"Š",Scedil:"Ş",Scirc:"Ŝ",Scy:"С",Sfr:"𝔖",ShortDownArrow:"↓",ShortLeftArrow:"←",ShortRightArrow:"→",ShortUpArrow:"↑",Sigma:"Σ",SmallCircle:"∘",Sopf:"𝕊",Sqrt:"√",Square:"□",SquareIntersection:"⊓",SquareSubset:"⊏",SquareSubsetEqual:"⊑",SquareSuperset:"⊐",SquareSupersetEqual:"⊒",SquareUnion:"⊔",Sscr:"𝒮",Star:"⋆",Sub:"⋐",Subset:"⋐",SubsetEqual:"⊆",Succeeds:"≻",SucceedsEqual:"⪰",SucceedsSlantEqual:"≽",SucceedsTilde:"≿",SuchThat:"∋",Sum:"∑",Sup:"⋑",Superset:"⊃",SupersetEqual:"⊇",Supset:"⋑",THORN:"Þ",TRADE:"™",TSHcy:"Ћ",TScy:"Ц",Tab:"\t",Tau:"Τ",Tcaron:"Ť",Tcedil:"Ţ",Tcy:"Т",Tfr:"𝔗",Therefore:"∴",Theta:"Θ",ThickSpace:"  ",ThinSpace:" ",Tilde:"∼",TildeEqual:"≃",TildeFullEqual:"≅",TildeTilde:"≈",Topf:"𝕋",TripleDot:"⃛",Tscr:"𝒯",Tstrok:"Ŧ",Uacute:"Ú",Uarr:"↟",Uarrocir:"⥉",Ubrcy:"Ў",Ubreve:"Ŭ",Ucirc:"Û",Ucy:"У",Udblac:"Ű",Ufr:"𝔘",Ugrave:"Ù",Umacr:"Ū",UnderBar:"_",UnderBrace:"⏟",UnderBracket:"⎵",UnderParenthesis:"⏝",Union:"⋃",UnionPlus:"⊎",Uogon:"Ų",Uopf:"𝕌",UpArrow:"↑",UpArrowBar:"⤒",UpArrowDownArrow:"⇅",UpDownArrow:"↕",UpEquilibrium:"⥮",UpTee:"⊥",UpTeeArrow:"↥",Uparrow:"⇑",Updownarrow:"⇕",UpperLeftArrow:"↖",UpperRightArrow:"↗",Upsi:"ϒ",Upsilon:"Υ",Uring:"Ů",Uscr:"𝒰",Utilde:"Ũ",Uuml:"Ü",VDash:"⊫",Vbar:"⫫",Vcy:"В",Vdash:"⊩",Vdashl:"⫦",Vee:"⋁",Verbar:"‖",Vert:"‖",VerticalBar:"∣",VerticalLine:"|",VerticalSeparator:"❘",VerticalTilde:"≀",VeryThinSpace:" ",Vfr:"𝔙",Vopf:"𝕍",Vscr:"𝒱",Vvdash:"⊪",Wcirc:"Ŵ",Wedge:"⋀",Wfr:"𝔚",Wopf:"𝕎",Wscr:"𝒲",Xfr:"𝔛",Xi:"Ξ",Xopf:"𝕏",Xscr:"𝒳",YAcy:"Я",YIcy:"Ї",YUcy:"Ю",Yacute:"Ý",Ycirc:"Ŷ",Ycy:"Ы",Yfr:"𝔜",Yopf:"𝕐",Yscr:"𝒴",Yuml:"Ÿ",ZHcy:"Ж",Zacute:"Ź",Zcaron:"Ž",Zcy:"З",Zdot:"Ż",ZeroWidthSpace:"​",Zeta:"Ζ",Zfr:"ℨ",Zopf:"ℤ",Zscr:"𝒵",aacute:"á",abreve:"ă",ac:"∾",acE:"∾̳",acd:"∿",acirc:"â",acute:"´",acy:"а",aelig:"æ",af:"⁡",afr:"𝔞",agrave:"à",alefsym:"ℵ",aleph:"ℵ",alpha:"α",amacr:"ā",amalg:"⨿",amp:"&",and:"∧",andand:"⩕",andd:"⩜",andslope:"⩘",andv:"⩚",ang:"∠",ange:"⦤",angle:"∠",angmsd:"∡",angmsdaa:"⦨",angmsdab:"⦩",angmsdac:"⦪",angmsdad:"⦫",angmsdae:"⦬",angmsdaf:"⦭",angmsdag:"⦮",angmsdah:"⦯",angrt:"∟",angrtvb:"⊾",angrtvbd:"⦝",angsph:"∢",angst:"Å",angzarr:"⍼",aogon:"ą",aopf:"𝕒",ap:"≈",apE:"⩰",apacir:"⩯",ape:"≊",apid:"≋",apos:"'",approx:"≈",approxeq:"≊",aring:"å",ascr:"𝒶",ast:"*",asymp:"≈",asympeq:"≍",atilde:"ã",auml:"ä",awconint:"∳",awint:"⨑",bNot:"⫭",backcong:"≌",backepsilon:"϶",backprime:"‵",backsim:"∽",backsimeq:"⋍",barvee:"⊽",barwed:"⌅",barwedge:"⌅",bbrk:"⎵",bbrktbrk:"⎶",bcong:"≌",bcy:"б",bdquo:"„",becaus:"∵",because:"∵",bemptyv:"⦰",bepsi:"϶",bernou:"ℬ",beta:"β",beth:"ℶ",between:"≬",bfr:"𝔟",bigcap:"⋂",bigcirc:"◯",bigcup:"⋃",bigodot:"⨀",bigoplus:"⨁",bigotimes:"⨂",bigsqcup:"⨆",bigstar:"★",bigtriangledown:"▽",bigtriangleup:"△",biguplus:"⨄",bigvee:"⋁",bigwedge:"⋀",bkarow:"⤍",blacklozenge:"⧫",blacksquare:"▪",blacktriangle:"▴",blacktriangledown:"▾",blacktriangleleft:"◂",blacktriangleright:"▸",blank:"␣",blk12:"▒",blk14:"░",blk34:"▓",block:"█",bne:"=⃥",bnequiv:"≡⃥",bnot:"⌐",bopf:"𝕓",bot:"⊥",bottom:"⊥",bowtie:"⋈",boxDL:"╗",boxDR:"╔",boxDl:"╖",boxDr:"╓",boxH:"═",boxHD:"╦",boxHU:"╩",boxHd:"╤",boxHu:"╧",boxUL:"╝",boxUR:"╚",boxUl:"╜",boxUr:"╙",boxV:"║",boxVH:"╬",boxVL:"╣",boxVR:"╠",boxVh:"╫",boxVl:"╢",boxVr:"╟",boxbox:"⧉",boxdL:"╕",boxdR:"╒",boxdl:"┐",boxdr:"┌",boxh:"─",boxhD:"╥",boxhU:"╨",boxhd:"┬",boxhu:"┴",boxminus:"⊟",boxplus:"⊞",boxtimes:"⊠",boxuL:"╛",boxuR:"╘",boxul:"┘",boxur:"└",boxv:"│",boxvH:"╪",boxvL:"╡",boxvR:"╞",boxvh:"┼",boxvl:"┤",boxvr:"├",bprime:"‵",breve:"˘",brvbar:"¦",bscr:"𝒷",bsemi:"⁏",bsim:"∽",bsime:"⋍",bsol:"\\",bsolb:"⧅",bsolhsub:"⟈",bull:"•",bullet:"•",bump:"≎",bumpE:"⪮",bumpe:"≏",bumpeq:"≏",cacute:"ć",cap:"∩",capand:"⩄",capbrcup:"⩉",capcap:"⩋",capcup:"⩇",capdot:"⩀",caps:"∩︀",caret:"⁁",caron:"ˇ",ccaps:"⩍",ccaron:"č",ccedil:"ç",ccirc:"ĉ",ccups:"⩌",ccupssm:"⩐",cdot:"ċ",cedil:"¸",cemptyv:"⦲",cent:"¢",centerdot:"·",cfr:"𝔠",chcy:"ч",check:"✓",checkmark:"✓",chi:"χ",cir:"○",cirE:"⧃",circ:"ˆ",circeq:"≗",circlearrowleft:"↺",circlearrowright:"↻",circledR:"®",circledS:"Ⓢ",circledast:"⊛",circledcirc:"⊚",circleddash:"⊝",cire:"≗",cirfnint:"⨐",cirmid:"⫯",cirscir:"⧂",clubs:"♣",clubsuit:"♣",colon:":",colone:"≔",coloneq:"≔",comma:",",commat:"@",comp:"∁",compfn:"∘",complement:"∁",complexes:"ℂ",cong:"≅",congdot:"⩭",conint:"∮",copf:"𝕔",coprod:"∐",copy:"©",copysr:"℗",crarr:"↵",cross:"✗",cscr:"𝒸",csub:"⫏",csube:"⫑",csup:"⫐",csupe:"⫒",ctdot:"⋯",cudarrl:"⤸",cudarrr:"⤵",cuepr:"⋞",cuesc:"⋟",cularr:"↶",cularrp:"⤽",cup:"∪",cupbrcap:"⩈",cupcap:"⩆",cupcup:"⩊",cupdot:"⊍",cupor:"⩅",cups:"∪︀",curarr:"↷",curarrm:"⤼",curlyeqprec:"⋞",curlyeqsucc:"⋟",curlyvee:"⋎",curlywedge:"⋏",curren:"¤",curvearrowleft:"↶",curvearrowright:"↷",cuvee:"⋎",cuwed:"⋏",cwconint:"∲",cwint:"∱",cylcty:"⌭",dArr:"⇓",dHar:"⥥",dagger:"†",daleth:"ℸ",darr:"↓",dash:"‐",dashv:"⊣",dbkarow:"⤏",dblac:"˝",dcaron:"ď",dcy:"д",dd:"ⅆ",ddagger:"‡",ddarr:"⇊",ddotseq:"⩷",deg:"°",delta:"δ",demptyv:"⦱",dfisht:"⥿",dfr:"𝔡",dharl:"⇃",dharr:"⇂",diam:"⋄",diamond:"⋄",diamondsuit:"♦",diams:"♦",die:"¨",digamma:"ϝ",disin:"⋲",div:"÷",divide:"÷",divideontimes:"⋇",divonx:"⋇",djcy:"ђ",dlcorn:"⌞",dlcrop:"⌍",dollar:"$",dopf:"𝕕",dot:"˙",doteq:"≐",doteqdot:"≑",dotminus:"∸",dotplus:"∔",dotsquare:"⊡",doublebarwedge:"⌆",downarrow:"↓",downdownarrows:"⇊",downharpoonleft:"⇃",downharpoonright:"⇂",drbkarow:"⤐",drcorn:"⌟",drcrop:"⌌",dscr:"𝒹",dscy:"ѕ",dsol:"⧶",dstrok:"đ",dtdot:"⋱",dtri:"▿",dtrif:"▾",duarr:"⇵",duhar:"⥯",dwangle:"⦦",dzcy:"џ",dzigrarr:"⟿",eDDot:"⩷",eDot:"≑",eacute:"é",easter:"⩮",ecaron:"ě",ecir:"≖",ecirc:"ê",ecolon:"≕",ecy:"э",edot:"ė",ee:"ⅇ",efDot:"≒",efr:"𝔢",eg:"⪚",egrave:"è",egs:"⪖",egsdot:"⪘",el:"⪙",elinters:"⏧",ell:"ℓ",els:"⪕",elsdot:"⪗",emacr:"ē",empty:"∅",emptyset:"∅",emptyv:"∅",emsp13:" ",emsp14:" ",emsp:" ",eng:"ŋ",ensp:" ",eogon:"ę",eopf:"𝕖",epar:"⋕",eparsl:"⧣",eplus:"⩱",epsi:"ε",epsilon:"ε",epsiv:"ϵ",eqcirc:"≖",eqcolon:"≕",eqsim:"≂",eqslantgtr:"⪖",eqslantless:"⪕",equals:"=",equest:"≟",equiv:"≡",equivDD:"⩸",eqvparsl:"⧥",erDot:"≓",erarr:"⥱",escr:"ℯ",esdot:"≐",esim:"≂",eta:"η",eth:"ð",euml:"ë",euro:"€",excl:"!",exist:"∃",expectation:"ℰ",exponentiale:"ⅇ",fallingdotseq:"≒",fcy:"ф",female:"♀",ffilig:"ﬃ",fflig:"ﬀ",ffllig:"ﬄ",ffr:"𝔣",filig:"ﬁ",fjlig:"fj",flat:"♭",fllig:"ﬂ",fltns:"▱",fnof:"ƒ",fopf:"𝕗",forall:"∀",fork:"⋔",forkv:"⫙",fpartint:"⨍",frac12:"½",frac13:"⅓",frac14:"¼",frac15:"⅕",frac16:"⅙",frac18:"⅛",frac23:"⅔",frac25:"⅖",frac34:"¾",frac35:"⅗",frac38:"⅜",frac45:"⅘",frac56:"⅚",frac58:"⅝",frac78:"⅞",frasl:"⁄",frown:"⌢",fscr:"𝒻",gE:"≧",gEl:"⪌",gacute:"ǵ",gamma:"γ",gammad:"ϝ",gap:"⪆",gbreve:"ğ",gcirc:"ĝ",gcy:"г",gdot:"ġ",ge:"≥",gel:"⋛",geq:"≥",geqq:"≧",geqslant:"⩾",ges:"⩾",gescc:"⪩",gesdot:"⪀",gesdoto:"⪂",gesdotol:"⪄",gesl:"⋛︀",gesles:"⪔",gfr:"𝔤",gg:"≫",ggg:"⋙",gimel:"ℷ",gjcy:"ѓ",gl:"≷",glE:"⪒",gla:"⪥",glj:"⪤",gnE:"≩",gnap:"⪊",gnapprox:"⪊",gne:"⪈",gneq:"⪈",gneqq:"≩",gnsim:"⋧",gopf:"𝕘",grave:"`",gscr:"ℊ",gsim:"≳",gsime:"⪎",gsiml:"⪐",gt:">",gtcc:"⪧",gtcir:"⩺",gtdot:"⋗",gtlPar:"⦕",gtquest:"⩼",gtrapprox:"⪆",gtrarr:"⥸",gtrdot:"⋗",gtreqless:"⋛",gtreqqless:"⪌",gtrless:"≷",gtrsim:"≳",gvertneqq:"≩︀",gvnE:"≩︀",hArr:"⇔",hairsp:" ",half:"½",hamilt:"ℋ",hardcy:"ъ",harr:"↔",harrcir:"⥈",harrw:"↭",hbar:"ℏ",hcirc:"ĥ",hearts:"♥",heartsuit:"♥",hellip:"…",hercon:"⊹",hfr:"𝔥",hksearow:"⤥",hkswarow:"⤦",hoarr:"⇿",homtht:"∻",hookleftarrow:"↩",hookrightarrow:"↪",hopf:"𝕙",horbar:"―",hscr:"𝒽",hslash:"ℏ",hstrok:"ħ",hybull:"⁃",hyphen:"‐",iacute:"í",ic:"⁣",icirc:"î",icy:"и",iecy:"е",iexcl:"¡",iff:"⇔",ifr:"𝔦",igrave:"ì",ii:"ⅈ",iiiint:"⨌",iiint:"∭",iinfin:"⧜",iiota:"℩",ijlig:"ĳ",imacr:"ī",image:"ℑ",imagline:"ℐ",imagpart:"ℑ",imath:"ı",imof:"⊷",imped:"Ƶ",in:"∈",incare:"℅",infin:"∞",infintie:"⧝",inodot:"ı",int:"∫",intcal:"⊺",integers:"ℤ",intercal:"⊺",intlarhk:"⨗",intprod:"⨼",iocy:"ё",iogon:"į",iopf:"𝕚",iota:"ι",iprod:"⨼",iquest:"¿",iscr:"𝒾",isin:"∈",isinE:"⋹",isindot:"⋵",isins:"⋴",isinsv:"⋳",isinv:"∈",it:"⁢",itilde:"ĩ",iukcy:"і",iuml:"ï",jcirc:"ĵ",jcy:"й",jfr:"𝔧",jmath:"ȷ",jopf:"𝕛",jscr:"𝒿",jsercy:"ј",jukcy:"є",kappa:"κ",kappav:"ϰ",kcedil:"ķ",kcy:"к",kfr:"𝔨",kgreen:"ĸ",khcy:"х",kjcy:"ќ",kopf:"𝕜",kscr:"𝓀",lAarr:"⇚",lArr:"⇐",lAtail:"⤛",lBarr:"⤎",lE:"≦",lEg:"⪋",lHar:"⥢",lacute:"ĺ",laemptyv:"⦴",lagran:"ℒ",lambda:"λ",lang:"⟨",langd:"⦑",langle:"⟨",lap:"⪅",laquo:"«",larr:"←",larrb:"⇤",larrbfs:"⤟",larrfs:"⤝",larrhk:"↩",larrlp:"↫",larrpl:"⤹",larrsim:"⥳",larrtl:"↢",lat:"⪫",latail:"⤙",late:"⪭",lates:"⪭︀",lbarr:"⤌",lbbrk:"❲",lbrace:"{",lbrack:"[",lbrke:"⦋",lbrksld:"⦏",lbrkslu:"⦍",lcaron:"ľ",lcedil:"ļ",lceil:"⌈",lcub:"{",lcy:"л",ldca:"⤶",ldquo:"“",ldquor:"„",ldrdhar:"⥧",ldrushar:"⥋",ldsh:"↲",le:"≤",leftarrow:"←",leftarrowtail:"↢",leftharpoondown:"↽",leftharpoonup:"↼",leftleftarrows:"⇇",leftrightarrow:"↔",leftrightarrows:"⇆",leftrightharpoons:"⇋",leftrightsquigarrow:"↭",leftthreetimes:"⋋",leg:"⋚",leq:"≤",leqq:"≦",leqslant:"⩽",les:"⩽",lescc:"⪨",lesdot:"⩿",lesdoto:"⪁",lesdotor:"⪃",lesg:"⋚︀",lesges:"⪓",lessapprox:"⪅",lessdot:"⋖",lesseqgtr:"⋚",lesseqqgtr:"⪋",lessgtr:"≶",lesssim:"≲",lfisht:"⥼",lfloor:"⌊",lfr:"𝔩",lg:"≶",lgE:"⪑",lhard:"↽",lharu:"↼",lharul:"⥪",lhblk:"▄",ljcy:"љ",ll:"≪",llarr:"⇇",llcorner:"⌞",llhard:"⥫",lltri:"◺",lmidot:"ŀ",lmoust:"⎰",lmoustache:"⎰",lnE:"≨",lnap:"⪉",lnapprox:"⪉",lne:"⪇",lneq:"⪇",lneqq:"≨",lnsim:"⋦",loang:"⟬",loarr:"⇽",lobrk:"⟦",longleftarrow:"⟵",longleftrightarrow:"⟷",longmapsto:"⟼",longrightarrow:"⟶",looparrowleft:"↫",looparrowright:"↬",lopar:"⦅",lopf:"𝕝",loplus:"⨭",lotimes:"⨴",lowast:"∗",lowbar:"_",loz:"◊",lozenge:"◊",lozf:"⧫",lpar:"(",lparlt:"⦓",lrarr:"⇆",lrcorner:"⌟",lrhar:"⇋",lrhard:"⥭",lrm:"‎",lrtri:"⊿",lsaquo:"‹",lscr:"𝓁",lsh:"↰",lsim:"≲",lsime:"⪍",lsimg:"⪏",lsqb:"[",lsquo:"‘",lsquor:"‚",lstrok:"ł",lt:"<",ltcc:"⪦",ltcir:"⩹",ltdot:"⋖",lthree:"⋋",ltimes:"⋉",ltlarr:"⥶",ltquest:"⩻",ltrPar:"⦖",ltri:"◃",ltrie:"⊴",ltrif:"◂",lurdshar:"⥊",luruhar:"⥦",lvertneqq:"≨︀",lvnE:"≨︀",mDDot:"∺",macr:"¯",male:"♂",malt:"✠",maltese:"✠",map:"↦",mapsto:"↦",mapstodown:"↧",mapstoleft:"↤",mapstoup:"↥",marker:"▮",mcomma:"⨩",mcy:"м",mdash:"—",measuredangle:"∡",mfr:"𝔪",mho:"℧",micro:"µ",mid:"∣",midast:"*",midcir:"⫰",middot:"·",minus:"−",minusb:"⊟",minusd:"∸",minusdu:"⨪",mlcp:"⫛",mldr:"…",mnplus:"∓",models:"⊧",mopf:"𝕞",mp:"∓",mscr:"𝓂",mstpos:"∾",mu:"μ",multimap:"⊸",mumap:"⊸",nGg:"⋙̸",nGt:"≫⃒",nGtv:"≫̸",nLeftarrow:"⇍",nLeftrightarrow:"⇎",nLl:"⋘̸",nLt:"≪⃒",nLtv:"≪̸",nRightarrow:"⇏",nVDash:"⊯",nVdash:"⊮",nabla:"∇",nacute:"ń",nang:"∠⃒",nap:"≉",napE:"⩰̸",napid:"≋̸",napos:"ŉ",napprox:"≉",natur:"♮",natural:"♮",naturals:"ℕ",nbsp:" ",nbump:"≎̸",nbumpe:"≏̸",ncap:"⩃",ncaron:"ň",ncedil:"ņ",ncong:"≇",ncongdot:"⩭̸",ncup:"⩂",ncy:"н",ndash:"–",ne:"≠",neArr:"⇗",nearhk:"⤤",nearr:"↗",nearrow:"↗",nedot:"≐̸",nequiv:"≢",nesear:"⤨",nesim:"≂̸",nexist:"∄",nexists:"∄",nfr:"𝔫",ngE:"≧̸",nge:"≱",ngeq:"≱",ngeqq:"≧̸",ngeqslant:"⩾̸",nges:"⩾̸",ngsim:"≵",ngt:"≯",ngtr:"≯",nhArr:"⇎",nharr:"↮",nhpar:"⫲",ni:"∋",nis:"⋼",nisd:"⋺",niv:"∋",njcy:"њ",nlArr:"⇍",nlE:"≦̸",nlarr:"↚",nldr:"‥",nle:"≰",nleftarrow:"↚",nleftrightarrow:"↮",nleq:"≰",nleqq:"≦̸",nleqslant:"⩽̸",nles:"⩽̸",nless:"≮",nlsim:"≴",nlt:"≮",nltri:"⋪",nltrie:"⋬",nmid:"∤",nopf:"𝕟",not:"¬",notin:"∉",notinE:"⋹̸",notindot:"⋵̸",notinva:"∉",notinvb:"⋷",notinvc:"⋶",notni:"∌",notniva:"∌",notnivb:"⋾",notnivc:"⋽",npar:"∦",nparallel:"∦",nparsl:"⫽⃥",npart:"∂̸",npolint:"⨔",npr:"⊀",nprcue:"⋠",npre:"⪯̸",nprec:"⊀",npreceq:"⪯̸",nrArr:"⇏",nrarr:"↛",nrarrc:"⤳̸",nrarrw:"↝̸",nrightarrow:"↛",nrtri:"⋫",nrtrie:"⋭",nsc:"⊁",nsccue:"⋡",nsce:"⪰̸",nscr:"𝓃",nshortmid:"∤",nshortparallel:"∦",nsim:"≁",nsime:"≄",nsimeq:"≄",nsmid:"∤",nspar:"∦",nsqsube:"⋢",nsqsupe:"⋣",nsub:"⊄",nsubE:"⫅̸",nsube:"⊈",nsubset:"⊂⃒",nsubseteq:"⊈",nsubseteqq:"⫅̸",nsucc:"⊁",nsucceq:"⪰̸",nsup:"⊅",nsupE:"⫆̸",nsupe:"⊉",nsupset:"⊃⃒",nsupseteq:"⊉",nsupseteqq:"⫆̸",ntgl:"≹",ntilde:"ñ",ntlg:"≸",ntriangleleft:"⋪",ntrianglelefteq:"⋬",ntriangleright:"⋫",ntrianglerighteq:"⋭",nu:"ν",num:"#",numero:"№",numsp:" ",nvDash:"⊭",nvHarr:"⤄",nvap:"≍⃒",nvdash:"⊬",nvge:"≥⃒",nvgt:">⃒",nvinfin:"⧞",nvlArr:"⤂",nvle:"≤⃒",nvlt:"<⃒",nvltrie:"⊴⃒",nvrArr:"⤃",nvrtrie:"⊵⃒",nvsim:"∼⃒",nwArr:"⇖",nwarhk:"⤣",nwarr:"↖",nwarrow:"↖",nwnear:"⤧",oS:"Ⓢ",oacute:"ó",oast:"⊛",ocir:"⊚",ocirc:"ô",ocy:"о",odash:"⊝",odblac:"ő",odiv:"⨸",odot:"⊙",odsold:"⦼",oelig:"œ",ofcir:"⦿",ofr:"𝔬",ogon:"˛",ograve:"ò",ogt:"⧁",ohbar:"⦵",ohm:"Ω",oint:"∮",olarr:"↺",olcir:"⦾",olcross:"⦻",oline:"‾",olt:"⧀",omacr:"ō",omega:"ω",omicron:"ο",omid:"⦶",ominus:"⊖",oopf:"𝕠",opar:"⦷",operp:"⦹",oplus:"⊕",or:"∨",orarr:"↻",ord:"⩝",order:"ℴ",orderof:"ℴ",ordf:"ª",ordm:"º",origof:"⊶",oror:"⩖",orslope:"⩗",orv:"⩛",oscr:"ℴ",oslash:"ø",osol:"⊘",otilde:"õ",otimes:"⊗",otimesas:"⨶",ouml:"ö",ovbar:"⌽",par:"∥",para:"¶",parallel:"∥",parsim:"⫳",parsl:"⫽",part:"∂",pcy:"п",percnt:"%",period:".",permil:"‰",perp:"⊥",pertenk:"‱",pfr:"𝔭",phi:"φ",phiv:"ϕ",phmmat:"ℳ",phone:"☎",pi:"π",pitchfork:"⋔",piv:"ϖ",planck:"ℏ",planckh:"ℎ",plankv:"ℏ",plus:"+",plusacir:"⨣",plusb:"⊞",pluscir:"⨢",plusdo:"∔",plusdu:"⨥",pluse:"⩲",plusmn:"±",plussim:"⨦",plustwo:"⨧",pm:"±",pointint:"⨕",popf:"𝕡",pound:"£",pr:"≺",prE:"⪳",prap:"⪷",prcue:"≼",pre:"⪯",prec:"≺",precapprox:"⪷",preccurlyeq:"≼",preceq:"⪯",precnapprox:"⪹",precneqq:"⪵",precnsim:"⋨",precsim:"≾",prime:"′",primes:"ℙ",prnE:"⪵",prnap:"⪹",prnsim:"⋨",prod:"∏",profalar:"⌮",profline:"⌒",profsurf:"⌓",prop:"∝",propto:"∝",prsim:"≾",prurel:"⊰",pscr:"𝓅",psi:"ψ",puncsp:" ",qfr:"𝔮",qint:"⨌",qopf:"𝕢",qprime:"⁗",qscr:"𝓆",quaternions:"ℍ",quatint:"⨖",quest:"?",questeq:"≟",quot:'"',rAarr:"⇛",rArr:"⇒",rAtail:"⤜",rBarr:"⤏",rHar:"⥤",race:"∽̱",racute:"ŕ",radic:"√",raemptyv:"⦳",rang:"⟩",rangd:"⦒",range:"⦥",rangle:"⟩",raquo:"»",rarr:"→",rarrap:"⥵",rarrb:"⇥",rarrbfs:"⤠",rarrc:"⤳",rarrfs:"⤞",rarrhk:"↪",rarrlp:"↬",rarrpl:"⥅",rarrsim:"⥴",rarrtl:"↣",rarrw:"↝",ratail:"⤚",ratio:"∶",rationals:"ℚ",rbarr:"⤍",rbbrk:"❳",rbrace:"}",rbrack:"]",rbrke:"⦌",rbrksld:"⦎",rbrkslu:"⦐",rcaron:"ř",rcedil:"ŗ",rceil:"⌉",rcub:"}",rcy:"р",rdca:"⤷",rdldhar:"⥩",rdquo:"”",rdquor:"”",rdsh:"↳",real:"ℜ",realine:"ℛ",realpart:"ℜ",reals:"ℝ",rect:"▭",reg:"®",rfisht:"⥽",rfloor:"⌋",rfr:"𝔯",rhard:"⇁",rharu:"⇀",rharul:"⥬",rho:"ρ",rhov:"ϱ",rightarrow:"→",rightarrowtail:"↣",rightharpoondown:"⇁",rightharpoonup:"⇀",rightleftarrows:"⇄",rightleftharpoons:"⇌",rightrightarrows:"⇉",rightsquigarrow:"↝",rightthreetimes:"⋌",ring:"˚",risingdotseq:"≓",rlarr:"⇄",rlhar:"⇌",rlm:"‏",rmoust:"⎱",rmoustache:"⎱",rnmid:"⫮",roang:"⟭",roarr:"⇾",robrk:"⟧",ropar:"⦆",ropf:"𝕣",roplus:"⨮",rotimes:"⨵",rpar:")",rpargt:"⦔",rppolint:"⨒",rrarr:"⇉",rsaquo:"›",rscr:"𝓇",rsh:"↱",rsqb:"]",rsquo:"’",rsquor:"’",rthree:"⋌",rtimes:"⋊",rtri:"▹",rtrie:"⊵",rtrif:"▸",rtriltri:"⧎",ruluhar:"⥨",rx:"℞",sacute:"ś",sbquo:"‚",sc:"≻",scE:"⪴",scap:"⪸",scaron:"š",sccue:"≽",sce:"⪰",scedil:"ş",scirc:"ŝ",scnE:"⪶",scnap:"⪺",scnsim:"⋩",scpolint:"⨓",scsim:"≿",scy:"с",sdot:"⋅",sdotb:"⊡",sdote:"⩦",seArr:"⇘",searhk:"⤥",searr:"↘",searrow:"↘",sect:"§",semi:";",seswar:"⤩",setminus:"∖",setmn:"∖",sext:"✶",sfr:"𝔰",sfrown:"⌢",sharp:"♯",shchcy:"щ",shcy:"ш",shortmid:"∣",shortparallel:"∥",shy:"­",sigma:"σ",sigmaf:"ς",sigmav:"ς",sim:"∼",simdot:"⩪",sime:"≃",simeq:"≃",simg:"⪞",simgE:"⪠",siml:"⪝",simlE:"⪟",simne:"≆",simplus:"⨤",simrarr:"⥲",slarr:"←",smallsetminus:"∖",smashp:"⨳",smeparsl:"⧤",smid:"∣",smile:"⌣",smt:"⪪",smte:"⪬",smtes:"⪬︀",softcy:"ь",sol:"/",solb:"⧄",solbar:"⌿",sopf:"𝕤",spades:"♠",spadesuit:"♠",spar:"∥",sqcap:"⊓",sqcaps:"⊓︀",sqcup:"⊔",sqcups:"⊔︀",sqsub:"⊏",sqsube:"⊑",sqsubset:"⊏",sqsubseteq:"⊑",sqsup:"⊐",sqsupe:"⊒",sqsupset:"⊐",sqsupseteq:"⊒",squ:"□",square:"□",squarf:"▪",squf:"▪",srarr:"→",sscr:"𝓈",ssetmn:"∖",ssmile:"⌣",sstarf:"⋆",star:"☆",starf:"★",straightepsilon:"ϵ",straightphi:"ϕ",strns:"¯",sub:"⊂",subE:"⫅",subdot:"⪽",sube:"⊆",subedot:"⫃",submult:"⫁",subnE:"⫋",subne:"⊊",subplus:"⪿",subrarr:"⥹",subset:"⊂",subseteq:"⊆",subseteqq:"⫅",subsetneq:"⊊",subsetneqq:"⫋",subsim:"⫇",subsub:"⫕",subsup:"⫓",succ:"≻",succapprox:"⪸",succcurlyeq:"≽",succeq:"⪰",succnapprox:"⪺",succneqq:"⪶",succnsim:"⋩",succsim:"≿",sum:"∑",sung:"♪",sup1:"¹",sup2:"²",sup3:"³",sup:"⊃",supE:"⫆",supdot:"⪾",supdsub:"⫘",supe:"⊇",supedot:"⫄",suphsol:"⟉",suphsub:"⫗",suplarr:"⥻",supmult:"⫂",supnE:"⫌",supne:"⊋",supplus:"⫀",supset:"⊃",supseteq:"⊇",supseteqq:"⫆",supsetneq:"⊋",supsetneqq:"⫌",supsim:"⫈",supsub:"⫔",supsup:"⫖",swArr:"⇙",swarhk:"⤦",swarr:"↙",swarrow:"↙",swnwar:"⤪",szlig:"ß",target:"⌖",tau:"τ",tbrk:"⎴",tcaron:"ť",tcedil:"ţ",tcy:"т",tdot:"⃛",telrec:"⌕",tfr:"𝔱",there4:"∴",therefore:"∴",theta:"θ",thetasym:"ϑ",thetav:"ϑ",thickapprox:"≈",thicksim:"∼",thinsp:" ",thkap:"≈",thksim:"∼",thorn:"þ",tilde:"˜",times:"×",timesb:"⊠",timesbar:"⨱",timesd:"⨰",tint:"∭",toea:"⤨",top:"⊤",topbot:"⌶",topcir:"⫱",topf:"𝕥",topfork:"⫚",tosa:"⤩",tprime:"‴",trade:"™",triangle:"▵",triangledown:"▿",triangleleft:"◃",trianglelefteq:"⊴",triangleq:"≜",triangleright:"▹",trianglerighteq:"⊵",tridot:"◬",trie:"≜",triminus:"⨺",triplus:"⨹",trisb:"⧍",tritime:"⨻",trpezium:"⏢",tscr:"𝓉",tscy:"ц",tshcy:"ћ",tstrok:"ŧ",twixt:"≬",twoheadleftarrow:"↞",twoheadrightarrow:"↠",uArr:"⇑",uHar:"⥣",uacute:"ú",uarr:"↑",ubrcy:"ў",ubreve:"ŭ",ucirc:"û",ucy:"у",udarr:"⇅",udblac:"ű",udhar:"⥮",ufisht:"⥾",ufr:"𝔲",ugrave:"ù",uharl:"↿",uharr:"↾",uhblk:"▀",ulcorn:"⌜",ulcorner:"⌜",ulcrop:"⌏",ultri:"◸",umacr:"ū",uml:"¨",uogon:"ų",uopf:"𝕦",uparrow:"↑",updownarrow:"↕",upharpoonleft:"↿",upharpoonright:"↾",uplus:"⊎",upsi:"υ",upsih:"ϒ",upsilon:"υ",upuparrows:"⇈",urcorn:"⌝",urcorner:"⌝",urcrop:"⌎",uring:"ů",urtri:"◹",uscr:"𝓊",utdot:"⋰",utilde:"ũ",utri:"▵",utrif:"▴",uuarr:"⇈",uuml:"ü",uwangle:"⦧",vArr:"⇕",vBar:"⫨",vBarv:"⫩",vDash:"⊨",vangrt:"⦜",varepsilon:"ϵ",varkappa:"ϰ",varnothing:"∅",varphi:"ϕ",varpi:"ϖ",varpropto:"∝",varr:"↕",varrho:"ϱ",varsigma:"ς",varsubsetneq:"⊊︀",varsubsetneqq:"⫋︀",varsupsetneq:"⊋︀",varsupsetneqq:"⫌︀",vartheta:"ϑ",vartriangleleft:"⊲",vartriangleright:"⊳",vcy:"в",vdash:"⊢",vee:"∨",veebar:"⊻",veeeq:"≚",vellip:"⋮",verbar:"|",vert:"|",vfr:"𝔳",vltri:"⊲",vnsub:"⊂⃒",vnsup:"⊃⃒",vopf:"𝕧",vprop:"∝",vrtri:"⊳",vscr:"𝓋",vsubnE:"⫋︀",vsubne:"⊊︀",vsupnE:"⫌︀",vsupne:"⊋︀",vzigzag:"⦚",wcirc:"ŵ",wedbar:"⩟",wedge:"∧",wedgeq:"≙",weierp:"℘",wfr:"𝔴",wopf:"𝕨",wp:"℘",wr:"≀",wreath:"≀",wscr:"𝓌",xcap:"⋂",xcirc:"◯",xcup:"⋃",xdtri:"▽",xfr:"𝔵",xhArr:"⟺",xharr:"⟷",xi:"ξ",xlArr:"⟸",xlarr:"⟵",xmap:"⟼",xnis:"⋻",xodot:"⨀",xopf:"𝕩",xoplus:"⨁",xotime:"⨂",xrArr:"⟹",xrarr:"⟶",xscr:"𝓍",xsqcup:"⨆",xuplus:"⨄",xutri:"△",xvee:"⋁",xwedge:"⋀",yacute:"ý",yacy:"я",ycirc:"ŷ",ycy:"ы",yen:"¥",yfr:"𝔶",yicy:"ї",yopf:"𝕪",yscr:"𝓎",yucy:"ю",yuml:"ÿ",zacute:"ź",zcaron:"ž",zcy:"з",zdot:"ż",zeetrf:"ℨ",zeta:"ζ",zfr:"𝔷",zhcy:"ж",zigrarr:"⇝",zopf:"𝕫",zscr:"𝓏",zwj:"‍",zwnj:"‌"},Re={}.hasOwnProperty,Me={name:"characterReference",tokenize:function(e,t,n){const r=this;let c,a,l=0;return function(t){return e.enter("characterReference"),e.enter("characterReferenceMarker"),e.consume(t),e.exit("characterReferenceMarker"),s};function s(t){return 35===t?(e.enter("characterReferenceMarkerNumeric"),e.consume(t),e.exit("characterReferenceMarkerNumeric"),f):(e.enter("characterReferenceValue"),c=31,a=u,p(t))}function f(t){return 88===t||120===t?(e.enter("characterReferenceMarkerHexadecimal"),e.consume(t),e.exit("characterReferenceMarkerHexadecimal"),e.enter("characterReferenceValue"),c=6,a=o,p):(e.enter("characterReferenceValue"),c=7,a=i,p(t))}function p(i){let o;return 59===i&&l?(o=e.exit("characterReferenceValue"),a!==u||function(e){return!!Re.call(Be,e)&&Be[e]}(r.sliceSerialize(o))?(e.enter("characterReferenceMarker"),e.consume(i),e.exit("characterReferenceMarker"),e.exit("characterReference"),t):n(i)):a(i)&&l++<c?(e.consume(i),p):n(i)}}},Ne={name:"characterEscape",tokenize:function(e,t,n){return function(t){return e.enter("characterEscape"),e.enter("escapeMarker"),e.consume(t),e.exit("escapeMarker"),r};function r(r){return c(r)?(e.enter("characterEscapeValue"),e.consume(r),e.exit("characterEscapeValue"),e.exit("characterEscape"),t):n(r)}}},Pe={name:"lineEnding",tokenize:function(e,t){return function(n){return e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),B(e,t,"linePrefix")}}},Oe={name:"labelEnd",tokenize:function(e,t,n){const r=this;let i,o,u=r.events.length;for(;u--;)if(("labelImage"===r.events[u][1].type||"labelLink"===r.events[u][1].type)&&!r.events[u][1]._balanced){i=r.events[u][1];break}return function(t){return i?i._inactive?a(t):(o=r.parser.defined.includes(M(r.sliceSerialize({start:i.end,end:r.now()}))),e.enter("labelEnd"),e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelEnd"),c):n(t)};function c(n){return 40===n?e.attempt(_e,t,o?t:a)(n):91===n?e.attempt(Ve,t,o?e.attempt(He,t,a):a)(n):o?t(n):a(n)}function a(e){return i._balanced=!0,n(e)}},resolveTo:function(e,t){let n,r,i,o,u=e.length,c=0;for(;u--;)if(n=e[u][1],r){if("link"===n.type||"labelLink"===n.type&&n._inactive)break;"enter"===e[u][0]&&"labelLink"===n.type&&(n._inactive=!0)}else if(i){if("enter"===e[u][0]&&("labelImage"===n.type||"labelLink"===n.type)&&!n._balanced&&(r=u,"labelLink"!==n.type)){c=2;break}}else"labelEnd"===n.type&&(i=u);const a={type:"labelLink"===e[r][1].type?"link":"image",start:Object.assign({},e[r][1].start),end:Object.assign({},e[e.length-1][1].end)},l={type:"label",start:Object.assign({},e[r][1].start),end:Object.assign({},e[i][1].end)},s={type:"labelText",start:Object.assign({},e[r+c+2][1].end),end:Object.assign({},e[i-2][1].start)};return o=[["enter",a,t],["enter",l,t]],o=Z(o,e.slice(r+1,r+c+3)),o=Z(o,[["enter",s,t]]),o=Z(o,pe(t.parser.constructs.insideSpan.null,e.slice(r+c+4,i-3),t)),o=Z(o,[["exit",s,t],e[i-2],e[i-1],["exit",l,t]]),o=Z(o,e.slice(i+1)),o=Z(o,[["exit",a,t]]),W(e,r,e.length,o),e},resolveAll:function(e){let t,n=-1;for(;++n<e.length;)t=e[n][1],"labelImage"!==t.type&&"labelLink"!==t.type&&"labelEnd"!==t.type||(e.splice(n+1,"labelImage"===t.type?4:2),t.type="data",n++);return e}},_e={tokenize:function(e,t,n){return function(t){return e.enter("resource"),e.enter("resourceMarker"),e.consume(t),e.exit("resourceMarker"),we(e,r)};function r(t){return 41===t?u(t):ke(e,i,n,"resourceDestination","resourceDestinationLiteral","resourceDestinationLiteralMarker","resourceDestinationRaw","resourceDestinationString",32)(t)}function i(t){return s(t)?we(e,o)(t):u(t)}function o(t){return 34===t||39===t||40===t?ye(e,we(e,u),n,"resourceTitle","resourceTitleMarker","resourceTitleString")(t):u(t)}function u(r){return 41===r?(e.enter("resourceMarker"),e.consume(r),e.exit("resourceMarker"),e.exit("resource"),t):n(r)}}},Ve={tokenize:function(e,t,n){const r=this;return function(t){return ve.call(r,e,i,n,"reference","referenceMarker","referenceString")(t)};function i(e){return r.parser.defined.includes(M(r.sliceSerialize(r.events[r.events.length-1][1]).slice(1,-1)))?t(e):n(e)}}},He={tokenize:function(e,t,n){return function(t){return e.enter("reference"),e.enter("referenceMarker"),e.consume(t),e.exit("referenceMarker"),r};function r(r){return 93===r?(e.enter("referenceMarker"),e.consume(r),e.exit("referenceMarker"),e.exit("reference"),t):n(r)}}},je={name:"labelStartImage",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("labelImage"),e.enter("labelImageMarker"),e.consume(t),e.exit("labelImageMarker"),i};function i(t){return 91===t?(e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelImage"),o):n(t)}function o(e){return 94===e&&"_hiddenFootnoteSupport"in r.parser.constructs?n(e):t(e)}},resolveAll:Oe.resolveAll};function Ue(e){return null===e||s(e)||d(e)?1:m(e)?2:void 0}const Ge={name:"attention",tokenize:function(e,t){const n=this.parser.constructs.attentionMarkers.null,r=this.previous,i=Ue(r);let o;return function(t){return e.enter("attentionSequence"),o=t,u(t)};function u(c){if(c===o)return e.consume(c),u;const a=e.exit("attentionSequence"),l=Ue(c),s=!l||2===l&&i||n.includes(c),f=!i||2===i&&l||n.includes(r);return a._open=Boolean(42===o?s:s&&(i||!f)),a._close=Boolean(42===o?f:f&&(l||!s)),t(c)}},resolveAll:function(e,t){let n,r,i,o,u,c,a,l,s=-1;for(;++s<e.length;)if("enter"===e[s][0]&&"attentionSequence"===e[s][1].type&&e[s][1]._close)for(n=s;n--;)if("exit"===e[n][0]&&"attentionSequence"===e[n][1].type&&e[n][1]._open&&t.sliceSerialize(e[n][1]).charCodeAt(0)===t.sliceSerialize(e[s][1]).charCodeAt(0)){if((e[n][1]._close||e[s][1]._open)&&(e[s][1].end.offset-e[s][1].start.offset)%3&&!((e[n][1].end.offset-e[n][1].start.offset+e[s][1].end.offset-e[s][1].start.offset)%3))continue;c=e[n][1].end.offset-e[n][1].start.offset>1&&e[s][1].end.offset-e[s][1].start.offset>1?2:1;const f=Object.assign({},e[n][1].end),p=Object.assign({},e[s][1].start);Qe(f,-c),Qe(p,c),o={type:c>1?"strongSequence":"emphasisSequence",start:f,end:Object.assign({},e[n][1].end)},u={type:c>1?"strongSequence":"emphasisSequence",start:Object.assign({},e[s][1].start),end:p},i={type:c>1?"strongText":"emphasisText",start:Object.assign({},e[n][1].end),end:Object.assign({},e[s][1].start)},r={type:c>1?"strong":"emphasis",start:Object.assign({},o.start),end:Object.assign({},u.end)},e[n][1].end=Object.assign({},o.start),e[s][1].start=Object.assign({},u.end),a=[],e[n][1].end.offset-e[n][1].start.offset&&(a=Z(a,[["enter",e[n][1],t],["exit",e[n][1],t]])),a=Z(a,[["enter",r,t],["enter",o,t],["exit",o,t],["enter",i,t]]),a=Z(a,pe(t.parser.constructs.insideSpan.null,e.slice(n+1,s),t)),a=Z(a,[["exit",i,t],["enter",u,t],["exit",u,t],["exit",r,t]]),e[s][1].end.offset-e[s][1].start.offset?(l=2,a=Z(a,[["enter",e[s][1],t],["exit",e[s][1],t]])):l=0,W(e,n-1,s-n+3,a),s=n+a.length-l-2;break}for(s=-1;++s<e.length;)"attentionSequence"===e[s][1].type&&(e[s][1].type="data");return e}};function Qe(e,t){e.column+=t,e.offset+=t,e._bufferIndex+=t}const We={name:"autolink",tokenize:function(e,t,n){let i=1;return function(t){return e.enter("autolink"),e.enter("autolinkMarker"),e.consume(t),e.exit("autolinkMarker"),e.enter("autolinkProtocol"),o};function o(t){return r(t)?(e.consume(t),c):a(t)?p(t):n(t)}function c(e){return 43===e||45===e||46===e||u(e)?s(e):p(e)}function s(t){return 58===t?(e.consume(t),f):(43===t||45===t||46===t||u(t))&&i++<32?(e.consume(t),s):p(t)}function f(t){return 62===t?(e.exit("autolinkProtocol"),h(t)):null===t||32===t||60===t||l(t)?n(t):(e.consume(t),f)}function p(t){return 64===t?(e.consume(t),i=0,d):a(t)?(e.consume(t),p):n(t)}function d(e){return u(e)?m(e):n(e)}function m(t){return 46===t?(e.consume(t),i=0,d):62===t?(e.exit("autolinkProtocol").type="autolinkEmail",h(t)):g(t)}function g(t){return(45===t||u(t))&&i++<63?(e.consume(t),45===t?g:m):n(t)}function h(n){return e.enter("autolinkMarker"),e.consume(n),e.exit("autolinkMarker"),e.exit("autolink"),t}}},Ze={name:"htmlText",tokenize:function(e,t,n){const i=this;let o,c,a,l;return function(t){return e.enter("htmlText"),e.enter("htmlTextData"),e.consume(t),d};function d(t){return 33===t?(e.consume(t),m):47===t?(e.consume(t),A):63===t?(e.consume(t),F):r(t)?(e.consume(t),L):n(t)}function m(t){return 45===t?(e.consume(t),g):91===t?(e.consume(t),c="CDATA[",a=0,v):r(t)?(e.consume(t),S):n(t)}function g(t){return 45===t?(e.consume(t),h):n(t)}function h(t){return null===t||62===t?n(t):45===t?(e.consume(t),b):x(t)}function b(e){return null===e||62===e?n(e):x(e)}function x(t){return null===t?n(t):45===t?(e.consume(t),k):f(t)?(l=x,O(t)):(e.consume(t),x)}function k(t){return 45===t?(e.consume(t),V):x(t)}function v(t){return t===c.charCodeAt(a++)?(e.consume(t),a===c.length?y:v):n(t)}function y(t){return null===t?n(t):93===t?(e.consume(t),w):f(t)?(l=y,O(t)):(e.consume(t),y)}function w(t){return 93===t?(e.consume(t),q):y(t)}function q(t){return 62===t?V(t):93===t?(e.consume(t),q):y(t)}function S(t){return null===t||62===t?V(t):f(t)?(l=S,O(t)):(e.consume(t),S)}function F(t){return null===t?n(t):63===t?(e.consume(t),E):f(t)?(l=F,O(t)):(e.consume(t),F)}function E(e){return 62===e?V(e):F(e)}function A(t){return r(t)?(e.consume(t),D):n(t)}function D(t){return 45===t||u(t)?(e.consume(t),D):C(t)}function C(t){return f(t)?(l=C,O(t)):p(t)?(e.consume(t),C):V(t)}function L(t){return 45===t||u(t)?(e.consume(t),L):47===t||62===t||s(t)?T(t):n(t)}function T(t){return 47===t?(e.consume(t),V):58===t||95===t||r(t)?(e.consume(t),z):f(t)?(l=T,O(t)):p(t)?(e.consume(t),T):V(t)}function z(t){return 45===t||46===t||58===t||95===t||u(t)?(e.consume(t),z):I(t)}function I(t){return 61===t?(e.consume(t),R):f(t)?(l=I,O(t)):p(t)?(e.consume(t),I):T(t)}function R(t){return null===t||60===t||61===t||62===t||96===t?n(t):34===t||39===t?(e.consume(t),o=t,M):f(t)?(l=R,O(t)):p(t)?(e.consume(t),R):(e.consume(t),o=void 0,P)}function M(t){return t===o?(e.consume(t),N):null===t?n(t):f(t)?(l=M,O(t)):(e.consume(t),M)}function N(e){return 62===e||47===e||s(e)?T(e):n(e)}function P(t){return null===t||34===t||39===t||60===t||61===t||96===t?n(t):62===t||s(t)?T(t):(e.consume(t),P)}function O(t){return e.exit("htmlTextData"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),B(e,_,"linePrefix",i.parser.constructs.disable.null.includes("codeIndented")?void 0:4)}function _(t){return e.enter("htmlTextData"),l(t)}function V(r){return 62===r?(e.consume(r),e.exit("htmlTextData"),e.exit("htmlText"),t):n(r)}}},Je={name:"labelStartLink",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("labelLink"),e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelLink"),i};function i(e){return 94===e&&"_hiddenFootnoteSupport"in r.parser.constructs?n(e):t(e)}},resolveAll:Oe.resolveAll},Ye={name:"hardBreakEscape",tokenize:function(e,t,n){return function(t){return e.enter("hardBreakEscape"),e.enter("escapeMarker"),e.consume(t),r};function r(r){return f(r)?(e.exit("escapeMarker"),e.exit("hardBreakEscape"),t(r)):n(r)}}},Ke={name:"codeText",tokenize:function(e,t,n){let r,i,o=0;return function(t){return e.enter("codeText"),e.enter("codeTextSequence"),u(t)};function u(t){return 96===t?(e.consume(t),o++,u):(e.exit("codeTextSequence"),c(t))}function c(t){return null===t?n(t):96===t?(i=e.enter("codeTextSequence"),r=0,l(t)):32===t?(e.enter("space"),e.consume(t),e.exit("space"),c):f(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),c):(e.enter("codeTextData"),a(t))}function a(t){return null===t||32===t||96===t||f(t)?(e.exit("codeTextData"),c(t)):(e.consume(t),a)}function l(n){return 96===n?(e.consume(n),r++,l):r===o?(e.exit("codeTextSequence"),e.exit("codeText"),t(n)):(i.type="codeTextData",a(n))}},resolve:function(e){let t,n,r=e.length-4,i=3;if(!("lineEnding"!==e[i][1].type&&"space"!==e[i][1].type||"lineEnding"!==e[r][1].type&&"space"!==e[r][1].type))for(t=i;++t<r;)if("codeTextData"===e[t][1].type){e[i][1].type="codeTextPadding",e[r][1].type="codeTextPadding",i+=2,r-=2;break}for(t=i-1,r++;++t<=r;)void 0===n?t!==r&&"lineEnding"!==e[t][1].type&&(n=t):t!==r&&"lineEnding"!==e[t][1].type||(e[n][1].type="codeTextData",t!==n+2&&(e[n][1].end=e[t-1][1].end,e.splice(n+2,t-n-2),r-=t-n-2,t=n+2),n=void 0);return e},previous:function(e){return 96!==e||"characterEscape"===this.events[this.events.length-1][1].type}},Xe={42:ge,43:ge,45:ge,48:ge,49:ge,50:ge,51:ge,52:ge,53:ge,54:ge,55:ge,56:ge,57:ge,62:xe},$e={91:qe},et={[-2]:Fe,[-1]:Fe,32:Fe},tt={35:Ae,42:me,45:[De,me],60:Te,61:De,95:me,96:Ie,126:Ie},nt={38:Me,92:Ne},rt={[-5]:Pe,[-4]:Pe,[-3]:Pe,33:je,38:Me,42:Ge,60:[We,Ze],91:Je,92:[Ye,Ne],93:Oe,95:Ge,96:Ke},it={null:[Ge,ue]},ot={null:[42,95]},ut={null:[]};function ct(e={}){const t={defined:[],lazy:{},constructs:function(e){const t={};let n=-1;for(;++n<e.length;)Y(t,e[n]);return t}([n].concat(e.extensions||[])),content:r(X),document:r($),flow:r(oe),string:r(ce),text:r(ae)};return t;function r(e){return function(n){return de(t,e,n)}}}function at(e){for(;!te(e););return e}const lt=/[\0\t\n\r]/g;function st(){let e,t=1,n="",r=!0;return function(i,o,u){const c=[];let a,l,s,f,p;for(i=n+i.toString(o),s=0,n="",r&&(65279===i.charCodeAt(0)&&s++,r=void 0);s<i.length;){if(lt.lastIndex=s,a=lt.exec(i),f=a&&void 0!==a.index?a.index:i.length,p=i.charCodeAt(f),!a){n=i.slice(s);break}if(10===p&&s===f&&e)c.push(-3),e=void 0;else switch(e&&(c.push(-5),e=void 0),s<f&&(c.push(i.slice(s,f)),t+=f-s),p){case 0:c.push(65533),t++;break;case 9:for(l=4*Math.ceil(t/4),c.push(-2);t++<l;)c.push(-1);break;case 10:c.push(-4),t=1;break;default:e=!0,t=1}s=f+1}return u&&(e&&c.push(-5),n&&c.push(n),c.push(null)),c}}var ft=exports;for(var pt in t)ft[pt]=t[pt];t.__esModule&&Object.defineProperty(ft,"__esModule",{value:!0})})();
+
+/***/ }),
+
+/***/ 5673:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+// @ts-check
+
+
+
+// @ts-ignore
+const {
+  gfmAutolinkLiteral, gfmFootnote, gfmTable, parse, postprocess, preprocess
+  // @ts-ignore
+} = __nccwpck_require__(4117);
+
+/**
+ * Markdown token.
+ *
+ * @typedef {Object} Token
+ * @property {string} type Token type.
+ * @property {number} startLine Start line (1-based).
+ * @property {number} startColumn Start column (1-based).
+ * @property {number} endLine End line (1-based).
+ * @property {number} endColumn End column (1-based).
+ * @property {string} text Token text.
+ * @property {Token[]} children Child tokens.
+ */
+
+/**
+ * Parses a Markdown document and returns Micromark events.
+ *
+ * @param {string} markdown Markdown document.
+ * @param {Object} [options] Options for micromark.
+ * @returns {Object[]} Micromark events.
+ */
+function getMicromarkEvents(markdown, options = {}) {
+
+  // Customize options object to add useful extensions
+  options.extensions = options.extensions || [];
+  options.extensions.push(gfmAutolinkLiteral, gfmFootnote(), gfmTable);
+
+  // Use micromark to parse document into Events
+  const encoding = undefined;
+  const eol = true;
+  const parseContext = parse(options);
+  // Customize ParseContext to treat all references as defined
+  parseContext.defined.includes = (searchElement) => searchElement.length > 0;
+  const chunks = preprocess()(markdown, encoding, eol);
+  const events = postprocess(parseContext.document().write(chunks));
+  return events;
+}
+
+/**
+ * Parses a Markdown document and returns (frozen) tokens.
+ *
+ * @param {string} markdown Markdown document.
+ * @param {Object} [options] Options for micromark.
+ * @returns {Token[]} Micromark tokens (frozen).
+ */
+function micromarkParse(markdown, options = {}) {
+
+  // Use micromark to parse document into Events
+  const events = getMicromarkEvents(markdown, options);
+
+  // Create Token objects
+  const document = [];
+  let current = {
+    "children": document
+  };
+  const history = [ current ];
+  for (const event of events) {
+    const [ kind, token, context ] = event;
+    const { type, start, end } = token;
+    const { "column": startColumn, "line": startLine } = start;
+    const { "column": endColumn, "line": endLine } = end;
+    let text = null;
+    try {
+      text = context.sliceSerialize(token);
+    } catch {
+      // https://github.com/micromark/micromark/issues/131
+    }
+    if (kind === "enter") {
+      const previous = current;
+      history.push(previous);
+      current = {
+        type,
+        startLine,
+        startColumn,
+        endLine,
+        endColumn,
+        text,
+        "children": []
+      };
+      previous.children.push(current);
+    } else if (kind === "exit") {
+      Object.freeze(current.children);
+      Object.freeze(current);
+      // @ts-ignore
+      current = history.pop();
+    }
+  }
+
+  // Return document
+  Object.freeze(document);
+  return document;
+}
+
+/**
+ * Filter a list of Micromark tokens by predicate.
+ *
+ * @param {Token[]} tokens Micromark tokens.
+ * @param {Function} allowed Allowed token predicate.
+ * @param {Function} [transformChildren] Transform children predicate.
+ * @returns {Token[]} Filtered tokens.
+ */
+function filterByPredicate(tokens, allowed, transformChildren) {
+  const result = [];
+  const pending = [ ...tokens ];
+  let token = null;
+  while ((token = pending.shift())) {
+    if (allowed(token)) {
+      result.push(token);
+    }
+    if (token.children.length > 0) {
+      const transformed =
+        transformChildren ? transformChildren(token) : token.children;
+      pending.unshift(...transformed);
+    }
+  }
+  return result;
+}
+
+/**
+ * Filter a list of Micromark tokens by type.
+ *
+ * @param {Token[]} tokens Micromark tokens.
+ * @param {string[]} allowed Types to allow.
+ * @returns {Token[]} Filtered tokens.
+ */
+function filterByTypes(tokens, allowed) {
+  return filterByPredicate(
+    tokens,
+    (token) => allowed.includes(token.type)
+  );
+}
+
+/**
+ * Gets information about the tag in an HTML token.
+ *
+ * @param {Token} token Micromark token.
+ * @returns {Object | null} HTML tag information.
+ */
+function getHtmlTagInfo(token) {
+  const htmlTagNameRe = /^<([^!>][^/\s>]*)/;
+  if (token.type === "htmlText") {
+    const match = htmlTagNameRe.exec(token.text);
+    if (match) {
+      const name = match[1];
+      const close = name.startsWith("/");
+      return {
+        close,
+        "name": close ? name.slice(1) : name
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Get the text of a single token from a list of Micromark tokens by type.
+ *
+ * @param {Token[]} tokens Micromark tokens.
+ * @param {string} type Types to match.
+ * @returns {string | null} Text of token.
+ */
+function getTokenTextByType(tokens, type) {
+  const filtered = tokens.filter((token) => token.type === type);
+  return (filtered.length === 1) ? filtered[0].text : null;
+}
+
+/**
+ * Determines a list of Micromark tokens matches and returns a subset.
+ *
+ * @param {Token[]} tokens Micromark tokens.
+ * @param {string[]} matchTypes Types to match.
+ * @param {string[]} [resultTypes] Types to return.
+ * @returns {Token[] | null} Matching tokens.
+ */
+function matchAndGetTokensByType(tokens, matchTypes, resultTypes) {
+  if (tokens.length !== matchTypes.length) {
+    return null;
+  }
+  resultTypes = resultTypes || matchTypes;
+  const result = [];
+  // eslint-disable-next-line unicorn/no-for-loop
+  for (let i = 0; i < matchTypes.length; i++) {
+    if (tokens[i].type !== matchTypes[i]) {
+      return null;
+    } else if (resultTypes.includes(matchTypes[i])) {
+      result.push(tokens[i]);
+    }
+  }
+  return result;
+}
+
+module.exports = {
+  "parse": micromarkParse,
+  filterByPredicate,
+  filterByTypes,
+  getHtmlTagInfo,
+  getMicromarkEvents,
+  getTokenTextByType,
+  matchAndGetTokensByType
+};
+
+
+/***/ }),
+
 /***/ 277:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
@@ -34345,12 +34545,13 @@ const getIsIgnoredPredicate = (files, cwd) => {
 
 const normalizeOptions = (options = {}) => ({
 	cwd: toPath(options.cwd) || external_node_process_namespaceObject.cwd(),
+	suppressErrors: Boolean(options.suppressErrors),
 });
 
 const isIgnoredByIgnoreFiles = async (patterns, options) => {
-	const {cwd} = normalizeOptions(options);
+	const {cwd, suppressErrors} = normalizeOptions(options);
 
-	const paths = await out(patterns, {cwd, ...ignoreFilesGlobOptions});
+	const paths = await out(patterns, {cwd, suppressErrors, ...ignoreFilesGlobOptions});
 
 	const files = await Promise.all(
 		paths.map(async filePath => ({
@@ -34363,9 +34564,9 @@ const isIgnoredByIgnoreFiles = async (patterns, options) => {
 };
 
 const isIgnoredByIgnoreFilesSync = (patterns, options) => {
-	const {cwd} = normalizeOptions(options);
+	const {cwd, suppressErrors} = normalizeOptions(options);
 
-	const paths = out.sync(patterns, {cwd, ...ignoreFilesGlobOptions});
+	const paths = out.sync(patterns, {cwd, suppressErrors, ...ignoreFilesGlobOptions});
 
 	const files = paths.map(filePath => ({
 		filePath,
@@ -34446,14 +34647,14 @@ const getIgnoreFilesPatterns = options => {
 const getFilter = async options => {
 	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
 	return createFilterFunction(
-		ignoreFilesPatterns.length > 0 && await isIgnoredByIgnoreFiles(ignoreFilesPatterns, {cwd: options.cwd}),
+		ignoreFilesPatterns.length > 0 && await isIgnoredByIgnoreFiles(ignoreFilesPatterns, options),
 	);
 };
 
 const getFilterSync = options => {
 	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
 	return createFilterFunction(
-		ignoreFilesPatterns.length > 0 && isIgnoredByIgnoreFilesSync(ignoreFilesPatterns, {cwd: options.cwd}),
+		ignoreFilesPatterns.length > 0 && isIgnoredByIgnoreFilesSync(ignoreFilesPatterns, options),
 	);
 };
 
