@@ -20262,7 +20262,7 @@ const resolveAndRequire = __nccwpck_require__(5317);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.7.0";
+const packageVersion = "0.7.1";
 const libraryName = "markdownlint";
 const libraryVersion = markdownlintLibrary.getVersion();
 const dotOnlySubstitute = "*.{md,markdown}";
@@ -21298,7 +21298,7 @@ module.exports.fixableRuleNames = [
   "MD044", "MD047", "MD049", "MD050", "MD051", "MD053"
 ];
 module.exports.homepage = "https://github.com/DavidAnson/markdownlint";
-module.exports.version = "0.28.1";
+module.exports.version = "0.28.2";
 
 
 /***/ }),
@@ -28369,7 +28369,7 @@ const prettifyError = (src, lc) => (error) => {
         let count = 1;
         const end = error.linePos[1];
         if (end && end.line === line && end.col > col) {
-            count = Math.min(end.col - col, 80 - ci);
+            count = Math.max(1, Math.min(end.col - col, 80 - ci));
         }
         const pointer = ' '.repeat(ci) + '^'.repeat(count);
         error.message += `:\n\n${lineStr}\n${pointer}\n`;
@@ -33278,7 +33278,7 @@ function stringifyFlowCollection({ comment, items }, ctx, { flowChars, itemInden
         }
     }
     if (comment) {
-        str += stringifyComment.lineComment(str, commentString(comment), indent);
+        str += stringifyComment.lineComment(str, indent, commentString(comment));
         if (onComment)
             onComment();
     }
@@ -33628,8 +33628,8 @@ exports.stringifyPair = stringifyPair;
 var Scalar = __nccwpck_require__(9338);
 var foldFlowLines = __nccwpck_require__(2889);
 
-const getFoldOptions = (ctx) => ({
-    indentAtStart: ctx.indentAtStart,
+const getFoldOptions = (ctx, isBlock) => ({
+    indentAtStart: isBlock ? ctx.indent.length : ctx.indentAtStart,
     lineWidth: ctx.options.lineWidth,
     minContentWidth: ctx.options.minContentWidth
 });
@@ -33742,7 +33742,7 @@ function doubleQuotedString(value, ctx) {
     str = start ? str + json.slice(start) : json;
     return implicitKey
         ? str
-        : foldFlowLines.foldFlowLines(str, indent, foldFlowLines.FOLD_QUOTED, getFoldOptions(ctx));
+        : foldFlowLines.foldFlowLines(str, indent, foldFlowLines.FOLD_QUOTED, getFoldOptions(ctx, false));
 }
 function singleQuotedString(value, ctx) {
     if (ctx.options.singleQuote === false ||
@@ -33754,7 +33754,7 @@ function singleQuotedString(value, ctx) {
     const res = "'" + value.replace(/'/g, "''").replace(/\n+/g, `$&\n${indent}`) + "'";
     return ctx.implicitKey
         ? res
-        : foldFlowLines.foldFlowLines(res, indent, foldFlowLines.FOLD_FLOW, getFoldOptions(ctx));
+        : foldFlowLines.foldFlowLines(res, indent, foldFlowLines.FOLD_FLOW, getFoldOptions(ctx, false));
 }
 function quotedString(value, ctx) {
     const { singleQuote } = ctx.options;
@@ -33852,7 +33852,7 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
         .replace(/(?:^|\n)([\t ].*)(?:([\n\t ]*)\n(?![\n\t ]))?/g, '$1$2') // more-indented lines aren't folded
         //                ^ more-ind. ^ empty     ^ capture next empty lines only at end of indent
         .replace(/\n+/g, `$&${indent}`);
-    const body = foldFlowLines.foldFlowLines(`${start}${value}${end}`, indent, foldFlowLines.FOLD_BLOCK, getFoldOptions(ctx));
+    const body = foldFlowLines.foldFlowLines(`${start}${value}${end}`, indent, foldFlowLines.FOLD_BLOCK, getFoldOptions(ctx, true));
     return `${header}\n${indent}${body}`;
 }
 function plainString(item, ctx, onComment, onChompKeep) {
@@ -33902,7 +33902,7 @@ function plainString(item, ctx, onComment, onChompKeep) {
     }
     return implicitKey
         ? str
-        : foldFlowLines.foldFlowLines(str, indent, foldFlowLines.FOLD_FLOW, getFoldOptions(ctx));
+        : foldFlowLines.foldFlowLines(str, indent, foldFlowLines.FOLD_FLOW, getFoldOptions(ctx, false));
 }
 function stringifyString(item, ctx, onComment, onChompKeep) {
     const { implicitKey, inFlow } = ctx;
