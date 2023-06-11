@@ -52,13 +52,15 @@ const argv =
     split(separator).
     filter(String);
 
-const parameters = {
-  argv,
-  logMessage,
-  "optionsOverride": {
-    "outputFormatters": [[outputFormatter]]
-  }
-};
+const config = core.getInput("config");
+if (config) {
+  argv.push("--config", config);
+}
+const fix = Boolean(core.getInput("fix"));
+if (fix) {
+  argv.push("--fix");
+}
+
 let invoke = true;
 const command = core.getInput("command");
 switch (command) {
@@ -66,11 +68,10 @@ case "":
   // Default behavior
   break;
 case "config":
-  parameters.name = "markdownlint-cli2-config";
+  argv.unshift("--config");
   break;
 case "fix":
-  parameters.name = "markdownlint-cli2-fix";
-  parameters.fixDefault = true;
+  argv.unshift("--fix");
   break;
 default:
   core.setFailed(`Unsupported command: ${command}`);
@@ -79,6 +80,13 @@ default:
 }
 
 if (invoke) {
+  const parameters = {
+    argv,
+    logMessage,
+    "optionsOverride": {
+      "outputFormatters": [[outputFormatter]]
+    }
+  };
   markdownlintCli2(parameters).then(
     (code) => code && core.setFailed(`Failed with exit code: ${code}`),
     (error) => core.setFailed(`Failed due to error: ${error}`)

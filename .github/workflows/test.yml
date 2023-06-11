@@ -33,7 +33,7 @@ jobs:
     - run: exit 1
       if: steps.test.outcome != 'failure'
   one-glob-pattern:
-    name: One glob (*.md, 0 errors)
+    name: One glob (README.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -72,6 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+    - run: rm .markdownlint.json
     - uses: ./
       with:
         command: config
@@ -117,6 +118,7 @@ jobs:
     - uses: ./
       with:
         command: fix
+        globs: 'test/*'
   command-unsupported:
     name: Command = unsupported (fails)
     runs-on: ubuntu-latest
@@ -129,3 +131,39 @@ jobs:
       id: test
     - run: exit 1
       if: steps.test.outcome != 'failure'
+  config:
+    name: config (test/errors.md, 2 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - run: rm .markdownlint.json
+    - uses: ./
+      with:
+        config: 'config/test.markdownlint.jsonc'
+        globs: 'test/*'
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
+  config-invalid:
+    name: config (invalid configuration file, fails)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./
+      with:
+        config: 'invalid.markdownlint.jsonc'
+        globs: 'test/*'
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
+  fix:
+    name: fix (test/errors.md, 0 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./
+      with:
+        fix: true
+        globs: 'test/*'

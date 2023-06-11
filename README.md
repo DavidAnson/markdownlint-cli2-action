@@ -15,17 +15,32 @@ information.
 
 ### command (optional)
 
-Command to run (unset, `fix`, or `config`)
+> **Deprecated in favor of the "fix" and "config" inputs**
+>
+> Command to run (unset, `fix`, or `config`)
+>
+> If unspecified or `""`, the `markdownlint-cli2` command is run.
+>
+> If set to `fix`, the `markdownlint-cli2-fix` command is run and supported
+> issues will be fixed automatically.
+>
+> If set to `config`, the `markdownlint-cli2-config` command is run and the
+> first element of `globs` should specify a supported configuration file.
+>
+> For more detail: [documentation for `markdownlint-cli2`][command-line].
 
-If unspecified or `""`, the `markdownlint-cli2` command is run.
+### config (optional)
 
-If set to `fix`, the `markdownlint-cli2-fix` command is run and supported issues
-will be fixed automatically.
+Path of a file to use for the base configuration object (defaults to none)
 
-If set to `config`, the `markdownlint-cli2-config` command is run and the first
-element of `globs` should specify a supported configuration file.
+Equivalent to using the `--config` [command-line option][command-line] and
+passing the specified configuration file.
 
-For more detail: [documentation for `markdownlint-cli2`][command-line].
+### fix (optional)
+
+Whether to fix supported issues automatically (any truthy value enables)
+
+Equivalent to specifying the `--fix` [command-line option][command-line].
 
 ### globs (optional)
 
@@ -88,7 +103,7 @@ To fix supported issues when linting:
 ```yaml
 - uses: DavidAnson/markdownlint-cli2-action@v10
   with:
-    command: fix
+    fix: true
     globs: '**/*.md'
 ```
 
@@ -97,10 +112,8 @@ To specify a custom configuration file:
 ```yaml
 - uses: DavidAnson/markdownlint-cli2-action@v10
   with:
-    command: config
-    globs: |
-      config/custom.markdownlint.jsonc
-      **/*.md
+    config: 'config/custom.markdownlint.jsonc'
+    globs: '**/*.md'
 ```
 
 To prevent linting issues from failing the workflow run:

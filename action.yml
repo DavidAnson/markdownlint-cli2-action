@@ -7,6 +7,15 @@ branding:
 inputs:
   command:
     description: Command to run (unset, "fix", or "config")
+    deprecationMessage: This input is deprecated in favor of the "fix" and "config" inputs
+    default: ''
+    required: false
+  config:
+    description: Path of a file to use for the base configuration object (defaults to none)
+    default: ''
+    required: false
+  fix:
+    description: Whether to fix supported issues automatically (any truthy value enables)
     default: ''
     required: false
   globs:
