@@ -558,7 +558,7 @@ class OidcClient {
                 .catch(error => {
                 throw new Error(`Failed to get ID Token. \n 
         Error Code : ${error.statusCode}\n 
-        Error Message: ${error.result.message}`);
+        Error Message: ${error.message}`);
             });
             const id_token = (_a = res.result) === null || _a === void 0 ? void 0 : _a.value;
             if (!id_token) {
@@ -14539,11 +14539,17 @@ module.exports.unorderedListStyleFor = function unorderedListStyleFor(token) {
 };
 
 /**
+ * @callback TokenCallback
+ * @param {MarkdownItToken} token Current token.
+ * @returns {void}
+ */
+
+/**
  * Calls the provided function for each matching token.
  *
  * @param {Object} params RuleParams instance.
  * @param {string} type Token type identifier.
- * @param {Function} handler Callback function.
+ * @param {TokenCallback} handler Callback function.
  * @returns {void}
  */
 function filterTokens(params, type, handler) {
@@ -14555,8 +14561,17 @@ function filterTokens(params, type, handler) {
 }
 module.exports.filterTokens = filterTokens;
 
-// Get line metadata array
-module.exports.getLineMetadata = function getLineMetadata(params) {
+/**
+ * @typedef {Array} LineMetadata
+ */
+
+/**
+ * Gets a line metadata array.
+ *
+ * @param {Object} params RuleParams instance.
+ * @returns {LineMetadata} Line metadata.
+ */
+function getLineMetadata(params) {
   const lineMetadata = params.lines.map(
     (line, index) => [ line, index, false, 0, false, false, false ]
   );
@@ -14588,18 +14603,32 @@ module.exports.getLineMetadata = function getLineMetadata(params) {
     lineMetadata[token.map[0]][6] = true;
   });
   return lineMetadata;
-};
+}
+module.exports.getLineMetadata = getLineMetadata;
+
+/**
+ * @callback EachLineCallback
+ * @param {string} line Line content.
+ * @param {number} lineIndex Line index (0-based).
+ * @param {boolean} inCode Iff in a code block.
+ * @param {number} onFence + if open, - if closed, 0 otherwise.
+ * @param {boolean} inTable Iff in a table.
+ * @param {boolean} inItem Iff in a list item.
+ * @param {boolean} inBreak Iff in semantic break.
+ * @returns {void}
+ */
 
 /**
  * Calls the provided function for each line.
  *
- * @param {Object} lineMetadata Line metadata object.
- * @param {Function} handler Function taking (line, lineIndex, inCode, onFence,
- * inTable, inItem, inBreak).
+ * @param {LineMetadata} lineMetadata Line metadata object.
+ * @param {EachLineCallback} handler Function taking (line, lineIndex, inCode,
+ * onFence, inTable, inItem, inBreak).
  * @returns {void}
  */
 function forEachLine(lineMetadata, handler) {
   for (const metadata of lineMetadata) {
+    // @ts-ignore
     handler(...metadata);
   }
 }
@@ -14671,11 +14700,20 @@ module.exports.forEachHeading = function forEachHeading(params, handler) {
 };
 
 /**
+ * @callback InlineCodeSpanCallback
+ * @param {string} code Code content.
+ * @param {number} lineIndex Line index (0-based).
+ * @param {number} columnIndex Column index (0-based).
+ * @param {number} ticks Count of backticks.
+ * @returns {void}
+ */
+
+/**
  * Calls the provided function for each inline code span's content.
  *
  * @param {string} input Markdown content.
- * @param {Function} handler Callback function taking (code, lineIndex,
- * columnIndex, ticks).
+ * @param {InlineCodeSpanCallback} handler Callback function taking (code,
+ * lineIndex, columnIndex, ticks).
  * @returns {void}
  */
 function forEachInlineCodeSpan(input, handler) {
@@ -15161,6 +15199,26 @@ function expandTildePath(file, os) {
   return homedir ? file.replace(/^~($|\/|\\)/, `${homedir}$1`) : file;
 }
 module.exports.expandTildePath = expandTildePath;
+
+// Copied from markdownlint.js to avoid TypeScript compiler import() issue.
+/**
+ * @typedef {Object} MarkdownItToken
+ * @property {string[][]} attrs HTML attributes.
+ * @property {boolean} block Block-level token.
+ * @property {MarkdownItToken[]} children Child nodes.
+ * @property {string} content Tag contents.
+ * @property {boolean} hidden Ignore element.
+ * @property {string} info Fence info.
+ * @property {number} level Nesting level.
+ * @property {number[]} map Beginning/ending line numbers.
+ * @property {string} markup Markup text.
+ * @property {Object} meta Arbitrary data.
+ * @property {number} nesting Level change.
+ * @property {string} tag HTML tag name.
+ * @property {string} type Token type.
+ * @property {number} lineNumber Line number (1-based).
+ * @property {string} line Line content.
+ */
 
 
 /***/ }),
@@ -20175,7 +20233,7 @@ const resolveAndRequire = __nccwpck_require__(5317);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.9.2";
+const packageVersion = "0.10.0";
 const libraryName = "markdownlint";
 const libraryVersion = markdownlintLibrary.getVersion();
 const dotOnlySubstitute = "*.{md,markdown}";
@@ -21099,9 +21157,15 @@ const main = async (params) => {
     );
   // Output linting status
   if (showProgress) {
-    let fileCount = 0;
-    for (const dirInfo of dirInfos) {
-      fileCount += dirInfo.files.length;
+    const fileNames = dirInfos.flatMap((dirInfo) => {
+      const { files } = dirInfo;
+      return files.map((file) => pathPosix.relative(baseDir, file));
+    });
+    const fileCount = fileNames.length;
+    if (baseMarkdownlintOptions.showFound) {
+      fileNames.push("");
+      fileNames.sort();
+      logMessage(`Found:${fileNames.join("\n ")}`);
     }
     logMessage(`Linting: ${fileCount} file(s)`);
   }
@@ -21266,7 +21330,7 @@ module.exports.fixableRuleNames = [
   "MD044", "MD047", "MD049", "MD050", "MD051", "MD053"
 ];
 module.exports.homepage = "https://github.com/DavidAnson/markdownlint";
-module.exports.version = "0.30.0";
+module.exports.version = "0.31.1";
 
 
 /***/ }),
@@ -21797,7 +21861,7 @@ function getEnabledRulesPerLineNumber(
  * @param {boolean} handleRuleFailures Whether to handle exceptions in rules.
  * @param {boolean} noInlineConfig Whether to allow inline configuration.
  * @param {number} resultVersion Version of the LintResults object to return.
- * @param {Function} callback Callback (err, result) function.
+ * @param {LintContentCallback} callback Callback (err, result) function.
  * @returns {void}
  */
 function lintContent(
@@ -22086,7 +22150,7 @@ function lintContent(
  * @param {number} resultVersion Version of the LintResults object to return.
  * @param {Object} fs File system implementation.
  * @param {boolean} synchronous Whether to execute synchronously.
- * @param {Function} callback Callback (err, result) function.
+ * @param {LintContentCallback} callback Callback (err, result) function.
  * @returns {void}
  */
 function lintFile(
@@ -22136,7 +22200,7 @@ function lintFile(
  *
  * @param {Options | null} options Options object.
  * @param {boolean} synchronous Whether to execute synchronously.
- * @param {Function} callback Callback (err, result) function.
+ * @param {LintCallback} callback Callback (err, result) function.
  * @returns {void}
  */
 function lintInput(options, synchronous, callback) {
@@ -22299,7 +22363,7 @@ function markdownlintPromise(options) {
  * @returns {LintResults} Results object.
  */
 function markdownlintSync(options) {
-  let results = {};
+  let results = null;
   lintInput(options, true, function callback(error, res) {
     if (error) {
       throw error;
@@ -22453,6 +22517,7 @@ function readConfig(file, parsers, fs, callback) {
   }
   // Read file
   file = helpers.expandTildePath(file, __nccwpck_require__(612));
+  // eslint-disable-next-line n/prefer-promises/fs
   fs.readFile(file, "utf8", (err, content) => {
     if (err) {
       // @ts-ignore
@@ -22694,11 +22759,20 @@ module.exports = markdownlint;
  */
 
 /**
+ * Called with the result of linting a string or document.
+ *
+ * @callback LintContentCallback
+ * @param {Error | null} error Error iff failed.
+ * @param {LintError[]} [result] Result iff successful.
+ * @returns {void}
+ */
+
+/**
  * Called with the result of the lint function.
  *
  * @callback LintCallback
- * @param {Error | null} err Error object or null.
- * @param {LintResults} [results] Lint results.
+ * @param {Error | null} error Error object iff failed.
+ * @param {LintResults} [results] Lint results iff succeeded.
  * @returns {void}
  */
 
@@ -24366,8 +24440,7 @@ module.exports = {
 
 const { addErrorContext, blockquotePrefixRe, isBlankLine } =
   __nccwpck_require__(2935);
-const { filterByPredicate, flattenedChildren } =
-  __nccwpck_require__(5673);
+const { filterByPredicate } = __nccwpck_require__(5673);
 
 const nonContentTokens = new Set([
   "blockQuoteMarker",
@@ -24409,7 +24482,9 @@ module.exports = {
     const topLevelLists = filterByPredicate(
       parsers.micromark.tokens,
       isList,
-      (token) => (isList(token) ? [] : token.children)
+      (token) => (
+        (isList(token) || (token.type === "htmlFlow")) ? [] : token.children
+      )
     );
     for (const list of topLevelLists) {
 
@@ -24421,7 +24496,11 @@ module.exports = {
 
       // Find the "visual" end of the list
       let endLine = list.endLine;
-      for (const child of flattenedChildren(list).reverse()) {
+      const flattenedChildren = filterByPredicate(
+        list.children,
+        () => true
+      );
+      for (const child of flattenedChildren.reverse()) {
         if (!nonContentTokens.has(child.type)) {
           endLine = child.endLine;
           break;
@@ -24449,7 +24528,7 @@ module.exports = {
 
 
 const { addError } = __nccwpck_require__(2935);
-const { filterByHtmlTokens, getHtmlTagInfo } =
+const { filterByTypes, getHtmlTagInfo } =
   __nccwpck_require__(5673);
 
 const nextLinesRe = /[\r\n][\s\S]*$/;
@@ -24462,7 +24541,8 @@ module.exports = {
     let allowedElements = params.config.allowed_elements;
     allowedElements = Array.isArray(allowedElements) ? allowedElements : [];
     allowedElements = allowedElements.map((element) => element.toLowerCase());
-    for (const token of filterByHtmlTokens(params.parsers.micromark.tokens)) {
+    const { tokens } = params.parsers.micromark;
+    for (const token of filterByTypes(tokens, [ "htmlText" ])) {
       const htmlTagInfo = getHtmlTagInfo(token);
       if (
         htmlTagInfo &&
@@ -24497,7 +24577,7 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(2935);
-const { filterByPredicate, getHtmlTagInfo, parse } =
+const { filterByPredicate, filterByTypes, getHtmlTagInfo, parse } =
   __nccwpck_require__(5673);
 
 module.exports = {
@@ -24505,42 +24585,40 @@ module.exports = {
   "description": "Bare URL used",
   "tags": [ "links", "url" ],
   "function": function MD034(params, onError) {
-    const literalAutolinks = (tokens) => (
-      filterByPredicate(
-        tokens,
-        (token) => token.type === "literalAutolink",
-        (token) => {
-          const { children } = token;
-          const result = [];
-          for (let i = 0; i < children.length; i++) {
-            const openToken = children[i];
-            const openTagInfo = getHtmlTagInfo(openToken);
-            if (openTagInfo && !openTagInfo.close) {
-              let count = 1;
-              for (let j = i + 1; j < children.length; j++) {
-                const closeToken = children[j];
-                const closeTagInfo = getHtmlTagInfo(closeToken);
-                if (closeTagInfo && (openTagInfo.name === closeTagInfo.name)) {
-                  if (closeTagInfo.close) {
-                    count--;
-                    if (count === 0) {
-                      i = j;
-                      break;
-                    }
-                  } else {
-                    count++;
-                  }
+    const literalAutolinks = (tokens) => {
+      const flattened = filterByPredicate(tokens, () => true);
+      const result = [];
+      for (let i = 0; i < flattened.length; i++) {
+        const current = flattened[i];
+        const openTagInfo = getHtmlTagInfo(current);
+        if (openTagInfo && !openTagInfo.close) {
+          let count = 1;
+          for (let j = i + 1; j < flattened.length; j++) {
+            const candidate = flattened[j];
+            const closeTagInfo = getHtmlTagInfo(candidate);
+            if (closeTagInfo && (openTagInfo.name === closeTagInfo.name)) {
+              if (closeTagInfo.close) {
+                count--;
+                if (count === 0) {
+                  i = j;
+                  break;
                 }
+              } else {
+                count++;
               }
-            } else {
-              result.push(openToken);
             }
           }
-          return result;
+        } else {
+          result.push(current);
         }
-      )
+      }
+      return result.filter((token) => token.type === "literalAutolink");
+    };
+    const autoLinks = filterByTypes(
+      params.parsers.micromark.tokens,
+      [ "literalAutolink" ]
     );
-    if (literalAutolinks(params.parsers.micromark.tokens).length > 0) {
+    if (autoLinks.length > 0) {
       // Re-parse with correct link/image reference definition handling
       const document = params.lines.join("\n");
       const tokens = parse(document, undefined, false);
@@ -24676,9 +24754,7 @@ module.exports = {
 
 
 const { addError } = __nccwpck_require__(2935);
-
-const emphasisStartTextRe = /^(\S{1,3})(\s+)\S/;
-const emphasisEndTextRe = /\S(\s+)(\S{1,3})$/;
+const { filterByPredicate } = __nccwpck_require__(5673);
 
 module.exports = {
   "names": [ "MD037", "no-space-in-emphasis" ],
@@ -24692,16 +24768,11 @@ module.exports = {
     for (const marker of [ "_", "__", "___", "*", "**", "***" ]) {
       emphasisTokensByMarker.set(marker, []);
     }
-    const pending = [ ...parsers.micromark.tokens ];
-    let token = null;
-    while ((token = pending.shift())) {
-
-      // Use reparsed children of htmlFlow tokens
-      if (token.type === "htmlFlow") {
-        pending.unshift(...token.htmlFlowChildren);
-        continue;
-      }
-      pending.push(...token.children);
+    const tokens = filterByPredicate(
+      parsers.micromark.tokens,
+      (token) => token.children.some((child) => child.type === "data")
+    );
+    for (const token of tokens) {
 
       // Build lists of bare tokens for each emphasis marker type
       for (const emphasisTokens of emphasisTokensByMarker.values()) {
@@ -24718,51 +24789,51 @@ module.exports = {
       }
 
       // Process bare tokens for each emphasis marker type
-      for (const emphasisTokens of emphasisTokensByMarker.values()) {
+      for (const entry of emphasisTokensByMarker.entries()) {
+        const [ marker, emphasisTokens ] = entry;
         for (let i = 0; i + 1 < emphasisTokens.length; i += 2) {
 
           // Process start token of start/end pair
           const startToken = emphasisTokens[i];
-          const startText =
-            lines[startToken.startLine - 1].slice(startToken.startColumn - 1);
-          const startMatch = startText.match(emphasisStartTextRe);
+          const startLine = lines[startToken.startLine - 1];
+          const startSlice = startLine.slice(startToken.endColumn - 1);
+          const startMatch = startSlice.match(/^\s+\S/);
           if (startMatch) {
-            const [ startContext, startMarker, startSpaces ] = startMatch;
-            if ((startMarker === startToken.text) && (startSpaces.length > 0)) {
-              addError(
-                onError,
-                startToken.startLine,
-                undefined,
-                startContext,
-                [ startToken.startColumn, startContext.length ],
-                {
-                  "editColumn": startToken.endColumn,
-                  "deleteCount": startSpaces.length
-                }
-              );
-            }
+            const [ startSpaceCharacter ] = startMatch;
+            const startContext = `${marker}${startSpaceCharacter}`;
+            addError(
+              onError,
+              startToken.startLine,
+              undefined,
+              startContext,
+              [ startToken.startColumn, startContext.length ],
+              {
+                "editColumn": startToken.endColumn,
+                "deleteCount": startSpaceCharacter.length - 1
+              }
+            );
           }
 
           // Process end token of start/end pair
           const endToken = emphasisTokens[i + 1];
-          const endText =
-            lines[endToken.startLine - 1].slice(0, endToken.endColumn - 1);
-          const endMatch = endText.match(emphasisEndTextRe);
+          const endLine = lines[endToken.startLine - 1];
+          const endSlice = endLine.slice(0, endToken.startColumn - 1);
+          const endMatch = endSlice.match(/\S\s+$/);
           if (endMatch) {
-            const [ endContext, endSpace, endMarker ] = endMatch;
-            if ((endMarker === endToken.text) && (endSpace.length > 0)) {
-              addError(
-                onError,
-                endToken.startLine,
-                undefined,
-                endContext,
-                [ endToken.endColumn - endContext.length, endContext.length ],
-                {
-                  "editColumn": endToken.startColumn - endSpace.length,
-                  "deleteCount": endSpace.length
-                }
-              );
-            }
+            const [ endSpaceCharacter ] = endMatch;
+            const endContext = `${endSpaceCharacter}${marker}`;
+            addError(
+              onError,
+              endToken.startLine,
+              undefined,
+              endContext,
+              [ endToken.endColumn - endContext.length, endContext.length ],
+              {
+                "editColumn":
+                  endToken.startColumn - (endSpaceCharacter.length - 1),
+                "deleteCount": endSpaceCharacter.length - 1
+              }
+            );
           }
         }
       }
@@ -25120,52 +25191,54 @@ module.exports = {
   "tags": [ "headings", "headers" ],
   "function": function MD043(params, onError) {
     const requiredHeadings = params.config.headings || params.config.headers;
+    if (!Array.isArray(requiredHeadings)) {
+      // Nothing to check; avoid doing any work
+      return;
+    }
     const matchCase = params.config.match_case || false;
-    if (Array.isArray(requiredHeadings)) {
-      const levels = {};
-      for (const level of [ 1, 2, 3, 4, 5, 6 ]) {
-        levels["h" + level] = "######".substr(-level);
-      }
-      let i = 0;
-      let matchAny = false;
-      let hasError = false;
-      let anyHeadings = false;
-      const getExpected = () => requiredHeadings[i++] || "[None]";
-      const handleCase = (str) => (matchCase ? str : str.toLowerCase());
-      forEachHeading(params, (heading, content) => {
-        if (!hasError) {
-          anyHeadings = true;
-          const actual = levels[heading.tag] + " " + content;
-          const expected = getExpected();
-          if (expected === "*") {
-            const nextExpected = getExpected();
-            if (handleCase(nextExpected) !== handleCase(actual)) {
-              matchAny = true;
-              i--;
-            }
-          } else if (expected === "+") {
+    const levels = {};
+    for (const level of [ 1, 2, 3, 4, 5, 6 ]) {
+      levels["h" + level] = "######".substr(-level);
+    }
+    let i = 0;
+    let matchAny = false;
+    let hasError = false;
+    let anyHeadings = false;
+    const getExpected = () => requiredHeadings[i++] || "[None]";
+    const handleCase = (str) => (matchCase ? str : str.toLowerCase());
+    forEachHeading(params, (heading, content) => {
+      if (!hasError) {
+        anyHeadings = true;
+        const actual = levels[heading.tag] + " " + content;
+        const expected = getExpected();
+        if (expected === "*") {
+          const nextExpected = getExpected();
+          if (handleCase(nextExpected) !== handleCase(actual)) {
             matchAny = true;
-          } else if (handleCase(expected) === handleCase(actual)) {
-            matchAny = false;
-          } else if (matchAny) {
             i--;
-          } else {
-            addErrorDetailIf(onError, heading.lineNumber,
-              expected, actual);
-            hasError = true;
           }
+        } else if (expected === "+") {
+          matchAny = true;
+        } else if (handleCase(expected) === handleCase(actual)) {
+          matchAny = false;
+        } else if (matchAny) {
+          i--;
+        } else {
+          addErrorDetailIf(onError, heading.lineNumber,
+            expected, actual);
+          hasError = true;
         }
-      });
-      const extraHeadings = requiredHeadings.length - i;
-      if (
-        !hasError &&
-        ((extraHeadings > 1) ||
-          ((extraHeadings === 1) && (requiredHeadings[i] !== "*"))) &&
-        (anyHeadings || !requiredHeadings.every((heading) => heading === "*"))
-      ) {
-        addErrorContext(onError, params.lines.length,
-          requiredHeadings[i]);
       }
+    });
+    const extraHeadings = requiredHeadings.length - i;
+    if (
+      !hasError &&
+      ((extraHeadings > 1) ||
+        ((extraHeadings === 1) && (requiredHeadings[i] !== "*"))) &&
+      (anyHeadings || !requiredHeadings.every((heading) => heading === "*"))
+    ) {
+      addErrorContext(onError, params.lines.length,
+        requiredHeadings[i]);
     }
   }
 };
@@ -25181,7 +25254,7 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, escapeForRegExp, newLineRe, withinAnyRange } =
+const { addErrorDetailIf, escapeForRegExp, withinAnyRange } =
   __nccwpck_require__(2935);
 const { filterByPredicate, filterByTypes, parse } =
   __nccwpck_require__(5673);
@@ -25198,46 +25271,32 @@ module.exports = {
     let names = params.config.names;
     names = Array.isArray(names) ? names : [];
     names.sort((a, b) => (b.length - a.length) || a.localeCompare(b));
+    if (names.length === 0) {
+      // Nothing to check; avoid doing any work
+      return;
+    }
     const codeBlocks = params.config.code_blocks;
     const includeCodeBlocks =
       (codeBlocks === undefined) ? true : !!codeBlocks;
     const htmlElements = params.config.html_elements;
     const includeHtmlElements =
       (htmlElements === undefined) ? true : !!htmlElements;
-    const scannedTypes = new Set([ "data", "htmlFlowData" ]);
+    const scannedTypes = new Set([ "data" ]);
     if (includeCodeBlocks) {
       scannedTypes.add("codeFlowValue");
       scannedTypes.add("codeTextData");
     }
-    const tokenAdjustments = new Map();
+    if (includeHtmlElements) {
+      scannedTypes.add("htmlFlowData");
+      scannedTypes.add("htmlTextData");
+    }
     const contentTokens =
       filterByPredicate(
         params.parsers.micromark.tokens,
         (token) => scannedTypes.has(token.type),
-        (token) => {
-          let { children } = token;
-          const { startLine, text } = token;
-          if (!includeHtmlElements && (token.type === "htmlFlow")) {
-            if (text.startsWith("<!--")) {
-              // Remove comment content
-              children = [];
-            } else {
-              // Re-parse to get htmlText elements for detailed tokenization
-              const htmlTextLines =
-                `<md044>\n${text}\n</md044>`.split(newLineRe);
-              children = parse(htmlTextLines.join(""));
-              const reTokens = [ ...children ];
-              for (const reToken of reTokens) {
-                tokenAdjustments.set(reToken, {
-                  htmlTextLines,
-                  startLine
-                });
-                reTokens.push(...reToken.children);
-              }
-            }
-          }
-          return children.filter((t) => !ignoredChildTypes.has(t.type));
-        }
+        (token) => (
+          token.children.filter((t) => !ignoredChildTypes.has(t.type))
+        )
       );
     const exclusions = [];
     const autoLinked = new Set();
@@ -25275,22 +25334,10 @@ module.exports = {
               autoLinked.add(token);
             }
             if (!withinAnyRange(urlRanges, lineIndex, index, length)) {
-              let lineNumber = token.startLine;
-              let column = index;
-              if (tokenAdjustments.has(token)) {
-                const { htmlTextLines, startLine } =
-                  tokenAdjustments.get(token);
-                let lineDelta = 0;
-                while (htmlTextLines[lineDelta].length <= column) {
-                  column -= htmlTextLines[lineDelta].length;
-                  lineDelta++;
-                }
-                lineNumber = startLine + lineDelta - 1;
-              }
-              column++;
+              const column = index + 1;
               addErrorDetailIf(
                 onError,
-                lineNumber,
+                token.startLine,
                 name,
                 nameMatch,
                 null,
@@ -25476,15 +25523,18 @@ module.exports = {
 
 
 const { addError, emphasisOrStrongStyleFor } = __nccwpck_require__(2935);
-const { filterByTypes, tokenIfType } = __nccwpck_require__(5673);
+const { filterByPredicate, tokenIfType } = __nccwpck_require__(5673);
 
 const intrawordRe = /\w/;
 
 const impl =
   (params, onError, type, asterisk, underline, style = "consistent") => {
     const { lines, parsers } = params;
-    const emphasisTokens =
-      filterByTypes(parsers.micromark.tokens, [ type ]);
+    const emphasisTokens = filterByPredicate(
+      parsers.micromark.tokens,
+      (token) => token.type === type,
+      (token) => ((token.type === "htmlFlow") ? [] : token.children)
+    );
     for (const token of emphasisTokens) {
       const { children } = token;
       const childType = `${type}Sequence`;
@@ -25570,7 +25620,7 @@ module.exports = [
 
 
 const { addError, addErrorDetailIf } = __nccwpck_require__(2935);
-const { filterByHtmlTokens, filterByTypes, getHtmlTagInfo } =
+const { filterByPredicate, filterByTypes, getHtmlTagInfo } =
   __nccwpck_require__(5673);
 
 // Regular expression for identifying HTML anchor names
@@ -25578,16 +25628,28 @@ const idRe = /\sid\s*=\s*['"]?([^'"\s>]+)/iu;
 const nameRe = /\sname\s*=\s*['"]?([^'"\s>]+)/iu;
 const anchorRe = /\{(#[a-z\d]+(?:[-_][a-z\d]+)*)\}/gu;
 
+// Sets for filtering heading tokens during conversion
+const childrenExclude = new Set([ "image", "reference", "resource" ]);
+const tokensInclude = new Set([ "codeTextData", "data" ]);
+
+/**
+ * @typedef {import("../helpers/micromark.cjs").Token} Token
+ */
+
 /**
  * Converts a Markdown heading into an HTML fragment according to the rules
  * used by GitHub.
  *
- * @param {Object} headingText Heading text token.
+ * @param {Token} headingText Heading text token.
  * @returns {string} Fragment string for heading.
  */
 function convertHeadingToHTMLFragment(headingText) {
   const inlineText =
-    filterByTypes(headingText.children, [ "codeTextData", "data" ])
+    filterByPredicate(
+      headingText.children,
+      (token) => tokensInclude.has(token.type),
+      (token) => (childrenExclude.has(token.type) ? [] : token.children)
+    )
       .map((token) => token.text)
       .join("");
   return "#" + encodeURIComponent(
@@ -25605,6 +25667,18 @@ function convertHeadingToHTMLFragment(headingText) {
   );
 }
 
+/**
+ * Unescapes the text of a String-type micromark Token.
+ *
+ * @param {Token} token String-type micromark Token.
+ * @returns {string} Unescaped token text.
+ */
+function unescapeStringTokenText(token) {
+  return filterByTypes(token.children, [ "characterEscapeValue", "data" ])
+    .map((child) => child.text)
+    .join("");
+}
+
 module.exports = {
   "names": [ "MD051", "link-fragments" ],
   "description": "Link fragments should be valid",
@@ -25620,22 +25694,24 @@ module.exports = {
     );
     for (const headingText of headingTexts) {
       const fragment = convertHeadingToHTMLFragment(headingText);
-      const count = fragments.get(fragment) || 0;
-      if (count) {
-        fragments.set(`${fragment}-${count}`, 0);
-      }
-      fragments.set(fragment, count + 1);
-      let match = null;
-      while ((match = anchorRe.exec(headingText.text)) !== null) {
-        const [ , anchor ] = match;
-        if (!fragments.has(anchor)) {
-          fragments.set(anchor, 1);
+      if (fragment !== "#") {
+        const count = fragments.get(fragment) || 0;
+        if (count) {
+          fragments.set(`${fragment}-${count}`, 0);
+        }
+        fragments.set(fragment, count + 1);
+        let match = null;
+        while ((match = anchorRe.exec(headingText.text)) !== null) {
+          const [ , anchor ] = match;
+          if (!fragments.has(anchor)) {
+            fragments.set(anchor, 1);
+          }
         }
       }
     }
 
     // Process HTML anchors
-    for (const token of filterByHtmlTokens(tokens)) {
+    for (const token of filterByTypes(tokens, [ "htmlText" ])) {
       const htmlTagInfo = getHtmlTagInfo(token);
       if (htmlTagInfo && !htmlTagInfo.close) {
         const anchorMatch = idRe.exec(token.text) ||
@@ -25656,10 +25732,13 @@ module.exports = {
       for (const link of links) {
         const definitions = filterByTypes(link.children, [ definitionType ]);
         for (const definition of definitions) {
+          const { endColumn, startColumn } = definition;
+          const text = unescapeStringTokenText(definition);
           if (
-            (definition.text.length > 1) &&
-            definition.text.startsWith("#") &&
-            !fragments.has(definition.text)
+            (text.length > 1) &&
+            text.startsWith("#") &&
+            !fragments.has(text) &&
+            !fragments.has(`#${encodeURIComponent(text.slice(1))}`)
           ) {
             // eslint-disable-next-line no-undef-init
             let context = undefined;
@@ -25671,13 +25750,13 @@ module.exports = {
               context = link.text;
               range = [ link.startColumn, link.endColumn - link.startColumn ];
               fixInfo = {
-                "editColumn": definition.startColumn,
-                "deleteCount": definition.endColumn - definition.startColumn
+                "editColumn": startColumn,
+                "deleteCount": endColumn - startColumn
               };
             }
-            const definitionTextLower = definition.text.toLowerCase();
+            const textLower = text.toLowerCase();
             const mixedCaseKey = [ ...fragments.keys() ]
-              .find((key) => definitionTextLower === key.toLowerCase());
+              .find((key) => textLower === key.toLowerCase());
             if (mixedCaseKey) {
               // @ts-ignore
               (fixInfo || {}).insertText = mixedCaseKey;
@@ -25685,7 +25764,7 @@ module.exports = {
                 onError,
                 link.startLine,
                 mixedCaseKey,
-                definition.text,
+                text,
                 undefined,
                 context,
                 range,
@@ -25727,10 +25806,14 @@ module.exports = {
     "Reference links and images should use a label that is defined",
   "tags": [ "images", "links" ],
   "function": function MD052(params, onError) {
-    const { lines } = params;
-    const { references, definitions } = referenceLinkImageData();
+    const { config, lines } = params;
+    const shortcutSyntax = config.shortcut_syntax || false;
+    const { definitions, references, shortcuts } = referenceLinkImageData();
+    const entries = shortcutSyntax ?
+      [ ...references.entries(), ...shortcuts.entries() ] :
+      references.entries();
     // Look for links/images that use an undefined link reference
-    for (const reference of references.entries()) {
+    for (const reference of entries) {
       const [ label, datas ] = reference;
       if (!definitions.has(label)) {
         for (const data of datas) {
@@ -28508,6 +28591,8 @@ function debug(logLevel, ...messages) {
 }
 function warn(logLevel, warning) {
     if (logLevel === 'debug' || logLevel === 'warn') {
+        // https://github.com/typescript-eslint/typescript-eslint/issues/7478
+        // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
         if (typeof process !== 'undefined' && process.emitWarning)
             process.emitWarning(warning);
         else
@@ -29289,7 +29374,7 @@ function stringifyKey(key, jsKey, ctx) {
         return '';
     if (typeof jsKey !== 'object')
         return String(jsKey);
-    if (identity.isNode(key) && ctx && ctx.doc) {
+    if (identity.isNode(key) && ctx?.doc) {
         const strCtx = stringify.createStringifyContext(ctx.doc, {});
         strCtx.anchors = new Set();
         for (const node of ctx.anchors.keys())
@@ -32668,8 +32753,9 @@ function createPairs(schema, iterable, ctx) {
                     key = keys[0];
                     value = it[key];
                 }
-                else
-                    throw new TypeError(`Expected { key: value } tuple: ${it}`);
+                else {
+                    throw new TypeError(`Expected tuple with one key, not ${keys.length} keys`);
+                }
             }
             else {
                 key = it;
@@ -33344,7 +33430,7 @@ function stringifyFlowCollection({ comment, items }, ctx, { flowChars, itemInden
                 if (iv.commentBefore)
                     reqNewline = true;
             }
-            else if (item.value == null && ik && ik.comment) {
+            else if (item.value == null && ik?.comment) {
                 comment = ik.comment;
             }
         }
@@ -33970,7 +34056,7 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
 function plainString(item, ctx, onComment, onChompKeep) {
     const { type, value } = item;
     const { actualString, implicitKey, indent, indentStep, inFlow } = ctx;
-    if ((implicitKey && /[\n[\]{},]/.test(value)) ||
+    if ((implicitKey && value.includes('\n')) ||
         (inFlow && /[[\]{},]/.test(value))) {
         return quotedString(value, ctx);
     }
@@ -34327,6 +34413,8 @@ const {
 } = __nccwpck_require__(4117);
 const { newLineRe } = __nccwpck_require__(3253);
 
+const flatTokensSymbol = Symbol("flat-tokens");
+
 /**
  * Markdown token.
  *
@@ -34338,8 +34426,31 @@ const { newLineRe } = __nccwpck_require__(3253);
  * @property {number} endColumn End column (1-based).
  * @property {string} text Token text.
  * @property {Token[]} children Child tokens.
- * @property {Token[]} [htmlFlowChildren] Child tokens for htmlFlow.
  */
+
+/**
+ * Returns whether a token is an htmlFlow type containing an HTML comment.
+ *
+ * @param {Token} token Micromark token.
+ * @returns {boolean} True iff token is htmlFlow containing a comment.
+ */
+function isHtmlFlowComment(token) {
+  const { text, type } = token;
+  if (
+    (type === "htmlFlow") &&
+    text.startsWith("<!--") &&
+    text.endsWith("-->")
+  ) {
+    const comment = text.slice(4, -3);
+    return (
+      !comment.startsWith(">") &&
+      !comment.startsWith("->") &&
+      !comment.endsWith("-") &&
+      !comment.includes("--")
+    );
+  }
+  return false;
+}
 
 /**
  * Parses a Markdown document and returns Micromark events.
@@ -34399,19 +34510,21 @@ function micromarkParseWithOffset(
 
   // Create Token objects
   const document = [];
+  let flatTokens = [];
   let current = {
     "children": document
   };
   const history = [ current ];
   let reparseOptions = null;
   let lines = null;
+  let skipHtmlFlowChildren = false;
   for (const event of events) {
     const [ kind, token, context ] = event;
     const { type, start, end } = token;
     const { "column": startColumn, "line": startLine } = start;
     const { "column": endColumn, "line": endLine } = end;
     const text = context.sliceSerialize(token);
-    if (kind === "enter") {
+    if ((kind === "enter") && !skipHtmlFlowChildren) {
       const previous = current;
       history.push(previous);
       current = {
@@ -34423,7 +34536,11 @@ function micromarkParseWithOffset(
         text,
         "children": []
       };
-      if (current.type === "htmlFlow") {
+      previous.children.push(current);
+      flatTokens.push(current);
+      // @ts-ignore
+      if ((current.type === "htmlFlow") && !isHtmlFlowComment(current)) {
+        skipHtmlFlowChildren = true;
         if (!reparseOptions || !lines) {
           reparseOptions = {
             ...micromarkOptions,
@@ -34440,23 +34557,32 @@ function micromarkParseWithOffset(
         const reparseMarkdown = lines
           .slice(current.startLine - 1, current.endLine)
           .join("\n");
-        current.htmlFlowChildren = micromarkParseWithOffset(
+        const tokens = micromarkParseWithOffset(
           reparseMarkdown,
           reparseOptions,
           referencesDefined,
           current.startLine - 1
         );
+        current.children = tokens;
+        // Avoid stack overflow of Array.push(...spread)
+        // eslint-disable-next-line unicorn/prefer-spread
+        flatTokens = flatTokens.concat(tokens[flatTokensSymbol]);
       }
-      previous.children.push(current);
     } else if (kind === "exit") {
-      Object.freeze(current.children);
-      Object.freeze(current);
-      // @ts-ignore
-      current = history.pop();
+      if (type === "htmlFlow") {
+        skipHtmlFlowChildren = false;
+      }
+      if (!skipHtmlFlowChildren) {
+        Object.freeze(current.children);
+        Object.freeze(current);
+        // @ts-ignore
+        current = history.pop();
+      }
     }
   }
 
   // Return document
+  Object.defineProperty(document, flatTokensSymbol, { "value": flatTokens });
   Object.freeze(document);
   return document;
 }
@@ -34483,25 +34609,54 @@ function micromarkParse(
 }
 
 /**
+ * @callback AllowedPredicate
+ * @param {Token} token Micromark token.
+ * @returns {boolean} True iff allowed.
+ */
+
+/**
+ * @callback TransformPredicate
+ * @param {Token} token Micromark token.
+ * @returns {Token[]} Child tokens.
+ */
+
+/**
  * Filter a list of Micromark tokens by predicate.
  *
  * @param {Token[]} tokens Micromark tokens.
- * @param {Function} allowed Allowed token predicate.
- * @param {Function} [transformChildren] Transform children predicate.
+ * @param {AllowedPredicate} allowed Allowed token predicate.
+ * @param {TransformPredicate} [transformChildren] Transform predicate.
  * @returns {Token[]} Filtered tokens.
  */
 function filterByPredicate(tokens, allowed, transformChildren) {
   const result = [];
-  const pending = [ ...tokens ];
-  let token = null;
-  while ((token = pending.shift())) {
-    if (allowed(token)) {
-      result.push(token);
+  const queue = [
+    {
+      "array": tokens,
+      "index": 0
     }
-    if (token.children.length > 0) {
-      const transformed =
-        transformChildren ? transformChildren(token) : token.children;
-      pending.unshift(...transformed);
+  ];
+  while (queue.length > 0) {
+    const current = queue[queue.length - 1];
+    const { array, index } = current;
+    if (index < array.length) {
+      const token = array[current.index++];
+      if (allowed(token)) {
+        result.push(token);
+      }
+      const { children } = token;
+      if (children.length > 0) {
+        const transformed =
+          transformChildren ? transformChildren(token) : children;
+        queue.push(
+          {
+            "array": transformed,
+            "index": 0
+          }
+        );
+      }
+    } else {
+      queue.pop();
     }
   }
   return result;
@@ -34515,51 +34670,12 @@ function filterByPredicate(tokens, allowed, transformChildren) {
  * @returns {Token[]} Filtered tokens.
  */
 function filterByTypes(tokens, allowed) {
-  return filterByPredicate(
-    tokens,
-    (token) => allowed.includes(token.type)
-  );
-}
-
-/**
- * Filter a list of Micromark tokens for HTML tokens.
- *
- * @param {Token[]} tokens Micromark tokens.
- * @returns {Token[]} Filtered tokens.
- */
-function filterByHtmlTokens(tokens) {
-  const result = [];
-  const pending = [ tokens ];
-  let current = null;
-  while ((current = pending.shift())) {
-    for (const token of filterByTypes(current, [ "htmlFlow", "htmlText" ])) {
-      if (token.type === "htmlText") {
-        result.push(token);
-      } else {
-        // token.type === "htmlFlow"
-        // @ts-ignore
-        pending.push(token.htmlFlowChildren);
-      }
-    }
+  const predicate = (token) => allowed.includes(token.type);
+  const flatTokens = tokens[flatTokensSymbol];
+  if (flatTokens) {
+    return flatTokens.filter(predicate);
   }
-  return result;
-}
-
-/**
- * Returns a list of all nested child tokens.
- *
- * @param {Token} parent Micromark token.
- * @returns {Token[]} Flattened children.
- */
-function flattenedChildren(parent) {
-  const result = [];
-  const pending = [ ...parent.children ];
-  let token = null;
-  while ((token = pending.shift())) {
-    result.push(token);
-    pending.unshift(...token.children);
-  }
-  return result;
+  return filterByPredicate(tokens, predicate);
 }
 
 /**
@@ -34655,10 +34771,8 @@ function tokenIfType(token, type) {
 
 module.exports = {
   "parse": micromarkParse,
-  filterByHtmlTokens,
   filterByPredicate,
   filterByTypes,
-  flattenedChildren,
   getHeadingLevel,
   getHtmlTagInfo,
   getMicromarkEvents,
