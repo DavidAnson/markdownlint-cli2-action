@@ -67,13 +67,13 @@ expressions.
 To lint Markdown files in the base directory of a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v12
+- uses: DavidAnson/markdownlint-cli2-action@v13
 ```
 
 To lint all Markdown files in a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v12
+- uses: DavidAnson/markdownlint-cli2-action@v13
   with:
     globs: '**/*.md'
 ```
@@ -81,7 +81,7 @@ To lint all Markdown files in a project:
 To lint specific Markdown files in a project:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v12
+- uses: DavidAnson/markdownlint-cli2-action@v13
   with:
     globs: |
       README.md
@@ -92,7 +92,7 @@ To lint specific Markdown files in a project:
 To use a custom separator:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v12
+- uses: DavidAnson/markdownlint-cli2-action@v13
   with:
     globs: 'README.md,CHANGELOG.md,docs/*.md'
     separator: ','
@@ -101,7 +101,7 @@ To use a custom separator:
 To fix supported issues when linting:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v12
+- uses: DavidAnson/markdownlint-cli2-action@v13
   with:
     fix: true
     globs: '**/*.md'
@@ -110,7 +110,7 @@ To fix supported issues when linting:
 To specify a custom configuration file:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v12
+- uses: DavidAnson/markdownlint-cli2-action@v13
   with:
     config: 'config/custom.markdownlint.jsonc'
     globs: '**/*.md'
@@ -119,7 +119,7 @@ To specify a custom configuration file:
 To prevent linting issues from failing the workflow run:
 
 ```yaml
-- uses: DavidAnson/markdownlint-cli2-action@v12
+- uses: DavidAnson/markdownlint-cli2-action@v13
   continue-on-error: true
 ```
 
