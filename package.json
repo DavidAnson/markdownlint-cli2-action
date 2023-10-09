@@ -14,6 +14,7 @@
     "url": "git+https://github.com/DavidAnson/markdownlint-cli2-action.git"
   },
   "bugs": "https://github.com/DavidAnson/markdownlint-cli2-action/issues",
+  "funding": "https://github.com/sponsors/DavidAnson",
   "scripts": {
     "build": "ncc build markdownlint-cli2-action.js",
     "docker-npm-install": "docker run --rm --tty --name npm-install --volume $PWD:/home/workdir --workdir /home/workdir --user node node:16 npm install",
