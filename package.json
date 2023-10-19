@@ -28,7 +28,7 @@
     "markdownlint-cli2": "0.10.0"
   },
   "devDependencies": {
-    "@vercel/ncc": "0.38.0",
+    "@vercel/ncc": "0.38.1",
     "eslint": "8.51.0",
     "eslint-plugin-node": "11.1.0",
     "eslint-plugin-unicorn": "48.0.1"
