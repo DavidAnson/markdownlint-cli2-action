@@ -26,7 +26,6 @@ const outputFormatter = (options) => {
     const context = errorContext ? ` [Context: "${errorContext}"]` : "";
     const information = ruleInformation ? ` ${ruleInformation}` : "";
     const message =
-      // eslint-disable-next-line max-len
       `${fileName}${line}${column} ${name} ${ruleDescription}${detail}${context}${information}`;
     const annotation = {
       "title": ruleDescription,

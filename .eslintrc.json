@@ -17,15 +17,11 @@
   ],
   "reportUnusedDisableDirectives": true,
   "rules": {
-    "indent": ["error", 2],
-    "function-call-argument-newline": "off",
     "max-statements": "off",
     "multiline-ternary": "off",
     "no-magic-numbers": "off",
     "no-ternary": "off",
     "one-var": "off",
-    "padded-blocks": "off",
-    "prefer-named-capture-group": "off",
     "sort-keys": "off",
 
     "node/handle-callback-err": "error",
