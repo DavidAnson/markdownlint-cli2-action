@@ -60,34 +60,14 @@ if (fix) {
   argv.push("--fix");
 }
 
-let invoke = true;
-const command = core.getInput("command");
-switch (command) {
-case "":
-  // Default behavior
-  break;
-case "config":
-  argv.unshift("--config");
-  break;
-case "fix":
-  argv.unshift("--fix");
-  break;
-default:
-  core.setFailed(`Unsupported command: ${command}`);
-  invoke = false;
-  break;
-}
-
-if (invoke) {
-  const parameters = {
-    argv,
-    logMessage,
-    "optionsOverride": {
-      "outputFormatters": [[outputFormatter]]
-    }
-  };
-  markdownlintCli2(parameters).then(
-    (code) => code && core.setFailed(`Failed with exit code: ${code}`),
-    (error) => core.setFailed(`Failed due to error: ${error}`)
-  );
-}
+const parameters = {
+  argv,
+  logMessage,
+  "optionsOverride": {
+    "outputFormatters": [[outputFormatter]]
+  }
+};
+markdownlintCli2(parameters).then(
+  (code) => code && core.setFailed(`Failed with exit code: ${code}`),
+  (error) => core.setFailed(`Failed due to error: ${error}`)
+);

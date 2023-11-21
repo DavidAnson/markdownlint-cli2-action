@@ -13,22 +13,6 @@ information.
 
 ## Inputs
 
-### command (optional)
-
-> **Deprecated in favor of the "fix" and "config" inputs**
->
-> Command to run (unset, `fix`, or `config`)
->
-> If unspecified or `""`, the `markdownlint-cli2` command is run.
->
-> If set to `fix`, the `markdownlint-cli2-fix` command is run and supported
-> issues will be fixed automatically.
->
-> If set to `config`, the `markdownlint-cli2-config` command is run and the
-> first element of `globs` should specify a supported configuration file.
->
-> For more detail: [documentation for `markdownlint-cli2`][command-line].
-
 ### config (optional)
 
 Path of a file to use for the base configuration object (defaults to none)
