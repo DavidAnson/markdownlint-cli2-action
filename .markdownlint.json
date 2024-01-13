@@ -24,6 +24,12 @@
     "strict": true,
     "code_blocks": false
   },
+  "link-image-style": {
+    "autolink": false,
+    "inline": false,
+    "collapsed": false,
+    "shortcut": false
+  },
   "no-duplicate-heading": {
     "siblings_only": true
   },
@@ -42,6 +48,9 @@
   },
   "strong-style": {
     "style": "asterisk"
+  },
+  "table-pipe-style": {
+    "style": "leading_and_trailing"
   },
   "ul-style": {
     "style": "dash"
