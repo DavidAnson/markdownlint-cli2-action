@@ -19,7 +19,7 @@
     "build": "ncc build markdownlint-cli2-action.js",
     "docker-npm-install": "docker run --rm --tty --name npm-install --volume $PWD:/home/workdir --workdir /home/workdir --user node node:16 npm install",
     "docker-npm-run-upgrade": "docker run --rm --tty --name npm-run-upgrade --volume $PWD:/home/workdir --workdir /home/workdir --user node node:16 npm run upgrade",
-    "lint": "eslint *.js && markdownlint-cli2 *.md",
+    "lint": "eslint *.js eslint.config.mjs && markdownlint-cli2 *.md",
     "test": "npm run lint && npm run build && git diff --exit-code",
     "upgrade": "npx --yes npm-check-updates --upgrade"
   },
@@ -28,9 +28,10 @@
     "markdownlint-cli2": "0.13.0"
   },
   "devDependencies": {
+    "@eslint/js": "9.0.0",
     "@vercel/ncc": "0.38.1",
     "eslint": "9.0.0",
-    "eslint-plugin-node": "11.1.0",
+    "eslint-plugin-n": "17.2.1",
     "eslint-plugin-unicorn": "52.0.0"
   }
 }
