@@ -30,7 +30,7 @@
   "devDependencies": {
     "@eslint/js": "9.4.0",
     "@vercel/ncc": "0.38.1",
-    "eslint": "9.4.0",
+    "eslint": "9.5.0",
     "eslint-plugin-n": "17.9.0",
     "eslint-plugin-unicorn": "53.0.0"
   }
