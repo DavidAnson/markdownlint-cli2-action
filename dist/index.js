@@ -57946,11 +57946,11 @@ var __webpack_exports__ = {};
 
 
 const core = __nccwpck_require__(2186);
-const {"main": markdownlintCli2} = __nccwpck_require__(9247);
+const { "main": markdownlintCli2 } = __nccwpck_require__(9247);
 
 const logMessage = core.info;
 const outputFormatter = (options) => {
-  const {results} = options;
+  const { results } = options;
   for (const lintError of results) {
     const {
       errorContext,
@@ -58007,7 +58007,7 @@ const parameters = {
   argv,
   logMessage,
   "optionsOverride": {
-    "outputFormatters": [[outputFormatter]]
+    "outputFormatters": [ [ outputFormatter ] ]
   }
 };
 markdownlintCli2(parameters).then(
