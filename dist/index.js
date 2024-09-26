@@ -57976,8 +57976,12 @@ const outputFormatter = (options) => {
     const detail = errorDetail ? ` [${errorDetail}]` : "";
     const context = errorContext ? ` [Context: "${errorContext}"]` : "";
     const information = ruleInformation ? ` ${ruleInformation}` : "";
+    const actionRepository = process.env.GITHUB_ACTION_REPOSITORY;
+    const headRef = process.env.GITHUB_HEAD_REF;
+    const baseRef = process.env.GITHUB_BASE_REF;
+    const ref = process.env.GITHUB_REF;
     const message =
-      `${fileName}${line}${column} ${name} ${ruleDescription}${detail}${context}${information}`;
+      `[${fileName}${line}${column}](https://github.com/inDriver/playbook/blob/main/docs/software-development/dev/guidelines/backend/api-guideline.md?plain=1#L519) actionRepository=${actionRepository} headRef=${headRef} baseRef=${baseRef} ref=${ref} ${name} ${ruleDescription}${detail}${context}${information}`;
     const annotation = {
       "title": ruleDescription,
       "file": fileName,
