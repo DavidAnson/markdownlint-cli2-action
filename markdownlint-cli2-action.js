@@ -28,7 +28,6 @@ const outputFormatter = (options) => {
     const actionRepository = process.env.GITHUB_ACTION_REPOSITORY;
     const headRef = process.env.GITHUB_HEAD_REF;
     const fileUrl = `https://github.com/${actionRepository}/blob/${headRef}/${fileName}?plain=1#L${lineNumber}`;
-    
     const message =
       `${fileName}${line}${column} ${fileUrl} ${name} ${ruleDescription}${detail}${context}${information}`;
     const annotation = {
