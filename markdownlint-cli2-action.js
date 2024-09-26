@@ -25,9 +25,9 @@ const outputFormatter = (options) => {
     const detail = errorDetail ? ` [${errorDetail}]` : "";
     const context = errorContext ? ` [Context: "${errorContext}"]` : "";
     const information = ruleInformation ? ` ${ruleInformation}` : "";
-    const actionRepository = process.env.GITHUB_ACTION_REPOSITORY;
+    const repository = process.env.GITHUB_REPOSITORY;
     const headRef = process.env.GITHUB_HEAD_REF;
-    const fileUrl = `https://github.com/${actionRepository}/blob/${headRef}/${fileName}?plain=1#L${lineNumber}`;
+    const fileUrl = `https://github.com/${repository}/blob/${headRef}/${fileName}?plain=1#L${lineNumber}`;
     const message =
       `${fileName}${line}${column} ${fileUrl} ${name} ${ruleDescription}${detail}${context}${information}`;
     const annotation = {
