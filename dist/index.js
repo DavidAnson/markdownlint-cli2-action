@@ -57973,14 +57973,15 @@ const outputFormatter = (options) => {
     const line = `:${lineNumber}`;
     const column = errorRange ? `:${errorRange[0]}` : "";
     const name = ruleNames.join("/");
-    const detail = errorDetail ? ` [${errorDetail}]` : "";
-    const context = errorContext ? ` [Context: "${errorContext}"]` : "";
-    const information = ruleInformation ? ` ${ruleInformation}` : "";
+    const detail = errorDetail ? `[${errorDetail}]` : "";
+    const context = errorContext ? `[Context: "${errorContext}"]` : "";
+    const information = ruleInformation ? `${ruleInformation}` : "";
     const repository = process.env.GITHUB_REPOSITORY;
     const headRef = process.env.GITHUB_HEAD_REF;
-    const fileUrl = `https://github.com/${repository}/blob/${headRef}/${fileName}?plain=1#L${lineNumber}`;
+    const fileUrl = `https://github.com/${repository}/blob/${headRef}/${fileName}#L${lineNumber}`;
+    const ignoreRule = `Please correct the violation or ignore the rule <!-- markdownlint-disable-next-line ${ruleNames[0]} -->`;
     const message =
-      `${fileName}${line}${column} ${fileUrl} ${name} ${ruleDescription}${detail}${context}${information}`;
+      `${fileName}${line}${column} ${fileUrl} ${name} ${ruleDescription} ${detail} ${context} ${information}. ${ignoreRule}`;
     const annotation = {
       "title": ruleDescription,
       "file": fileName,
