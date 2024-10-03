@@ -57981,7 +57981,7 @@ const outputFormatter = (options) => {
     const fileUrl = `https://github.com/${repository}/blob/${headRef}/${fileName}#L${lineNumber}`;
     const ignoreRule = `Please correct the violation or ignore the rule <!-- markdownlint-disable-next-line ${ruleNames[0]} -->`;
     const message =
-      `${fileName}${line}${column} ${fileUrl} ${name} ${ruleDescription} ${detail} ${context} ${information}. ${ignoreRule}`;
+      `${fileName}${line}${column} ${fileUrl} ${name} ${ruleDescription} ${detail}${context} ${information} ${ignoreRule}`;
     const annotation = {
       "title": ruleDescription,
       "file": fileName,
