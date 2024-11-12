@@ -21344,29 +21344,24 @@ module.exports = outputFormatter;
 
 
 
-const micromark = __nccwpck_require__(3302);
+const micromark = __nccwpck_require__(1670);
 
 const { newLineRe, nextLinesRe } = __nccwpck_require__(7389);
 
 module.exports.newLineRe = newLineRe;
 module.exports.nextLinesRe = nextLinesRe;
 
+/** @typedef {import("../lib/markdownlint.js").RuleOnError} RuleOnError */
+/** @typedef {import("../lib/markdownlint.js").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
+
 // Regular expression for matching common front matter (YAML and TOML)
 module.exports.frontMatterRe =
-  /((^---\s*$[\s\S]+?^---\s*)|(^\+\+\+\s*$[\s\S]+?^(\+\+\+|\.\.\.)\s*)|(^\{\s*$[\s\S]+?^\}\s*))(\r\n|\r|\n|$)/m;
+  /((^---[^\S\r\n\u2028\u2029]*$[\s\S]+?^---\s*)|(^\+\+\+[^\S\r\n\u2028\u2029]*$[\s\S]+?^(\+\+\+|\.\.\.)\s*)|(^\{[^\S\r\n\u2028\u2029]*$[\s\S]+?^\}\s*))(\r\n|\r|\n|$)/m;
 
 // Regular expression for matching the start of inline disable/enable comments
 const inlineCommentStartRe =
   /(<!--\s*markdownlint-(disable|enable|capture|restore|disable-file|enable-file|disable-line|disable-next-line|configure-file))(?:\s|-->)/gi;
 module.exports.inlineCommentStartRe = inlineCommentStartRe;
-
-// Regular expression for blockquote prefixes
-const blockquotePrefixRe = /^[>\s]*/;
-module.exports.blockquotePrefixRe = blockquotePrefixRe;
-
-// Regular expression for link reference definitions
-const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
-module.exports.linkReferenceDefinitionRe = linkReferenceDefinitionRe;
 
 // Regular expression for identifying an HTML entity at the end of a line
 module.exports.endOfLineHtmlEntityRe =
@@ -21566,99 +21561,6 @@ module.exports.escapeForRegExp = function escapeForRegExp(str) {
 };
 
 /**
- * Return the string representation of a fence markup character.
- *
- * @param {string} markup Fence string.
- * @returns {string} String representation.
- */
-module.exports.fencedCodeBlockStyleFor =
-  function fencedCodeBlockStyleFor(markup) {
-    switch (markup[0]) {
-      case "~":
-        return "tilde";
-      default:
-        return "backtick";
-    }
-  };
-
-/**
- * Return the string representation of a emphasis or strong markup character.
- *
- * @param {string} markup Emphasis or strong string.
- * @returns {"asterisk" | "underscore"} String representation.
- */
-module.exports.emphasisOrStrongStyleFor =
-  function emphasisOrStrongStyleFor(markup) {
-    switch (markup[0]) {
-      case "*":
-        return "asterisk";
-      default:
-        return "underscore";
-    }
-  };
-
-/**
- * @callback InlineCodeSpanCallback
- * @param {string} code Code content.
- * @param {number} lineIndex Line index (0-based).
- * @param {number} columnIndex Column index (0-based).
- * @param {number} ticks Count of backticks.
- * @returns {void}
- */
-
-/**
- * Calls the provided function for each inline code span's content.
- *
- * @param {string} input Markdown content.
- * @param {InlineCodeSpanCallback} handler Callback function taking (code,
- * lineIndex, columnIndex, ticks).
- * @returns {void}
- */
-function forEachInlineCodeSpan(input, handler) {
-  const backtickRe = /`+/g;
-  let match = null;
-  const backticksLengthAndIndex = [];
-  while ((match = backtickRe.exec(input)) !== null) {
-    backticksLengthAndIndex.push([ match[0].length, match.index ]);
-  }
-  const newLinesIndex = [];
-  while ((match = newLineRe.exec(input)) !== null) {
-    newLinesIndex.push(match.index);
-  }
-  let lineIndex = 0;
-  let lineStartIndex = 0;
-  let k = 0;
-  for (let i = 0; i < backticksLengthAndIndex.length - 1; i++) {
-    const [ startLength, startIndex ] = backticksLengthAndIndex[i];
-    if ((startIndex === 0) || (input[startIndex - 1] !== "\\")) {
-      for (let j = i + 1; j < backticksLengthAndIndex.length; j++) {
-        const [ endLength, endIndex ] = backticksLengthAndIndex[j];
-        if (startLength === endLength) {
-          for (; k < newLinesIndex.length; k++) {
-            const newLineIndex = newLinesIndex[k];
-            if (startIndex < newLineIndex) {
-              break;
-            }
-            lineIndex++;
-            lineStartIndex = newLineIndex + 1;
-          }
-          const columnIndex = startIndex - lineStartIndex + startLength;
-          handler(
-            input.slice(startIndex + startLength, endIndex),
-            lineIndex,
-            columnIndex,
-            startLength
-          );
-          i = j;
-          break;
-        }
-      }
-    }
-  }
-}
-module.exports.forEachInlineCodeSpan = forEachInlineCodeSpan;
-
-/**
  * Adds ellipsis to the left/right/middle of the specified text.
  *
  * @param {string} text Text to ellipsify.
@@ -21683,12 +21585,12 @@ module.exports.ellipsify = ellipsify;
 /**
  * Adds a generic error object via the onError callback.
  *
- * @param {Object} onError RuleOnError instance.
+ * @param {RuleOnError} onError RuleOnError instance.
  * @param {number} lineNumber Line number.
  * @param {string} [detail] Error details.
  * @param {string} [context] Error context.
  * @param {number[]} [range] Column and length of error.
- * @param {Object} [fixInfo] RuleOnErrorFixInfo instance.
+ * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
  * @returns {void}
  */
 function addError(onError, lineNumber, detail, context, range, fixInfo) {
@@ -21705,14 +21607,14 @@ module.exports.addError = addError;
 /**
  * Adds an error object with details conditionally via the onError callback.
  *
- * @param {Object} onError RuleOnError instance.
+ * @param {RuleOnError} onError RuleOnError instance.
  * @param {number} lineNumber Line number.
  * @param {Object} expected Expected value.
  * @param {Object} actual Actual value.
  * @param {string} [detail] Error details.
  * @param {string} [context] Error context.
  * @param {number[]} [range] Column and length of error.
- * @param {Object} [fixInfo] RuleOnErrorFixInfo instance.
+ * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
  * @returns {void}
  */
 function addErrorDetailIf(
@@ -21733,13 +21635,13 @@ module.exports.addErrorDetailIf = addErrorDetailIf;
 /**
  * Adds an error object with context via the onError callback.
  *
- * @param {Object} onError RuleOnError instance.
+ * @param {RuleOnError} onError RuleOnError instance.
  * @param {number} lineNumber Line number.
  * @param {string} context Error context.
  * @param {boolean} [start] True iff the start of the text is important.
  * @param {boolean} [end] True iff the end of the text is important.
  * @param {number[]} [range] Column and length of error.
- * @param {Object} [fixInfo] RuleOnErrorFixInfo instance.
+ * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
  * @returns {void}
  */
 function addErrorContext(
@@ -21750,50 +21652,42 @@ function addErrorContext(
 module.exports.addErrorContext = addErrorContext;
 
 /**
- * Adds an error object with context for a construct missing a blank line.
+ * Defines a range within a file (start line/column to end line/column, subset of MicromarkToken).
  *
- * @param {Object} onError RuleOnError instance.
- * @param {string[]} lines Lines of Markdown content.
- * @param {number} lineIndex Line index of line.
- * @param {number} [lineNumber] Line number for override.
- * @returns {void}
+ * @typedef {Object} FileRange
+ * @property {number} startLine Start line (1-based).
+ * @property {number} startColumn Start column (1-based).
+ * @property {number} endLine End line (1-based).
+ * @property {number} endColumn End column (1-based).
  */
-function addErrorContextForLine(onError, lines, lineIndex, lineNumber) {
-  const line = lines[lineIndex];
-  // @ts-ignore
-  const quotePrefix = line.match(blockquotePrefixRe)[0].trimEnd();
-  addErrorContext(
-    onError,
-    lineIndex + 1,
-    line.trim(),
-    undefined,
-    undefined,
-    undefined,
-    {
-      lineNumber,
-      "insertText": `${quotePrefix}\n`
-    }
-  );
-}
-module.exports.addErrorContextForLine = addErrorContextForLine;
 
 /**
- * Determines whether the specified range is within another range.
+ * Returns whether line/column A is less than or equal to line/column B.
  *
- * @param {number[][]} ranges Array of ranges (line, index, length).
- * @param {number} lineIndex Line index to check.
- * @param {number} index Index to check.
- * @param {number} length Length to check.
- * @returns {boolean} True iff the specified range is within.
+ * @param {number} lineA Line A.
+ * @param {number} columnA Column A.
+ * @param {number} lineB Line B.
+ * @param {number} columnB Column B.
+ * @returns {boolean} True iff A is less than or equal to B.
  */
-const withinAnyRange = (ranges, lineIndex, index, length) => (
-  !ranges.every((span) => (
-    (lineIndex !== span[0]) ||
-    (index < span[1]) ||
-    (index + length > span[1] + span[2])
-  ))
+const positionLessThanOrEqual = (lineA, columnA, lineB, columnB) => (
+  (lineA < lineB) ||
+  ((lineA === lineB) && (columnA <= columnB))
 );
-module.exports.withinAnyRange = withinAnyRange;
+
+/**
+ * Returns whether two ranges (or MicromarkTokens) overlap anywhere.
+ *
+ * @param {FileRange|import("../lib/markdownlint.js").MicromarkToken} rangeA Range A.
+ * @param {FileRange|import("../lib/markdownlint.js").MicromarkToken} rangeB Range B.
+ * @returns {boolean} True iff the two ranges overlap.
+ */
+module.exports.hasOverlap = function hasOverlap(rangeA, rangeB) {
+  const lte = positionLessThanOrEqual(rangeA.startLine, rangeA.startColumn, rangeB.startLine, rangeB.startColumn);
+  const first = lte ? rangeA : rangeB;
+  const second = lte ? rangeB : rangeA;
+  return positionLessThanOrEqual(second.startLine, second.startColumn, first.endLine, first.endColumn);
+};
 
 // Determines if the front matter includes a title
 module.exports.frontMatterHasTitle =
@@ -21812,16 +21706,28 @@ module.exports.frontMatterHasTitle =
 /**
  * Returns an object with information about reference links and images.
  *
- * @param {import("../helpers/micromark.cjs").Token[]} tokens Micromark tokens.
+ * @param {import("../helpers/micromark-helpers.cjs").Token[]} tokens Micromark tokens.
  * @returns {Object} Reference link/image data.
  */
 function getReferenceLinkImageData(tokens) {
   const normalizeReference = (s) => s.toLowerCase().trim().replace(/\s+/g, " ");
+  const references = new Map();
+  const shortcuts = new Map();
+  const addReferenceToDictionary = (token, label, isShortcut) => {
+    const referenceDatum = [
+      token.startLine - 1,
+      token.startColumn - 1,
+      token.text.length
+    ];
+    const reference = normalizeReference(label);
+    const dictionary = isShortcut ? shortcuts : references;
+    const referenceData = dictionary.get(reference) || [];
+    referenceData.push(referenceDatum);
+    dictionary.set(reference, referenceData);
+  };
   const definitions = new Map();
   const definitionLineIndices = [];
   const duplicateDefinitions = [];
-  const references = new Map();
-  const shortcuts = new Map();
   const filteredTokens =
     micromark.filterByTypes(
       tokens,
@@ -21831,7 +21737,9 @@ function getReferenceLinkImageData(tokens) {
         // definitions and definitionLineIndices
         "definitionLabelString", "gfmFootnoteDefinitionLabelString",
         // references and shortcuts
-        "gfmFootnoteCall", "image", "link"
+        "gfmFootnoteCall", "image", "link",
+        // undefined link labels
+        "undefinedReferenceCollapsed", "undefinedReferenceFull", "undefinedReferenceShortcut"
       ]
     );
   for (const token of filteredTokens) {
@@ -21854,15 +21762,10 @@ function getReferenceLinkImageData(tokens) {
           if (definitions.has(reference)) {
             duplicateDefinitions.push([ reference, token.startLine - 1 ]);
           } else {
-            let destinationString = null;
             const parent =
-              micromark.getTokenParentOfType(token, [ "definition" ]);
-            if (parent) {
-              destinationString = micromark.getTokenTextByType(
-                micromark.filterByPredicate(parent.children),
-                "definitionDestinationString"
-              );
-            }
+              micromark.getParentOfType(token, [ "definition" ]);
+            const destinationString = parent &&
+              micromark.getDescendantsByType(parent, [ "definitionDestination", "definitionDestinationRaw", "definitionDestinationString" ])[0]?.text;
             definitions.set(
               reference,
               [ token.startLine - 1, destinationString ]
@@ -21874,65 +21777,36 @@ function getReferenceLinkImageData(tokens) {
       case "image":
       case "link":
         {
-          let isShortcut = false;
-          let isFullOrCollapsed = false;
-          let labelText = null;
-          let referenceStringText = null;
-          const shortcutCandidate =
-            micromark.matchAndGetTokensByType(token.children, [ "label" ]);
-          if (shortcutCandidate) {
-            labelText =
-              micromark.getTokenTextByType(
-                shortcutCandidate[0].children, "labelText"
-              );
-            isShortcut = (labelText !== null);
-          }
-          const fullAndCollapsedCandidate =
-            micromark.matchAndGetTokensByType(
-              token.children, [ "label", "reference" ]
+          // Identify if shortcut or full/collapsed
+          let isShortcut = (token.children.length === 1);
+          const isFullOrCollapsed = (token.children.length === 2) && !token.children.some((t) => t.type === "resource");
+          const [ labelText ] = micromark.getDescendantsByType(token, [ "label", "labelText" ]);
+          const [ referenceString ] = micromark.getDescendantsByType(token, [ "reference", "referenceString" ]);
+          let label = labelText?.text;
+          // Identify if footnote
+          if (!isShortcut && !isFullOrCollapsed) {
+            const [ footnoteCallMarker, footnoteCallString ] = token.children.filter(
+              (t) => [ "gfmFootnoteCallMarker", "gfmFootnoteCallString" ].includes(t.type)
             );
-          if (fullAndCollapsedCandidate) {
-            labelText =
-              micromark.getTokenTextByType(
-                fullAndCollapsedCandidate[0].children, "labelText"
-              );
-            referenceStringText =
-              micromark.getTokenTextByType(
-                fullAndCollapsedCandidate[1].children, "referenceString"
-              );
-            isFullOrCollapsed = (labelText !== null);
+            if (footnoteCallMarker && footnoteCallString) {
+              label = `${footnoteCallMarker.text}${footnoteCallString.text}`;
+              isShortcut = true;
+            }
           }
-          const footnote = micromark.matchAndGetTokensByType(
-            token.children,
-            [
-              "gfmFootnoteCallLabelMarker", "gfmFootnoteCallMarker",
-              "gfmFootnoteCallString", "gfmFootnoteCallLabelMarker"
-            ],
-            [ "gfmFootnoteCallMarker", "gfmFootnoteCallString" ]
-          );
-          if (footnote) {
-            const callMarkerText = footnote[0].text;
-            const callString = footnote[1].text;
-            labelText = `${callMarkerText}${callString}`;
-            isShortcut = true;
-          }
-          // Track shortcuts separately due to ambiguity in "text [text] text"
+          // Track link (handle shortcuts separately due to ambiguity in "text [text] text")
           if (isShortcut || isFullOrCollapsed) {
-            const referenceDatum = [
-              token.startLine - 1,
-              token.startColumn - 1,
-              token.text.length,
-              // @ts-ignore
-              labelText.length,
-              (referenceStringText || "").length
-            ];
-            const reference =
-              normalizeReference(referenceStringText || labelText);
-            const dictionary = isShortcut ? shortcuts : references;
-            const referenceData = dictionary.get(reference) || [];
-            referenceData.push(referenceDatum);
-            dictionary.set(reference, referenceData);
+            addReferenceToDictionary(token, referenceString?.text || label, isShortcut);
           }
+        }
+        break;
+      case "undefinedReferenceCollapsed":
+      case "undefinedReferenceFull":
+      case "undefinedReferenceShortcut":
+        {
+          const undefinedReference = micromark.getDescendantsByType(token, [ "undefinedReference" ])[0];
+          const label = undefinedReference.children.map((t) => t.text).join("");
+          const isShortcut = (token.type === "undefinedReferenceShortcut");
+          addReferenceToDictionary(token, label, isShortcut);
         }
         break;
     }
@@ -21988,120 +21862,6 @@ function getPreferredLineEnding(input, os) {
 module.exports.getPreferredLineEnding = getPreferredLineEnding;
 
 /**
- * Normalizes the fields of a RuleOnErrorFixInfo instance.
- *
- * @param {Object} fixInfo RuleOnErrorFixInfo instance.
- * @param {number} [lineNumber] Line number.
- * @returns {Object} Normalized RuleOnErrorFixInfo instance.
- */
-function normalizeFixInfo(fixInfo, lineNumber) {
-  return {
-    "lineNumber": fixInfo.lineNumber || lineNumber,
-    "editColumn": fixInfo.editColumn || 1,
-    "deleteCount": fixInfo.deleteCount || 0,
-    "insertText": fixInfo.insertText || ""
-  };
-}
-
-/**
- * Fixes the specified error on a line of Markdown content.
- *
- * @param {string} line Line of Markdown content.
- * @param {Object} fixInfo RuleOnErrorFixInfo instance.
- * @param {string} [lineEnding] Line ending to use.
- * @returns {string | null} Fixed content.
- */
-function applyFix(line, fixInfo, lineEnding) {
-  const { editColumn, deleteCount, insertText } = normalizeFixInfo(fixInfo);
-  const editIndex = editColumn - 1;
-  return (deleteCount === -1) ?
-    null :
-    line.slice(0, editIndex) +
-    insertText.replace(/\n/g, lineEnding || "\n") +
-    line.slice(editIndex + deleteCount);
-}
-module.exports.applyFix = applyFix;
-
-/**
- * Applies as many fixes as possible to Markdown content.
- *
- * @param {string} input Lines of Markdown content.
- * @param {Object[]} errors RuleOnErrorInfo instances.
- * @returns {string} Corrected content.
- */
-function applyFixes(input, errors) {
-  const lineEnding = getPreferredLineEnding(input, __nccwpck_require__(8161));
-  const lines = input.split(newLineRe);
-  // Normalize fixInfo objects
-  let fixInfos = errors
-    .filter((error) => error.fixInfo)
-    .map((error) => normalizeFixInfo(error.fixInfo, error.lineNumber));
-  // Sort bottom-to-top, line-deletes last, right-to-left, long-to-short
-  fixInfos.sort((a, b) => {
-    const aDeletingLine = (a.deleteCount === -1);
-    const bDeletingLine = (b.deleteCount === -1);
-    return (
-      (b.lineNumber - a.lineNumber) ||
-      (aDeletingLine ? 1 : (bDeletingLine ? -1 : 0)) ||
-      (b.editColumn - a.editColumn) ||
-      (b.insertText.length - a.insertText.length)
-    );
-  });
-  // Remove duplicate entries (needed for following collapse step)
-  let lastFixInfo = {};
-  fixInfos = fixInfos.filter((fixInfo) => {
-    const unique = (
-      (fixInfo.lineNumber !== lastFixInfo.lineNumber) ||
-      (fixInfo.editColumn !== lastFixInfo.editColumn) ||
-      (fixInfo.deleteCount !== lastFixInfo.deleteCount) ||
-      (fixInfo.insertText !== lastFixInfo.insertText)
-    );
-    lastFixInfo = fixInfo;
-    return unique;
-  });
-  // Collapse insert/no-delete and no-insert/delete for same line/column
-  lastFixInfo = {
-    "lineNumber": -1
-  };
-  for (const fixInfo of fixInfos) {
-    if (
-      (fixInfo.lineNumber === lastFixInfo.lineNumber) &&
-      (fixInfo.editColumn === lastFixInfo.editColumn) &&
-      !fixInfo.insertText &&
-      (fixInfo.deleteCount > 0) &&
-      lastFixInfo.insertText &&
-      !lastFixInfo.deleteCount) {
-      fixInfo.insertText = lastFixInfo.insertText;
-      lastFixInfo.lineNumber = 0;
-    }
-    lastFixInfo = fixInfo;
-  }
-  fixInfos = fixInfos.filter((fixInfo) => fixInfo.lineNumber);
-  // Apply all (remaining/updated) fixes
-  let lastLineIndex = -1;
-  let lastEditIndex = -1;
-  for (const fixInfo of fixInfos) {
-    const { lineNumber, editColumn, deleteCount } = fixInfo;
-    const lineIndex = lineNumber - 1;
-    const editIndex = editColumn - 1;
-    if (
-      (lineIndex !== lastLineIndex) ||
-      (deleteCount === -1) ||
-      ((editIndex + deleteCount) <=
-        (lastEditIndex - ((deleteCount > 0) ? 0 : 1)))
-    ) {
-      // @ts-ignore
-      lines[lineIndex] = applyFix(lines[lineIndex], fixInfo, lineEnding);
-    }
-    lastLineIndex = lineIndex;
-    lastEditIndex = editIndex;
-  }
-  // Return corrected input
-  return lines.filter((line) => line !== null).join(lineEnding);
-}
-module.exports.applyFixes = applyFixes;
-
-/**
  * Expands a path with a tilde to an absolute path.
  *
  * @param {string} file Path that may begin with a tilde.
@@ -22114,26 +21874,6 @@ function expandTildePath(file, os) {
 }
 module.exports.expandTildePath = expandTildePath;
 
-// Copied from markdownlint.js to avoid TypeScript compiler import() issue.
-/**
- * @typedef {Object} MarkdownItToken
- * @property {string[][]} attrs HTML attributes.
- * @property {boolean} block Block-level token.
- * @property {MarkdownItToken[]} children Child nodes.
- * @property {string} content Tag contents.
- * @property {boolean} hidden Ignore element.
- * @property {string} info Fence info.
- * @property {number} level Nesting level.
- * @property {number[]} map Beginning/ending line numbers.
- * @property {string} markup Markup text.
- * @property {Object} meta Arbitrary data.
- * @property {number} nesting Level change.
- * @property {string} tag HTML tag name.
- * @property {string} type Token type.
- * @property {number} lineNumber Line number (1-based).
- * @property {string} line Line content.
- */
-
 
 /***/ }),
 
@@ -22144,6 +21884,12 @@ module.exports.expandTildePath = expandTildePath;
 // @ts-check
 
 
+
+// Symbol for identifing the flat tokens array from micromark parse
+module.exports.flatTokensSymbol = Symbol("flat-tokens");
+
+// Symbol for identifying the htmlFlow token from micromark parse
+module.exports.htmlFlowSymbol = Symbol("html-flow");
 
 // Regular expression for matching common newline characters
 // See NEWLINES_RE in markdown-it/lib/rules_core/normalize.js
@@ -48923,6 +48669,14 @@ module.exports = require("node:stream");
 
 /***/ }),
 
+/***/ 8321:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:stream/consumers");
+
+/***/ }),
+
 /***/ 3136:
 /***/ ((module) => {
 
@@ -50729,20 +50483,24 @@ const pathPosix = pathDefault.posix;
 const { pathToFileURL } = __nccwpck_require__(3136);
 const markdownlintLibrary = __nccwpck_require__(9061);
 const {
+  applyFixes,
+  "getVersion": getLibraryVersion,
+  "promises": markdownlintPromises
+} = markdownlintLibrary;
+const {
   markdownlint,
   "extendConfig": markdownlintExtendConfig,
   "readConfig": markdownlintReadConfig
-} = markdownlintLibrary.promises;
-const markdownlintRuleHelpers = __nccwpck_require__(8307);
+} = markdownlintPromises;
 const appendToArray = __nccwpck_require__(3730);
 const mergeOptions = __nccwpck_require__(6211);
 const resolveAndRequire = __nccwpck_require__(2034);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.14.0";
+const packageVersion = "0.15.0";
 const libraryName = "markdownlint";
-const libraryVersion = markdownlintLibrary.getVersion();
+const libraryVersion = getLibraryVersion();
 const bannerMessage = `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`;
 const dotOnlySubstitute = "*.{md,markdown}";
 const utf8 = "utf8";
@@ -50766,7 +50524,6 @@ const negateGlob = (glob) => `!${glob}`;
 const throwForConfigurationFile = (file, error) => {
   throw new Error(
     `Unable to use configuration file '${file}'; ${error?.message}`,
-    // @ts-ignore
     { "cause": error }
   );
 };
@@ -50775,9 +50532,10 @@ const throwForConfigurationFile = (file, error) => {
 const posixPath = (p) => p.split(pathDefault.sep).join(pathPosix.sep);
 
 // Expands a path with a tilde to an absolute path
-const expandTildePath = (id) => (
-  markdownlintRuleHelpers.expandTildePath(id, __nccwpck_require__(8161))
-);
+const expandTildePath = (id) => {
+  const markdownlintRuleHelpers = __nccwpck_require__(8307);
+  return markdownlintRuleHelpers.expandTildePath(id, __nccwpck_require__(8161));
+};
 
 // Resolves module paths relative to the specified directory
 const resolveModulePaths = (dir, modulePaths) => (
@@ -50824,7 +50582,6 @@ const importOrRequireResolve = async (dirOrDirs, id, noRequire) => {
     } catch (error) {
       errors.push(error);
     }
-    // @ts-ignore
     throw new AggregateError(
       errors,
       `Unable to require or import module '${id}'.`
@@ -50972,6 +50729,7 @@ Glob expressions (from the globby library):
 - {} allows for a comma-separated list of "or" expressions
 - ! or # at the beginning of a pattern negate the match
 - : at the beginning identifies a literal file path
+- - as a glob represents standard input (stdin)
 
 Dot-only glob:
 - The command "markdownlint-cli2 ." would lint every file in the current directory tree which is probably not intended
@@ -51486,6 +51244,7 @@ const lintFiles = (fs, dirInfos, fileContents) => {
     const filteredFiles = filesAfterIgnores.filter(
       (file) => fileContents[file] === undefined
     );
+    /** @type {Record<string, string>} */
     const filteredStrings = {};
     for (const file of filesAfterIgnores) {
       if (fileContents[file] !== undefined) {
@@ -51493,6 +51252,7 @@ const lintFiles = (fs, dirInfos, fileContents) => {
       }
     }
     // Create markdownlint options object
+    /** @type {import("markdownlint").Options} */
     const options = {
       "files": filteredFiles,
       "strings": filteredStrings,
@@ -51509,14 +51269,14 @@ const lintFiles = (fs, dirInfos, fileContents) => {
       fs
     };
     // Invoke markdownlint
-    // @ts-ignore
     let task = markdownlint(options);
     // For any fixable errors, read file, apply fixes, and write it back
     if (markdownlintOptions.fix) {
       task = task.then((results) => {
         options.files = [];
         const subTasks = [];
-        const errorFiles = Object.keys(results);
+        const errorFiles = Object.keys(results).
+          filter((result) => filteredFiles.includes(result));
         for (const fileName of errorFiles) {
           const errorInfos = results[fileName].
             filter((errorInfo) => errorInfo.fixInfo);
@@ -51525,15 +51285,13 @@ const lintFiles = (fs, dirInfos, fileContents) => {
             options.files.push(fileName);
             subTasks.push(fs.promises.readFile(fileName, utf8).
               then((original) => {
-                const fixed = markdownlintRuleHelpers.
-                  applyFixes(original, errorInfos);
+                const fixed = applyFixes(original, errorInfos);
                 return fs.promises.writeFile(fileName, fixed, utf8);
               })
             );
           }
         }
         return Promise.all(subTasks).
-          // @ts-ignore
           then(() => markdownlint(options)).
           then((fixResults) => ({
             ...results,
@@ -51619,11 +51377,12 @@ const main = async (params) => {
     optionsDefault,
     optionsOverride,
     fileContents,
-    nonFileContents,
-    noRequire
+    noRequire,
+    allowStdin
   } = params;
   let {
-    noGlobs
+    noGlobs,
+    nonFileContents
   } = params;
   const logMessage = params.logMessage || noop;
   const logError = params.logError || noop;
@@ -51636,6 +51395,7 @@ const main = async (params) => {
   let fixDefault = false;
   // eslint-disable-next-line unicorn/no-useless-undefined
   let configPath = undefined;
+  let useStdin = false;
   let sawDashDash = false;
   let shouldShowHelp = false;
   const argvFiltered = (argv || []).filter((arg) => {
@@ -51643,6 +51403,8 @@ const main = async (params) => {
       return true;
     } else if (configPath === null) {
       configPath = arg;
+    } else if ((arg === "-") && allowStdin) {
+      useStdin = true;
       // eslint-disable-next-line unicorn/prefer-switch
     } else if (arg === "--") {
       sawDashDash = true;
@@ -51693,22 +51455,30 @@ const main = async (params) => {
     }
   }
   if (
-    ((globPatterns.length === 0) && !nonFileContents) ||
+    ((globPatterns.length === 0) && !useStdin && !nonFileContents) ||
     (configPath === null)
   ) {
     return showHelp(logMessage, false);
   }
+  // Add stdin as a non-file input if necessary
+  if (useStdin) {
+    const key = pathPosix.join(baseDir, "stdin");
+    const { text } = __nccwpck_require__(8321);
+    nonFileContents = {
+      ...nonFileContents,
+      [key]: await text(process.stdin)
+    };
+  }
   // Include any file overrides or non-file content
-  const { baseMarkdownlintOptions, dirToDirInfo } = baseOptions;
   const resolvedFileContents = {};
   for (const file in fileContents) {
     const resolvedFile = posixPath(pathDefault.resolve(baseDirSystem, file));
-    resolvedFileContents[resolvedFile] =
-      fileContents[file];
+    resolvedFileContents[resolvedFile] = fileContents[file];
   }
   for (const nonFile in nonFileContents) {
     resolvedFileContents[nonFile] = nonFileContents[nonFile];
   }
+  const { baseMarkdownlintOptions, dirToDirInfo } = baseOptions;
   appendToArray(
     dirToDirInfo[baseDir].files,
     Object.keys(nonFileContents || {})
@@ -51780,37 +51550,12 @@ const main = async (params) => {
   return errorsPresent ? 1 : 0;
 };
 
-// Run function
-const run = (overrides, args) => {
-  (async () => {
-    const argsAndArgv = args || [];
-    appendToArray(argsAndArgv, process.argv.slice(2));
-    try {
-      const defaultParams = {
-        "argv": argsAndArgv,
-        "logMessage": console.log,
-        "logError": console.error
-      };
-      const params = {
-        ...defaultParams,
-        ...overrides
-      };
-      process.exitCode = await main(params);
-    } catch (error) {
-      console.error(error);
-      process.exitCode = 2;
-    }
-  })();
-};
-
 // Export functions
 module.exports = {
-  main,
-  run
+  main
 };
 
 // Run if invoked as a CLI
-// @ts-ignore
 if (false) {}
 
 
@@ -51965,11 +51710,10 @@ module.exports = resolveAndRequire;
 
 
 const helpers = __nccwpck_require__(8307);
-const { filterByTypes } = __nccwpck_require__(3302);
+const { filterByTypes } = __nccwpck_require__(1670);
 
 /** @type {Map<string, object>} */
 const map = new Map();
-// eslint-disable-next-line no-undef-init
 let params = undefined;
 
 /**
@@ -52008,7 +51752,8 @@ function getCached(name, getValue) {
  */
 function filterByTypesCached(types, htmlFlow) {
   return getCached(
-    types.join("|"),
+    // eslint-disable-next-line prefer-rest-params
+    JSON.stringify(arguments),
     () => filterByTypes(params.parsers.micromark.tokens, types, htmlFlow)
   );
 }
@@ -52052,7 +51797,7 @@ module.exports.fixableRuleNames = [
   "MD058"
 ];
 module.exports.homepage = "https://github.com/DavidAnson/markdownlint";
-module.exports.version = "0.35.0";
+module.exports.version = "0.36.1";
 
 
 /***/ }),
@@ -52067,8 +51812,8 @@ module.exports.version = "0.35.0";
 
 const path = __nccwpck_require__(6760);
 const { promisify } = __nccwpck_require__(7975);
-const micromark = __nccwpck_require__(3302);
-// const { deprecatedRuleNames } = require("./constants");
+const micromark = __nccwpck_require__(7132);
+const { version } = __nccwpck_require__(6072);
 const rules = __nccwpck_require__(5414);
 const helpers = __nccwpck_require__(8307);
 const cache = __nccwpck_require__(5791);
@@ -52121,7 +51866,7 @@ function validateRuleList(ruleList, synchronous) {
       !result &&
       (rule.parser !== undefined) &&
       (rule.parser !== "markdownit") &&
-      !((customIndex < 0) && (rule.parser === "micromark")) &&
+      (rule.parser !== "micromark") &&
       (rule.parser !== "none")
     ) {
       result = newError("parser", rule.parser);
@@ -52258,87 +52003,6 @@ function removeFrontMatter(content, frontMatter) {
     "content": content,
     "frontMatterLines": frontMatterLines
   };
-}
-
-/**
- * Freeze all freeze-able members of a token and its children.
- *
- * @param {MarkdownItToken} token A markdown-it token.
- * @returns {void}
- */
-function freezeToken(token) {
-  if (token.attrs) {
-    for (const attr of token.attrs) {
-      Object.freeze(attr);
-    }
-    Object.freeze(token.attrs);
-  }
-  if (token.children) {
-    for (const child of token.children) {
-      freezeToken(child);
-    }
-    Object.freeze(token.children);
-  }
-  if (token.map) {
-    Object.freeze(token.map);
-  }
-  Object.freeze(token);
-}
-
-/**
- * Annotate tokens with line/lineNumber and freeze them.
- *
- * @param {import("markdown-it").Token[]} tokens Array of markdown-it tokens.
- * @param {string[]} lines Lines of Markdown content.
- * @returns {void}
- */
-function annotateAndFreezeTokens(tokens, lines) {
-  let trMap = null;
-  // eslint-disable-next-line jsdoc/valid-types
-  /** @type MarkdownItToken[] */
-  // @ts-ignore
-  const markdownItTokens = tokens;
-  for (const token of markdownItTokens) {
-    // Provide missing maps for table content
-    if (token.type === "tr_open") {
-      trMap = token.map;
-    } else if (token.type === "tr_close") {
-      trMap = null;
-    }
-    if (!token.map && trMap) {
-      token.map = [ ...trMap ];
-    }
-    // Update token metadata
-    if (token.map) {
-      token.line = lines[token.map[0]];
-      token.lineNumber = token.map[0] + 1;
-      // Trim bottom of token to exclude whitespace lines
-      while (token.map[1] && !((lines[token.map[1] - 1] || "").trim())) {
-        token.map[1]--;
-      }
-    }
-    // Annotate children with lineNumber
-    if (token.children) {
-      const codeSpanExtraLines = [];
-      if (token.children.some((child) => child.type === "code_inline")) {
-        helpers.forEachInlineCodeSpan(token.content, (code) => {
-          codeSpanExtraLines.push(code.split(helpers.newLineRe).length - 1);
-        });
-      }
-      let lineNumber = token.lineNumber;
-      for (const child of token.children) {
-        child.lineNumber = lineNumber;
-        child.line = lines[lineNumber - 1];
-        if ((child.type === "softbreak") || (child.type === "hardbreak")) {
-          lineNumber++;
-        } else if (child.type === "code_inline") {
-          lineNumber += codeSpanExtraLines.shift();
-        }
-      }
-    }
-    freezeToken(token);
-  }
-  Object.freeze(tokens);
 }
 
 /**
@@ -52596,7 +52260,7 @@ function getEnabledRulesPerLineNumber(
  * names.
  * @param {string} name Identifier for the content.
  * @param {string} content Markdown content.
- * @param {GetMarkdownIt} getMarkdownIt Getter for instance of markdown-it.
+ * @param {Plugin[]} markdownItPlugins Additional plugins.
  * @param {Configuration} config Configuration object.
  * @param {ConfigurationParser[] | null} configParsers Configuration parsers.
  * @param {RegExp | null} frontMatter Regular expression for front matter.
@@ -52611,7 +52275,7 @@ function lintContent(
   aliasToRuleNames,
   name,
   content,
-  getMarkdownIt,
+  markdownItPlugins,
   config,
   configParsers,
   frontMatter,
@@ -52639,14 +52303,20 @@ function lintContent(
   const needMarkdownItTokens = enabledRuleList.some(
     (rule) => (rule.parser === "markdownit") || (rule.parser === undefined)
   );
+  const customRulesPresent = (ruleList.length !== rules.length);
   // Parse content into parser tokens
-  const markdownitTokens = needMarkdownItTokens ? getMarkdownIt().parse(content, {}) : [];
-  const micromarkTokens = micromark.parse(content);
+  const micromarkTokens = micromark.parse(
+    content,
+    { "freezeTokens": customRulesPresent }
+  );
   // Hide the content of HTML comments from rules
+  const preClearedContent = content;
   content = helpers.clearHtmlCommentText(content);
-  // Parse content into lines and update markdown-it tokens
+  // Parse content into lines and get markdown-it tokens
   const lines = content.split(helpers.newLineRe);
-  annotateAndFreezeTokens(markdownitTokens, lines);
+  const markdownitTokens = needMarkdownItTokens ?
+    (__nccwpck_require__(9917).getMarkdownItTokens)(markdownItPlugins, preClearedContent, lines) :
+    [];
   // Create (frozen) parameters for rules
   /** @type {MarkdownParsers} */
   // @ts-ignore
@@ -52667,6 +52337,7 @@ function lintContent(
   const parsersNone = Object.freeze({});
   const paramsBase = {
     name,
+    version,
     "lines": Object.freeze(lines),
     "frontMatterLines": Object.freeze(frontMatterLines)
   };
@@ -52899,7 +52570,7 @@ function lintContent(
  * @param {Object.<string, string[]>} aliasToRuleNames Map of alias to rule
  * names.
  * @param {string} file Path of file to lint.
- * @param {GetMarkdownIt} getMarkdownIt Getter for instance of markdown-it.
+ * @param {Plugin[]} markdownItPlugins Additional plugins.
  * @param {Configuration} config Configuration object.
  * @param {ConfigurationParser[] | null} configParsers Configuration parsers.
  * @param {RegExp | null} frontMatter Regular expression for front matter.
@@ -52915,7 +52586,7 @@ function lintFile(
   ruleList,
   aliasToRuleNames,
   file,
-  getMarkdownIt,
+  markdownItPlugins,
   config,
   configParsers,
   frontMatter,
@@ -52935,7 +52606,7 @@ function lintFile(
       aliasToRuleNames,
       file,
       content,
-      getMarkdownIt,
+      markdownItPlugins,
       config,
       configParsers,
       frontMatter,
@@ -52995,21 +52666,14 @@ function lintInput(options, synchronous, callback) {
   const config = options.config || { "default": true };
   const configParsers = options.configParsers || null;
   const frontMatter = (options.frontMatter === undefined) ?
-    helpers.frontMatterRe : options.frontMatter;
+    helpers.frontMatterRe :
+    options.frontMatter;
   const handleRuleFailures = !!options.handleRuleFailures;
   const noInlineConfig = !!options.noInlineConfig;
   const resultVersion = (options.resultVersion === undefined) ?
-    3 : options.resultVersion;
-  const getMarkdownIt = () => {
-    const markdownit = __nccwpck_require__(5182);
-    const md = markdownit({ "html": true });
-    const markdownItPlugins = options.markdownItPlugins || [];
-    for (const plugin of markdownItPlugins) {
-      // @ts-ignore
-      md.use(...plugin);
-    }
-    return md;
-  };
+    3 :
+    options.resultVersion;
+  const markdownItPlugins = options.markdownItPlugins || [];
   const fs = options.fs || __nccwpck_require__(3024);
   const aliasToRuleNames = mapAliasToRuleNames(ruleList);
   const results = newResults(ruleList);
@@ -53041,7 +52705,7 @@ function lintInput(options, synchronous, callback) {
         ruleList,
         aliasToRuleNames,
         currentItem,
-        getMarkdownIt,
+        markdownItPlugins,
         config,
         configParsers,
         frontMatter,
@@ -53060,7 +52724,7 @@ function lintInput(options, synchronous, callback) {
         aliasToRuleNames,
         currentItem,
         strings[currentItem] || "",
-        getMarkdownIt,
+        markdownItPlugins,
         config,
         configParsers,
         frontMatter,
@@ -53353,12 +53017,125 @@ function readConfigSync(file, parsers, fs) {
 }
 
 /**
+ * Normalizes the fields of a RuleOnErrorFixInfo instance.
+ *
+ * @param {RuleOnErrorFixInfo} fixInfo RuleOnErrorFixInfo instance.
+ * @param {number} [lineNumber] Line number.
+ * @returns {RuleOnErrorFixInfoNormalized} Normalized RuleOnErrorFixInfo instance.
+ */
+function normalizeFixInfo(fixInfo, lineNumber = 0) {
+  return {
+    "lineNumber": fixInfo.lineNumber || lineNumber,
+    "editColumn": fixInfo.editColumn || 1,
+    "deleteCount": fixInfo.deleteCount || 0,
+    "insertText": fixInfo.insertText || ""
+  };
+}
+
+/**
+ * Applies the specified fix to a Markdown content line.
+ *
+ * @param {string} line Line of Markdown content.
+ * @param {RuleOnErrorFixInfo} fixInfo RuleOnErrorFixInfo instance.
+ * @param {string} [lineEnding] Line ending to use.
+ * @returns {string | null} Fixed content or null if deleted.
+ */
+function applyFix(line, fixInfo, lineEnding = "\n") {
+  const { editColumn, deleteCount, insertText } = normalizeFixInfo(fixInfo);
+  const editIndex = editColumn - 1;
+  return (deleteCount === -1) ?
+    null :
+    line.slice(0, editIndex) + insertText.replace(/\n/g, lineEnding) + line.slice(editIndex + deleteCount);
+}
+
+/**
+ * Applies as many of the specified fixes as possible to Markdown content.
+ *
+ * @param {string} input Lines of Markdown content.
+ * @param {RuleOnErrorInfo[]} errors RuleOnErrorInfo instances.
+ * @returns {string} Fixed content.
+ */
+function applyFixes(input, errors) {
+  const lineEnding = helpers.getPreferredLineEnding(input, __nccwpck_require__(8161));
+  const lines = input.split(helpers.newLineRe);
+  // Normalize fixInfo objects
+  let fixInfos = errors
+    .filter((error) => error.fixInfo)
+    // @ts-ignore
+    .map((error) => normalizeFixInfo(error.fixInfo, error.lineNumber));
+  // Sort bottom-to-top, line-deletes last, right-to-left, long-to-short
+  fixInfos.sort((a, b) => {
+    const aDeletingLine = (a.deleteCount === -1);
+    const bDeletingLine = (b.deleteCount === -1);
+    return (
+      (b.lineNumber - a.lineNumber) ||
+      (aDeletingLine ? 1 : (bDeletingLine ? -1 : 0)) ||
+      (b.editColumn - a.editColumn) ||
+      (b.insertText.length - a.insertText.length)
+    );
+  });
+  // Remove duplicate entries (needed for following collapse step)
+  // eslint-disable-next-line jsdoc/valid-types
+  /** @type RuleOnErrorFixInfo */
+  let lastFixInfo = {};
+  fixInfos = fixInfos.filter((fixInfo) => {
+    const unique = (
+      (fixInfo.lineNumber !== lastFixInfo.lineNumber) ||
+      (fixInfo.editColumn !== lastFixInfo.editColumn) ||
+      (fixInfo.deleteCount !== lastFixInfo.deleteCount) ||
+      (fixInfo.insertText !== lastFixInfo.insertText)
+    );
+    lastFixInfo = fixInfo;
+    return unique;
+  });
+  // Collapse insert/no-delete and no-insert/delete for same line/column
+  lastFixInfo = {
+    "lineNumber": -1
+  };
+  for (const fixInfo of fixInfos) {
+    if (
+      (fixInfo.lineNumber === lastFixInfo.lineNumber) &&
+      (fixInfo.editColumn === lastFixInfo.editColumn) &&
+      !fixInfo.insertText &&
+      (fixInfo.deleteCount > 0) &&
+      lastFixInfo.insertText &&
+      !lastFixInfo.deleteCount) {
+      fixInfo.insertText = lastFixInfo.insertText;
+      lastFixInfo.lineNumber = 0;
+    }
+    lastFixInfo = fixInfo;
+  }
+  fixInfos = fixInfos.filter((fixInfo) => fixInfo.lineNumber);
+  // Apply all (remaining/updated) fixes
+  let lastLineIndex = -1;
+  let lastEditIndex = -1;
+  for (const fixInfo of fixInfos) {
+    const { lineNumber, editColumn, deleteCount } = fixInfo;
+    const lineIndex = lineNumber - 1;
+    const editIndex = editColumn - 1;
+    if (
+      (lineIndex !== lastLineIndex) ||
+      (deleteCount === -1) ||
+      ((editIndex + deleteCount) <=
+        (lastEditIndex - ((deleteCount > 0) ? 0 : 1)))
+    ) {
+      // @ts-ignore
+      lines[lineIndex] = applyFix(lines[lineIndex], fixInfo, lineEnding);
+    }
+    lastLineIndex = lineIndex;
+    lastEditIndex = editIndex;
+  }
+  // Return corrected input
+  return lines.filter((line) => line !== null).join(lineEnding);
+}
+
+/**
  * Gets the (semantic) version of the library.
  *
  * @returns {string} SemVer string.
  */
 function getVersion() {
-  return (__nccwpck_require__(6072).version);
+  return version;
 }
 
 // Export a/synchronous/Promise APIs
@@ -53371,16 +53148,11 @@ markdownlint.promises = {
   "extendConfig": extendConfigPromise,
   "readConfig": readConfigPromise
 };
+markdownlint.applyFix = applyFix;
+markdownlint.applyFixes = applyFixes;
 module.exports = markdownlint;
 
 // Type declarations
-
-/**
- * Function to get an instance of the markdown-it parser.
- *
- * @callback GetMarkdownIt
- * @returns {import("markdown-it")}
- */
 
 /**
  * Function to implement rule logic.
@@ -53402,6 +53174,7 @@ module.exports = markdownlint;
  * @property {readonly string[]} lines File/string lines.
  * @property {readonly string[]} frontMatterLines Front matter lines.
  * @property {RuleConfiguration} config Rule configuration.
+ * @property {string} version Version of the markdownlint library.
  */
 
 /* eslint-enable jsdoc/valid-types */
@@ -53493,6 +53266,16 @@ module.exports = markdownlint;
  * @property {number} [editColumn] Column of the fix (1-based).
  * @property {number} [deleteCount] Count of characters to delete.
  * @property {string} [insertText] Text to insert (after deleting).
+ */
+
+/**
+ * RuleOnErrorInfo with all optional properties present.
+ *
+ * @typedef {Object} RuleOnErrorFixInfoNormalized
+ * @property {number} lineNumber Line number (1-based).
+ * @property {number} editColumn Column of the fix (1-based).
+ * @property {number} deleteCount Count of characters to delete.
+ * @property {string} insertText Text to insert (after deleting).
  */
 
 /**
@@ -53646,7 +53429,7 @@ module.exports = markdownlint;
 
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getHeadingLevel } = __nccwpck_require__(3302);
+const { getHeadingLevel } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -53685,7 +53468,7 @@ module.exports = {
 
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getHeadingLevel, getHeadingStyle } = __nccwpck_require__(3302);
+const { getHeadingLevel, getHeadingStyle } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -53743,7 +53526,7 @@ module.exports = {
 
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getDescendantsByType, getTokenParentOfType } = __nccwpck_require__(3302);
+const { getDescendantsByType, getParentOfType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const markerToStyle = {
@@ -53783,10 +53566,10 @@ module.exports = {
     for (const listUnordered of filterByTypesCached([ "listUnordered" ])) {
       let nesting = 0;
       if (style === "sublist") {
-        /** @type {import("../helpers/micromark.cjs").Token | null} */
+        /** @type {import("../helpers/micromark-helpers.cjs").Token | null} */
         let parent = listUnordered;
         // @ts-ignore
-        while ((parent = getTokenParentOfType(parent, [ "listOrdered", "listUnordered" ]))) {
+        while ((parent = getParentOfType(parent, [ "listOrdered", "listUnordered" ]))) {
           nesting++;
         }
       }
@@ -53917,7 +53700,7 @@ module.exports = {
 
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getTokenParentOfType } = __nccwpck_require__(3302);
+const { getParentOfType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -53949,11 +53732,11 @@ module.exports = {
         lastBlockQuotePrefix = token;
       } else if (type === "listUnordered") {
         let nesting = 0;
-        /** @type {import("../helpers/micromark.cjs").Token | null} */
+        /** @type {import("../helpers/micromark-helpers.cjs").Token | null} */
         let current = token;
         while (
           // @ts-ignore
-          (current = getTokenParentOfType(current, unorderedParentTypes))
+          (current = getParentOfType(current, unorderedParentTypes))
         ) {
           if (current.type === "listUnordered") {
             nesting++;
@@ -54013,7 +53796,7 @@ module.exports = {
 
 
 const { addError } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(3302);
+const { addRangeToSet } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -54115,8 +53898,8 @@ module.exports = {
 
 
 
-const { addError, withinAnyRange } = __nccwpck_require__(8307);
-const { getDescendantsByType, getExclusionsForToken } = __nccwpck_require__(3302);
+const { addError, hasOverlap } = __nccwpck_require__(8307);
+const { getDescendantsByType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const tabRe = /\t+/g;
@@ -54139,9 +53922,8 @@ module.exports = {
     const spaceMultiplier = (spacesPerTab === undefined) ?
       1 :
       Math.max(0, Number(spacesPerTab));
-    const exclusions = [];
     // eslint-disable-next-line jsdoc/valid-types
-    /** @type import("../helpers/micromark.cjs").TokenType[] */
+    /** @type import("../helpers/micromark-helpers.cjs").TokenType[] */
     const exclusionTypes = [];
     if (includeCode) {
       if (ignoreCodeLanguages.size > 0) {
@@ -54157,24 +53939,29 @@ module.exports = {
       }
       return true;
     });
-    for (const codeToken of codeTokens) {
-      const exclusionsForToken = getExclusionsForToken(params.lines, codeToken);
-      if (codeToken.type === "codeFenced") {
-        exclusionsForToken.pop();
-        exclusionsForToken.shift();
-      }
-      exclusions.push(...exclusionsForToken);
-    }
+    const codeRanges = codeTokens.map((token) => {
+      const { type, startLine, startColumn, endLine, endColumn } = token;
+      const codeFenced = (type === "codeFenced");
+      return {
+        "startLine": startLine + (codeFenced ? 1 : 0),
+        "startColumn": codeFenced ? 0 : startColumn,
+        "endLine": endLine - (codeFenced ? 1 : 0),
+        "endColumn": codeFenced ? Number.MAX_SAFE_INTEGER : endColumn
+      };
+    });
     for (let lineIndex = 0; lineIndex < params.lines.length; lineIndex++) {
       const line = params.lines[lineIndex];
       let match = null;
       while ((match = tabRe.exec(line)) !== null) {
+        const lineNumber = lineIndex + 1;
         const column = match.index + 1;
         const length = match[0].length;
-        if (!withinAnyRange(exclusions, lineIndex + 1, column, length)) {
+        /** @type {import("../helpers").FileRange} */
+        const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
+        if (!codeRanges.some((codeRange) => hasOverlap(codeRange, range))) {
           addError(
             onError,
-            lineIndex + 1,
+            lineNumber,
             "Column: " + column,
             undefined,
             [ column, length ],
@@ -54201,8 +53988,8 @@ module.exports = {
 
 
 
-const { addError, withinAnyRange } = __nccwpck_require__(8307);
-const { addRangeToSet, getExclusionsForToken } = __nccwpck_require__(3302);
+const { addError, hasOverlap } = __nccwpck_require__(8307);
+const { addRangeToSet } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const reversedLinkRe =
@@ -54220,34 +54007,35 @@ module.exports = {
     for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
       addRangeToSet(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
     }
-    const exclusions = [];
-    for (const codeText of filterByTypesCached([ "codeText" ])) {
-      exclusions.push(...getExclusionsForToken(params.lines, codeText));
-    }
+    const codeTexts = filterByTypesCached([ "codeText" ]);
     for (const [ lineIndex, line ] of params.lines.entries()) {
-      if (!codeBlockLineNumbers.has(lineIndex + 1)) {
+      const lineNumber = lineIndex + 1;
+      if (!codeBlockLineNumbers.has(lineNumber)) {
         let match = null;
         while ((match = reversedLinkRe.exec(line)) !== null) {
           const [ reversedLink, preChar, linkText, linkDestination ] = match;
-          const index = match.index + preChar.length;
-          const length = match[0].length - preChar.length;
           if (
             !linkText.endsWith("\\") &&
-            !linkDestination.endsWith("\\") &&
-            !withinAnyRange(exclusions, lineIndex + 1, index, length)
+            !linkDestination.endsWith("\\")
           ) {
-            addError(
-              onError,
-              lineIndex + 1,
-              reversedLink.slice(preChar.length),
-              undefined,
-              [ index + 1, length ],
-              {
-                "editColumn": index + 1,
-                "deleteCount": length,
-                "insertText": `[${linkText}](${linkDestination})`
-              }
-            );
+            const column = match.index + preChar.length + 1;
+            const length = match[0].length - preChar.length;
+            /** @type {import("../helpers").FileRange} */
+            const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
+            if (!codeTexts.some((codeText) => hasOverlap(codeText, range))) {
+              addError(
+                onError,
+                lineNumber,
+                reversedLink.slice(preChar.length),
+                undefined,
+                [ column, length ],
+                {
+                  "editColumn": column,
+                  "deleteCount": length,
+                  "insertText": `[${linkText}](${linkDestination})`
+                }
+              );
+            }
           }
         }
       }
@@ -54267,7 +54055,7 @@ module.exports = {
 
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(3302);
+const { addRangeToSet } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -54319,7 +54107,7 @@ module.exports = {
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
 const { getReferenceLinkImageData } = __nccwpck_require__(5791);
-const { addRangeToSet, getDescendantsByType } = __nccwpck_require__(3302);
+const { addRangeToSet, getDescendantsByType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const longLineRePrefix = "^.{";
@@ -54431,7 +54219,6 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { filterByTypes } = __nccwpck_require__(3302);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const dollarCommandRe = /^(\s*)(\$\s+)/;
@@ -54445,18 +54232,15 @@ module.exports = {
   "parser": "micromark",
   "function": function MD014(params, onError) {
     for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
-      const codeFlowValues = filterByTypes(
-        codeBlock.children,
-        [ "codeFlowValue" ]
-      );
-      const dollarMatches = codeFlowValues.
-        map((codeFlowValue) => ({
+      const codeFlowValues = codeBlock.children.filter((child) => child.type === "codeFlowValue");
+      const dollarMatches = codeFlowValues
+        .map((codeFlowValue) => ({
           "result": codeFlowValue.text.match(dollarCommandRe),
           "startColumn": codeFlowValue.startColumn,
           "startLine": codeFlowValue.startLine,
           "text": codeFlowValue.text
-        })).
-        filter((dollarMatch) => dollarMatch.result);
+        }))
+        .filter((dollarMatch) => dollarMatch.result);
       if (dollarMatches.length === codeFlowValues.length) {
         for (const dollarMatch of dollarMatches) {
           // @ts-ignore
@@ -54493,7 +54277,7 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(3302);
+const { addRangeToSet } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -54547,7 +54331,7 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { getHeadingStyle } = __nccwpck_require__(3302);
+const { getHeadingStyle } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 /**
@@ -54635,7 +54419,7 @@ module.exports = [
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(3302);
+const { addRangeToSet } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -54654,7 +54438,7 @@ module.exports = {
     for (const [ lineIndex, line ] of lines.entries()) {
       if (!ignoreBlockLineNumbers.has(lineIndex + 1)) {
         const match =
-          /^(#+)([ \t]*)([^#]*?[^#\\])([ \t]*)((?:\\#)?)(#+)(\s*)$/.exec(line);
+          /^(#+)([ \t]*)([^# \t\\]|[^# \t][^#]*?[^# \t\\])([ \t]*)((?:\\#)?)(#+)(\s*)$/.exec(line);
         if (match) {
           const [
             ,
@@ -54713,8 +54497,8 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, blockquotePrefixRe, isBlankLine } = __nccwpck_require__(8307);
-const { getHeadingLevel } = __nccwpck_require__(3302);
+const { addErrorDetailIf, isBlankLine } = __nccwpck_require__(8307);
+const { getBlockQuotePrefixText, getHeadingLevel } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const defaultLines = 1;
@@ -54732,15 +54516,6 @@ const getLinesFunction = (linesParam) => {
   return () => lines;
 };
 
-const getBlockQuote = (str, count) => (
-  (str || "")
-    .match(blockquotePrefixRe)[0]
-    .trimEnd()
-    // eslint-disable-next-line unicorn/prefer-spread
-    .concat("\n")
-    .repeat(count)
-);
-
 // eslint-disable-next-line jsdoc/valid-types
 /** @type import("./markdownlint").Rule */
 module.exports = {
@@ -54752,6 +54527,7 @@ module.exports = {
     const getLinesAbove = getLinesFunction(params.config.lines_above);
     const getLinesBelow = getLinesFunction(params.config.lines_below);
     const { lines } = params;
+    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
     for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
       const { startLine, endLine } = heading;
       const line = lines[startLine - 1].trim();
@@ -54776,8 +54552,9 @@ module.exports = {
           line,
           undefined,
           {
-            "insertText": getBlockQuote(
-              lines[startLine - 2],
+            "insertText": getBlockQuotePrefixText(
+              blockQuotePrefixes,
+              startLine - 1,
               linesAbove - actualAbove
             )
           }
@@ -54805,8 +54582,9 @@ module.exports = {
           undefined,
           {
             "lineNumber": endLine + 1,
-            "insertText": getBlockQuote(
-              lines[endLine],
+            "insertText": getBlockQuotePrefixText(
+              blockQuotePrefixes,
+              endLine + 1,
               linesBelow - actualBelow
             )
           }
@@ -54876,7 +54654,7 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { getHeadingLevel, getHeadingText } = __nccwpck_require__(3302);
+const { getHeadingLevel, getHeadingText } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -54932,7 +54710,7 @@ module.exports = {
 
 
 const { addErrorContext, frontMatterHasTitle } = __nccwpck_require__(8307);
-const { getHeadingLevel, getHeadingText } = __nccwpck_require__(3302);
+const { getHeadingLevel, getHeadingText } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -55042,9 +54820,9 @@ const { filterByTypesCached } = __nccwpck_require__(5791);
 // eslint-disable-next-line jsdoc/valid-types
 /** @type import("./markdownlint").Rule */
 module.exports = {
-  "names": ["MD027", "no-multiple-space-blockquote"],
+  "names": [ "MD027", "no-multiple-space-blockquote" ],
   "description": "Multiple spaces after blockquote symbol",
-  "tags": ["blockquote", "whitespace", "indentation"],
+  "tags": [ "blockquote", "whitespace", "indentation" ],
   "parser": "micromark",
   "function": function MD027(params, onError) {
     for (const token of filterByTypesCached([ "linePrefix" ])) {
@@ -55132,7 +54910,7 @@ module.exports = {
 
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getDescendantsByType, getTokenTextByType } = __nccwpck_require__(3302);
+const { getDescendantsByType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const listStyleExamples = {
@@ -55144,11 +54922,11 @@ const listStyleExamples = {
 /**
  * Gets the value of an ordered list item prefix token.
  *
- * @param {import("../helpers/micromark.cjs").Token} listItemPrefix List item prefix token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} listItemPrefix List item prefix token.
  * @returns {number} List item value.
  */
 function getOrderedListItemValue(listItemPrefix) {
-  return Number(getTokenTextByType(listItemPrefix.children, "listItemValue"));
+  return Number(getDescendantsByType(listItemPrefix, [ "listItemValue" ])[0].text);
 }
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -55284,7 +55062,7 @@ module.exports = {
 
 
 const { addErrorContext, isBlankLine } = __nccwpck_require__(8307);
-const { getTokenParentOfType } = __nccwpck_require__(3302);
+const { getParentOfType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const codeFencePrefixRe = /^(.*?)[`~]/;
@@ -55304,10 +55082,12 @@ const codeFencePrefixRe = /^(.*?)[`~]/;
 function addError(onError, lines, lineNumber, top) {
   const line = lines[lineNumber - 1];
   const [ , prefix ] = line.match(codeFencePrefixRe) || [];
-  const fixInfo = (prefix === undefined) ? null : {
-    "lineNumber": lineNumber + (top ? 0 : 1),
-    "insertText": `${prefix.replace(/[^>]/g, " ").trim()}\n`
-  };
+  const fixInfo = (prefix === undefined) ?
+    null :
+    {
+      "lineNumber": lineNumber + (top ? 0 : 1),
+      "insertText": `${prefix.replace(/[^>]/g, " ").trim()}\n`
+    };
   addErrorContext(
     onError,
     lineNumber,
@@ -55331,7 +55111,7 @@ module.exports = {
     const includeListItems = (listItems === undefined) ? true : !!listItems;
     const { lines } = params;
     for (const codeBlock of filterByTypesCached([ "codeFenced" ])) {
-      if (includeListItems || !(getTokenParentOfType(codeBlock, [ "listOrdered", "listUnordered" ]))) {
+      if (includeListItems || !(getParentOfType(codeBlock, [ "listOrdered", "listUnordered" ]))) {
         if (!isBlankLine(lines[codeBlock.startLine - 2])) {
           addError(onError, lines, codeBlock.startLine, true);
         }
@@ -55354,8 +55134,9 @@ module.exports = {
 
 
 
-const { addErrorContextForLine, isBlankLine } = __nccwpck_require__(8307);
-const { filterByPredicate, nonContentTokens } = __nccwpck_require__(3302);
+const { addErrorContext, isBlankLine } = __nccwpck_require__(8307);
+const { filterByPredicate, getBlockQuotePrefixText, nonContentTokens } = __nccwpck_require__(1670);
+const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const isList = (token) => (
   (token.type === "listOrdered") || (token.type === "listUnordered")
@@ -55370,6 +55151,7 @@ module.exports = {
   "parser": "micromark",
   "function": function MD032(params, onError) {
     const { lines, parsers } = params;
+    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
 
     // For every top-level list...
     const topLevelLists = filterByPredicate(
@@ -55382,13 +55164,18 @@ module.exports = {
     for (const list of topLevelLists) {
 
       // Look for a blank line above the list
-      const firstIndex = list.startLine - 1;
-      if (!isBlankLine(lines[firstIndex - 1])) {
-        addErrorContextForLine(
+      const firstLineNumber = list.startLine;
+      if (!isBlankLine(lines[firstLineNumber - 2])) {
+        addErrorContext(
           onError,
-          // @ts-ignore
-          lines,
-          firstIndex
+          firstLineNumber,
+          lines[firstLineNumber - 1].trim(),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "insertText": getBlockQuotePrefixText(blockQuotePrefixes, firstLineNumber)
+          }
         );
       }
 
@@ -55403,14 +55190,19 @@ module.exports = {
       }
 
       // Look for a blank line below the list
-      const lastIndex = endLine - 1;
-      if (!isBlankLine(lines[lastIndex + 1])) {
-        addErrorContextForLine(
+      const lastLineNumber = endLine;
+      if (!isBlankLine(lines[lastLineNumber])) {
+        addErrorContext(
           onError,
-          // @ts-ignore
-          lines,
-          lastIndex,
-          lastIndex + 2
+          lastLineNumber,
+          lines[lastLineNumber - 1].trim(),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "lineNumber": lastLineNumber + 1,
+            "insertText": getBlockQuotePrefixText(blockQuotePrefixes, lastLineNumber)
+          }
         );
       }
     }
@@ -55429,7 +55221,7 @@ module.exports = {
 
 
 const { addError, nextLinesRe } = __nccwpck_require__(8307);
-const { getHtmlTagInfo } = __nccwpck_require__(3302);
+const { getHtmlTagInfo } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -55478,8 +55270,7 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { filterByPredicate, getHtmlTagInfo, inHtmlFlow, parse } = __nccwpck_require__(3302);
-const { filterByTypesCached } = __nccwpck_require__(5791);
+const { filterByPredicate, getHtmlTagInfo, inHtmlFlow } = __nccwpck_require__(1670);
 
 // eslint-disable-next-line jsdoc/valid-types
 /** @type import("./markdownlint").Rule */
@@ -55496,8 +55287,6 @@ module.exports = {
           if ((token.type === "literalAutolink") && !inHtmlFlow(token)) {
             // Detect and ignore https://github.com/micromark/micromark/issues/164
             const siblings = token.parent?.children;
-              // Commented-out due to not being able to exercise in test/code coverage
-              // || micromarkTokens;
             const index = siblings?.indexOf(token);
             // @ts-ignore
             const prev = siblings?.at(index - 1);
@@ -55515,6 +55304,7 @@ module.exports = {
           return false;
         },
         (token) => {
+          // Ignore content of inline HTML tags
           const { children } = token;
           const result = [];
           for (let i = 0; i < children.length; i++) {
@@ -55545,31 +55335,25 @@ module.exports = {
         }
       )
     );
-    const autoLinks = filterByTypesCached([ "literalAutolink" ]);
-    if (autoLinks.length > 0) {
-      // Re-parse with correct link/image reference definition handling
-      const document = params.lines.join("\n");
-      const tokens = parse(document, undefined, false);
-      for (const token of literalAutolinks(tokens)) {
-        const range = [
-          token.startColumn,
-          token.endColumn - token.startColumn
-        ];
-        const fixInfo = {
-          "editColumn": range[0],
-          "deleteCount": range[1],
-          "insertText": `<${token.text}>`
-        };
-        addErrorContext(
-          onError,
-          token.startLine,
-          token.text,
-          undefined,
-          undefined,
-          range,
-          fixInfo
-        );
-      }
+    for (const token of literalAutolinks(params.parsers.micromark.tokens)) {
+      const range = [
+        token.startColumn,
+        token.endColumn - token.startColumn
+      ];
+      const fixInfo = {
+        "editColumn": range[0],
+        "deleteCount": range[1],
+        "insertText": `<${token.text}>`
+      };
+      addErrorContext(
+        onError,
+        token.startLine,
+        token.text,
+        undefined,
+        undefined,
+        range,
+        fixInfo
+      );
     }
   }
 };
@@ -55620,15 +55404,15 @@ module.exports = {
 
 
 const { addErrorContext, allPunctuation } = __nccwpck_require__(8307);
-const { matchAndGetTokensByType } = __nccwpck_require__(3302);
+const { getDescendantsByType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
-/** @typedef {import("../helpers/micromark.cjs").TokenType} TokenType */
-/** @type {Map<TokenType, TokenType[]>} */
-const emphasisAndChildrenTypes = new Map([
-  [ "emphasis", [ "emphasisSequence", "emphasisText", "emphasisSequence" ] ],
-  [ "strong", [ "strongSequence", "strongText", "strongSequence" ] ]
-]);
+/** @typedef {import("../helpers/micromark-helpers.cjs").TokenType} TokenType */
+/** @type {TokenType[][]} */
+const emphasisTypes = [
+  [ "emphasis", "emphasisText" ],
+  [ "strong", "strongText" ]
+];
 
 // eslint-disable-next-line jsdoc/valid-types
 /** @type import("./markdownlint").Rule */
@@ -55642,25 +55426,19 @@ module.exports = {
     punctuation = String((punctuation === undefined) ? allPunctuation : punctuation);
     const punctuationRe = new RegExp("[" + punctuation + "]$");
     const paragraphTokens =
-      filterByTypesCached([ "paragraph" ]).
-        filter((token) =>
+      filterByTypesCached([ "paragraph" ])
+        .filter((token) =>
           (token.parent?.type === "content") && !token.parent?.parent && (token.children.length === 1)
         );
-    for (const paragraphToken of paragraphTokens) {
-      const childToken = paragraphToken.children[0];
-      for (const [ emphasisType, emphasisChildrenTypes ] of emphasisAndChildrenTypes) {
-        if (childToken.type === emphasisType) {
-          const matchingTokens = matchAndGetTokensByType(childToken.children, emphasisChildrenTypes);
-          if (matchingTokens) {
-            const textToken = matchingTokens[1];
-            if (
-              (textToken.children.length === 1) &&
-              (textToken.children[0].type === "data") &&
-              !punctuationRe.test(textToken.text)
-            ) {
-              addErrorContext(onError, textToken.startLine, textToken.text);
-            }
-          }
+    for (const emphasisType of emphasisTypes) {
+      const textTokens = getDescendantsByType(paragraphTokens, emphasisType);
+      for (const textToken of textTokens) {
+        if (
+          (textToken.children.length === 1) &&
+          (textToken.children[0].type === "data") &&
+          !punctuationRe.test(textToken.text)
+        ) {
+          addErrorContext(onError, textToken.startLine, textToken.text);
         }
       }
     }
@@ -55679,7 +55457,7 @@ module.exports = {
 
 
 const { addError } = __nccwpck_require__(8307);
-const { filterByPredicate, inHtmlFlow } = __nccwpck_require__(3302);
+const { filterByPredicate, inHtmlFlow } = __nccwpck_require__(1670);
 
 // eslint-disable-next-line jsdoc/valid-types
 /** @type import("./markdownlint").Rule */
@@ -55781,7 +55559,7 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { tokenIfType } = __nccwpck_require__(3302);
+const { getDescendantsByType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const leftSpaceRe = /^\s(?:[^`]|$)/;
@@ -55807,24 +55585,19 @@ module.exports = {
   "function": function MD038(params, onError) {
     const codeTexts = filterByTypesCached([ "codeText" ]);
     for (const codeText of codeTexts) {
-      const { children } = codeText;
-      const first = 0;
-      const last = children.length - 1;
-      const startSequence = tokenIfType(children[first], "codeTextSequence");
-      const endSequence = tokenIfType(children[last], "codeTextSequence");
-      const startData =
-        tokenIfType(children[first + 1], "codeTextData") ||
-        tokenIfType(children[first + 2], "codeTextData");
-      const endData =
-        tokenIfType(children[last - 1], "codeTextData") ||
-        tokenIfType(children[last - 2], "codeTextData");
+      const sequences = getDescendantsByType(codeText, [ "codeTextSequence" ]);
+      const startSequence = sequences[0];
+      const endSequence = sequences[sequences.length - 1];
+      const datas = getDescendantsByType(codeText, [ "codeTextData" ]);
+      const startData = datas[0];
+      const endData = datas[datas.length - 1];
       if (startSequence && endSequence && startData && endData) {
         const spaceLeft = leftSpaceRe.test(startData.text);
         const spaceRight = rightSpaceRe.test(endData.text);
         if (spaceLeft || spaceRight) {
           let lineNumber = startSequence.startLine;
-          let range = null;
-          let fixInfo = null;
+          let range = undefined;
+          let fixInfo = undefined;
           if (startSequence.startLine === endSequence.endLine) {
             range = [
               startSequence.startColumn,
@@ -55889,15 +55662,14 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { filterByTypes } = __nccwpck_require__(3302);
 const { getReferenceLinkImageData, filterByTypesCached } = __nccwpck_require__(5791);
 
 /**
  * Adds an error for a label space issue.
  *
  * @param {import("./markdownlint").RuleOnError} onError Error-reporting callback.
- * @param {import("../helpers/micromark.cjs").Token} label Label token.
- * @param {import("../helpers/micromark.cjs").Token} labelText LabelText token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} label Label token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} labelText LabelText token.
  * @param {boolean} isStart True iff error is at the start of the link.
  */
 function addLabelSpaceError(onError, label, labelText, isStart) {
@@ -55915,18 +55687,20 @@ function addLabelSpaceError(onError, label, labelText, isStart) {
     isStart,
     !isStart,
     range,
-    range ? {
-      "editColumn": range[0],
-      "deleteCount": range[1]
-    } : undefined
+    range ?
+      {
+        "editColumn": range[0],
+        "deleteCount": range[1]
+      } :
+      undefined
   );
 }
 
 /**
  * Determines if a link is a valid link (and not a fake shortcut link due to parser tricks).
  *
- * @param {import("../helpers/micromark.cjs").Token} label Label token.
- * @param {import("../helpers/micromark.cjs").Token} labelText LabelText token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} label Label token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} labelText LabelText token.
  * @param {Map<string, any>} definitions Map of link definitions.
  * @returns {boolean} True iff the link is valid.
  */
@@ -55943,13 +55717,10 @@ module.exports = {
   "parser": "micromark",
   "function": function MD039(params, onError) {
     const { definitions } = getReferenceLinkImageData();
-    const labels = filterByTypesCached([ "label" ]).
-      filter((label) => label.parent?.type === "link");
+    const labels = filterByTypesCached([ "label" ])
+      .filter((label) => label.parent?.type === "link");
     for (const label of labels) {
-      const labelTexts = filterByTypes(
-        label.children,
-        [ "labelText" ]
-      );
+      const labelTexts = label.children.filter((child) => child.type === "labelText");
       for (const labelText of labelTexts) {
         if (
           (labelText.text.trimStart().length !== labelText.text.length) &&
@@ -55980,7 +55751,7 @@ module.exports = {
 
 
 const { addError, addErrorContext } = __nccwpck_require__(8307);
-const { getTokenTextByType, tokenIfType } = __nccwpck_require__(3302);
+const { getDescendantsByType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -55996,18 +55767,16 @@ module.exports = {
     const languageOnly = !!params.config.language_only;
     const fencedCodes = filterByTypesCached([ "codeFenced" ]);
     for (const fencedCode of fencedCodes) {
-      const openingFence = tokenIfType(fencedCode.children[0], "codeFencedFence");
-      if (openingFence) {
-        const { children, startLine, text } = openingFence;
-        const info = getTokenTextByType(children, "codeFencedFenceInfo");
-        if (!info) {
-          addErrorContext(onError, startLine, text);
-        } else if ((allowed.length > 0) && !allowed.includes(info)) {
-          addError(onError, startLine, `"${info}" is not allowed`);
-        }
-        if (languageOnly && getTokenTextByType(children, "codeFencedFenceMeta")) {
-          addError(onError, startLine, `Info string contains more than language: "${text}"`);
-        }
+      const openingFence = getDescendantsByType(fencedCode, [ "codeFencedFence" ])[0];
+      const { startLine, text } = openingFence;
+      const info = getDescendantsByType(openingFence, [ "codeFencedFenceInfo" ])[0]?.text;
+      if (!info) {
+        addErrorContext(onError, startLine, text);
+      } else if ((allowed.length > 0) && !allowed.includes(info)) {
+        addError(onError, startLine, `"${info}" is not allowed`);
+      }
+      if (languageOnly && getDescendantsByType(openingFence, [ "codeFencedFenceMeta" ]).length > 0) {
+        addError(onError, startLine, `Info string contains more than language: "${text}"`);
       }
     }
   }
@@ -56026,7 +55795,7 @@ module.exports = {
 
 const { addErrorContext, frontMatterHasTitle } = __nccwpck_require__(8307);
 const { filterByTypes, getHeadingLevel, getHtmlTagInfo, isHtmlFlowComment, nonContentTokens } =
-  __nccwpck_require__(3302);
+  __nccwpck_require__(1670);
 
 // eslint-disable-next-line jsdoc/valid-types
 /** @type import("./markdownlint").Rule */
@@ -56038,9 +55807,9 @@ module.exports = {
   "function": function MD041(params, onError) {
     const level = Number(params.config.level || 1);
     if (!frontMatterHasTitle(params.frontMatterLines, params.config.front_matter_title)) {
-      params.parsers.micromark.tokens.
-        filter((token) => !nonContentTokens.has(token.type) && !isHtmlFlowComment(token)).
-        every((token) => {
+      params.parsers.micromark.tokens
+        .filter((token) => !nonContentTokens.has(token.type) && !isHtmlFlowComment(token))
+        .every((token) => {
           let isError = true;
           if ((token.type === "atxHeading") || (token.type === "setextHeading")) {
             isError = (getHeadingLevel(token) !== level);
@@ -56070,7 +55839,7 @@ module.exports = {
 
 
 const { addErrorContext } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(3302);
+const { getDescendantsByType } = __nccwpck_require__(1670);
 const { getReferenceLinkImageData, filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -56092,11 +55861,7 @@ module.exports = {
       const reference = getDescendantsByType(link, [ "reference" ]);
       const resource = getDescendantsByType(link, [ "resource" ]);
       const referenceString = getDescendantsByType(reference, [ "referenceString" ]);
-      const resourceDestination = getDescendantsByType(resource, [ "resourceDestination" ]);
-      const resourceDestinationString = [
-        ...getDescendantsByType(resourceDestination, [ "resourceDestinationRaw", "resourceDestinationString" ]),
-        ...getDescendantsByType(resourceDestination, [ "resourceDestinationLiteral", "resourceDestinationString" ])
-      ];
+      const resourceDestinationString = getDescendantsByType(resource, [ "resourceDestination", [ "resourceDestinationLiteral", "resourceDestinationRaw" ], "resourceDestinationString" ]);
       const hasLabelText = labelText.length > 0;
       const hasReference = reference.length > 0;
       const hasResource = resource.length > 0;
@@ -56141,7 +55906,7 @@ module.exports = {
 
 
 const { addErrorContext, addErrorDetailIf } = __nccwpck_require__(8307);
-const { getHeadingLevel, getHeadingText } = __nccwpck_require__(3302);
+const { getHeadingLevel, getHeadingText } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -56221,10 +55986,9 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, escapeForRegExp, withinAnyRange } =
-  __nccwpck_require__(8307);
-const { filterByPredicate, filterByTypes, parse } =
-  __nccwpck_require__(3302);
+const { addErrorDetailIf, escapeForRegExp, hasOverlap } = __nccwpck_require__(8307);
+const { filterByPredicate, filterByTypes } = __nccwpck_require__(1670);
+const { parse } = __nccwpck_require__(7132);
 
 const ignoredChildTypes = new Set(
   [ "codeFencedFence", "definition", "reference", "resource" ]
@@ -56268,43 +56032,47 @@ module.exports = {
           token.children.filter((t) => !ignoredChildTypes.has(t.type))
         )
       );
+    /** @type {import("../helpers").FileRange[]} */
     const exclusions = [];
-    const autoLinked = new Set();
+    const scannedTokens = new Set();
     for (const name of names) {
       const escapedName = escapeForRegExp(name);
       const startNamePattern = /^\W/.test(name) ? "" : "\\b_*";
       const endNamePattern = /\W$/.test(name) ? "" : "_*\\b";
-      const namePattern =
-        `(${startNamePattern})(${escapedName})${endNamePattern}`;
+      const namePattern = `(${startNamePattern})(${escapedName})${endNamePattern}`;
       const nameRe = new RegExp(namePattern, "gi");
       for (const token of contentTokens) {
         let match = null;
         while ((match = nameRe.exec(token.text)) !== null) {
           const [ , leftMatch, nameMatch ] = match;
-          const index = token.startColumn - 1 + match.index + leftMatch.length;
+          const column = token.startColumn + match.index + leftMatch.length;
           const length = nameMatch.length;
-          const lineIndex = token.startLine - 1;
+          const lineNumber = token.startLine;
+          /** @type {import("../helpers").FileRange} */
+          const nameRange = {
+            "startLine": lineNumber,
+            "startColumn": column,
+            "endLine": lineNumber,
+            "endColumn": column + length - 1
+          };
           if (
-            !withinAnyRange(exclusions, lineIndex, index, length) &&
-            !names.includes(nameMatch)
+            !names.includes(nameMatch) &&
+            !exclusions.some((exclusion) => hasOverlap(exclusion, nameRange))
           ) {
-            let urlRanges = [];
-            if (!autoLinked.has(token)) {
-              urlRanges = filterByTypes(
-                parse(token.text),
-                [ "literalAutolink" ]
-              ).map(
-                (t) => [
-                  lineIndex,
-                  token.startColumn - 1 + t.startColumn - 1,
-                  t.endColumn - t.startColumn
-                ]
-              );
-              exclusions.push(...urlRanges);
-              autoLinked.add(token);
+            /** @type {import("../helpers").FileRange[]} */
+            let autolinkRanges = [];
+            if (!scannedTokens.has(token)) {
+              autolinkRanges = filterByTypes(parse(token.text), [ "literalAutolink" ])
+                .map((tok) => ({
+                  "startLine": lineNumber,
+                  "startColumn": token.startColumn + tok.startColumn - 1,
+                  "endLine": lineNumber,
+                  "endColumn": token.endColumn + tok.endColumn - 1
+                }));
+              exclusions.push(...autolinkRanges);
+              scannedTokens.add(token);
             }
-            if (!withinAnyRange(urlRanges, lineIndex, index, length)) {
-              const column = index + 1;
+            if (!autolinkRanges.some((autolinkRange) => hasOverlap(autolinkRange, nameRange))) {
               addErrorDetailIf(
                 onError,
                 token.startLine,
@@ -56321,7 +56089,7 @@ module.exports = {
               );
             }
           }
-          exclusions.push([ lineIndex, index, length ]);
+          exclusions.push(nameRange);
         }
       }
     }
@@ -56340,7 +56108,7 @@ module.exports = {
 
 
 const { addError, getHtmlAttributeRe, nextLinesRe } = __nccwpck_require__(8307);
-const { filterByTypes, getHtmlTagInfo } = __nccwpck_require__(3302);
+const { getHtmlTagInfo, getDescendantsByType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const altRe = getHtmlAttributeRe("alt");
@@ -56356,7 +56124,7 @@ module.exports = {
     // Process Markdown images
     const images = filterByTypesCached([ "image" ]);
     for (const image of images) {
-      const labelTexts = filterByTypes(image.children, [ "labelText" ]);
+      const labelTexts = getDescendantsByType(image, [ "label", "labelText" ]);
       if (labelTexts.some((labelText) => labelText.text.length === 0)) {
         const range = (image.startLine === image.endLine) ?
           [ image.startColumn, image.endColumn - image.startColumn ] :
@@ -56490,9 +56258,24 @@ module.exports = {
 
 
 
-const { addErrorDetailIf, fencedCodeBlockStyleFor } = __nccwpck_require__(8307);
-const { tokenIfType } = __nccwpck_require__(3302);
+const { addErrorDetailIf } = __nccwpck_require__(8307);
+const { getDescendantsByType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
+
+/**
+ * Return the string representation of a fence markup character.
+ *
+ * @param {string} markup Fence string.
+ * @returns {"tilde" | "backtick"} String representation.
+ */
+function fencedCodeBlockStyleFor(markup) {
+  switch (markup[0]) {
+    case "~":
+      return "tilde";
+    default:
+      return "backtick";
+  }
+};
 
 // eslint-disable-next-line jsdoc/valid-types
 /** @type import("./markdownlint").Rule */
@@ -56506,22 +56289,18 @@ module.exports = {
     let expectedStyle = style;
     const codeFenceds = filterByTypesCached([ "codeFenced" ]);
     for (const codeFenced of codeFenceds) {
-      const codeFencedFence = tokenIfType(codeFenced.children[0], "codeFencedFence");
-      if (codeFencedFence) {
-        const codeFencedFenceSequence = tokenIfType(codeFencedFence.children[0], "codeFencedFenceSequence");
-        if (codeFencedFenceSequence) {
-          const { startLine, text } = codeFencedFenceSequence;
-          if (expectedStyle === "consistent") {
-            expectedStyle = fencedCodeBlockStyleFor(text);
-          }
-          addErrorDetailIf(
-            onError,
-            startLine,
-            expectedStyle,
-            fencedCodeBlockStyleFor(text)
-          );
-        }
+      const codeFencedFenceSequence =
+        getDescendantsByType(codeFenced, [ "codeFencedFence", "codeFencedFenceSequence" ])[0];
+      const { startLine, text } = codeFencedFenceSequence;
+      if (expectedStyle === "consistent") {
+        expectedStyle = fencedCodeBlockStyleFor(text);
       }
+      addErrorDetailIf(
+        onError,
+        startLine,
+        expectedStyle,
+        fencedCodeBlockStyleFor(text)
+      );
     }
   }
 };
@@ -56537,10 +56316,25 @@ module.exports = {
 
 
 
-const { addError, emphasisOrStrongStyleFor } = __nccwpck_require__(8307);
-const { filterByPredicate, tokenIfType } = __nccwpck_require__(3302);
+const { addError } = __nccwpck_require__(8307);
+const { filterByPredicate, getDescendantsByType } = __nccwpck_require__(1670);
 
 const intrawordRe = /^\w$/;
+
+/**
+ * Return the string representation of a emphasis or strong markup character.
+ *
+ * @param {string} markup Emphasis or strong string.
+ * @returns {"asterisk" | "underscore"} String representation.
+ */
+function emphasisOrStrongStyleFor(markup) {
+  switch (markup[0]) {
+    case "*":
+      return "asterisk";
+    default:
+      return "underscore";
+  }
+};
 
 /**
  * @param {import("./markdownlint").RuleParams} params Rule parameters.
@@ -56560,9 +56354,9 @@ const impl =
       (token) => ((token.type === "htmlFlow") ? [] : token.children)
     );
     for (const token of emphasisTokens) {
-      const { children } = token;
-      const startSequence = tokenIfType(children[0], typeSequence);
-      const endSequence = tokenIfType(children[children.length - 1], typeSequence);
+      const sequences = getDescendantsByType(token, [ typeSequence ]);
+      const startSequence = sequences[0];
+      const endSequence = sequences[sequences.length - 1];
       if (startSequence && endSequence) {
         const markupStyle = emphasisOrStrongStyleFor(startSequence.text);
         if (style === "consistent") {
@@ -56648,8 +56442,8 @@ module.exports = [
 
 
 
-const { addError, addErrorDetailIf, getHtmlAttributeRe } = __nccwpck_require__(8307);
-const { filterByPredicate, filterByTypes, getHtmlTagInfo } = __nccwpck_require__(3302);
+const { addError, getHtmlAttributeRe } = __nccwpck_require__(8307);
+const { filterByPredicate, filterByTypes, getHtmlTagInfo } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // Regular expression for identifying HTML anchor names
@@ -56668,7 +56462,7 @@ const tokensInclude = new Set(
  * Converts a Markdown heading into an HTML fragment according to the rules
  * used by GitHub.
  *
- * @param {import("../helpers/micromark.cjs").Token} headingText Heading text token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} headingText Heading text token.
  * @returns {string} Fragment string for heading.
  */
 function convertHeadingToHTMLFragment(headingText) {
@@ -56697,7 +56491,7 @@ function convertHeadingToHTMLFragment(headingText) {
 /**
  * Unescapes the text of a String-type micromark Token.
  *
- * @param {import("../helpers/micromark.cjs").Token} token String-type micromark Token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} token String-type micromark Token.
  * @returns {string} Unescaped token text.
  */
 function unescapeStringTokenText(token) {
@@ -56714,6 +56508,7 @@ module.exports = {
   "tags": [ "links" ],
   "parser": "micromark",
   "function": function MD051(params, onError) {
+    const ignoreCase = params.config.ignore_case || false;
     const fragments = new Map();
 
     // Process headings
@@ -56750,7 +56545,7 @@ module.exports = {
 
     // Process link and definition fragments
     // eslint-disable-next-line jsdoc/valid-types
-    /** @type import("../helpers/micromark.cjs").TokenType[][] */
+    /** @type import("../helpers/micromark-helpers.cjs").TokenType[][] */
     const parentChilds = [
       [ "link", "resourceDestinationString" ],
       [ "definition", "definitionDestinationString" ]
@@ -56769,11 +56564,8 @@ module.exports = {
             !fragments.has(encodedText) &&
             !lineFragmentRe.test(encodedText)
           ) {
-            // eslint-disable-next-line no-undef-init
             let context = undefined;
-            // eslint-disable-next-line no-undef-init
             let range = undefined;
-            // eslint-disable-next-line no-undef-init
             let fixInfo = undefined;
             if (link.startLine === link.endLine) {
               context = link.text;
@@ -56789,16 +56581,16 @@ module.exports = {
             if (mixedCaseKey) {
               // @ts-ignore
               (fixInfo || {}).insertText = mixedCaseKey;
-              addErrorDetailIf(
-                onError,
-                link.startLine,
-                mixedCaseKey,
-                text,
-                undefined,
-                context,
-                range,
-                fixInfo
-              );
+              if (!ignoreCase && (mixedCaseKey !== text)) {
+                addError(
+                  onError,
+                  link.startLine,
+                  `Expected: ${mixedCaseKey}; Actual: ${text}`,
+                  context,
+                  range,
+                  fixInfo
+                );
+              }
             } else {
               addError(
                 onError,
@@ -56876,9 +56668,10 @@ module.exports = {
 
 
 
-const { addError, ellipsify, linkReferenceDefinitionRe } =
-  __nccwpck_require__(8307);
+const { addError, ellipsify } = __nccwpck_require__(8307);
 const { getReferenceLinkImageData } = __nccwpck_require__(5791);
+
+const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
 
 // eslint-disable-next-line jsdoc/valid-types
 /** @type import("./markdownlint").Rule */
@@ -56913,7 +56706,7 @@ module.exports = {
           `Unused link or image reference definition: "${label}"`,
           ellipsify(line),
           [ 1, line.length ],
-          singleLineDefinition(line) ? deleteFixInfo : 0
+          singleLineDefinition(line) ? deleteFixInfo : undefined
         );
       }
     }
@@ -56928,7 +56721,7 @@ module.exports = {
           `Duplicate link or image reference definition: "${label}"`,
           ellipsify(line),
           [ 1, line.length ],
-          singleLineDefinition(line) ? deleteFixInfo : 0
+          singleLineDefinition(line) ? deleteFixInfo : undefined
         );
       }
     }
@@ -56947,7 +56740,7 @@ module.exports = {
 
 
 const { addErrorContext, nextLinesRe } = __nccwpck_require__(8307);
-const { filterByPredicate, getTokenTextByType } = __nccwpck_require__(3302);
+const { getDescendantsByType } = __nccwpck_require__(1670);
 const { getReferenceLinkImageData, filterByTypesCached } = __nccwpck_require__(5791);
 
 const backslashEscapeRe = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g;
@@ -56989,24 +56782,23 @@ module.exports = {
       let label = null;
       let destination = null;
       const {
-        children, endColumn, endLine, startColumn, startLine, text, type
+        endColumn, endLine, startColumn, startLine, text, type
       } = link;
       const image = (type === "image");
       let isError = false;
       if (type === "autolink") {
         // link kind is an autolink
-        destination = getTokenTextByType(children, "autolinkProtocol");
+        destination = getDescendantsByType(link, [ [ "autolinkEmail", "autolinkProtocol" ] ])[0]?.text;
         label = destination;
-        isError = !autolink;
+        isError = !autolink && Boolean(destination);
       } else {
         // link type is "image" or "link"
-        const descendents = filterByPredicate(children);
-        label = getTokenTextByType(descendents, "labelText");
+        label = getDescendantsByType(link, [ "label", "labelText" ])[0].text;
         destination =
-          getTokenTextByType(descendents, "resourceDestinationString");
+          getDescendantsByType(link, [ "resource", "resourceDestination", [ "resourceDestinationLiteral", "resourceDestinationRaw" ], "resourceDestinationString" ])[0]?.text;
         if (destination) {
           // link kind is an inline link
-          const title = getTokenTextByType(descendents, "resourceTitleString");
+          const title = getDescendantsByType(link, [ "resource", "resourceTitle", "resourceTitleString" ])[0]?.text;
           isError = !inline || (
             !urlInline &&
             autolink &&
@@ -57017,9 +56809,9 @@ module.exports = {
           );
         } else {
           // link kind is a full/collapsed/shortcut reference link
-          const isShortcut = !children.some((t) => t.type === "reference");
-          const referenceString = getTokenTextByType(descendents, "referenceString");
-          const isCollapsed = (referenceString === null);
+          const isShortcut = getDescendantsByType(link, [ "reference" ]).length === 0;
+          const referenceString = getDescendantsByType(link, [ "reference", "referenceString" ])[0]?.text;
+          const isCollapsed = (referenceString === undefined);
           const definition = definitions.get(referenceString || label);
           destination = definition && definition[1];
           isError = destination &&
@@ -57027,9 +56819,8 @@ module.exports = {
         }
       }
       if (isError) {
-        // eslint-disable-next-line no-undef-init
         let range = undefined;
-        let fixInfo = null;
+        let fixInfo = undefined;
         if (startLine === endLine) {
           range = [ startColumn, endColumn - startColumn ];
           let insertText = null;
@@ -57080,7 +56871,6 @@ module.exports = {
 
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { filterByTypes } = __nccwpck_require__(3302);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const whitespaceTypes = new Set([ "linePrefix", "whitespace" ]);
@@ -57105,51 +56895,45 @@ module.exports = {
       ((expectedStyle !== "no_leading_or_trailing") && (expectedStyle !== "trailing_only"));
     let expectedTrailingPipe =
       ((expectedStyle !== "no_leading_or_trailing") && (expectedStyle !== "leading_only"));
-    const tables = filterByTypesCached([ "table" ]);
-    for (const table of tables) {
-      const rows = filterByTypes(
-        table.children,
-        [ "tableDelimiterRow", "tableRow" ]
-      );
-      for (const row of rows) {
-        // The following uses of first/lastOrNothing lack fallback handling
-        // because it seems not to be possible (i.e., 0% coverage)
-        const firstCell = firstOrNothing(row.children);
-        const leadingToken = firstOrNothing(ignoreWhitespace(firstCell.children));
-        const actualLeadingPipe = (leadingToken.type === "tableCellDivider");
-        const lastCell = lastOrNothing(row.children);
-        const trailingToken = lastOrNothing(ignoreWhitespace(lastCell.children));
-        const actualTrailingPipe = (trailingToken.type === "tableCellDivider");
-        const actualStyle = actualLeadingPipe ?
-          (actualTrailingPipe ? "leading_and_trailing" : "leading_only") :
-          (actualTrailingPipe ? "trailing_only" : "no_leading_or_trailing");
-        if (expectedStyle === "consistent") {
-          expectedStyle = actualStyle;
-          expectedLeadingPipe = actualLeadingPipe;
-          expectedTrailingPipe = actualTrailingPipe;
-        }
-        if (actualLeadingPipe !== expectedLeadingPipe) {
-          addErrorDetailIf(
-            onError,
-            firstCell.startLine,
-            expectedStyle,
-            actualStyle,
-            `${expectedLeadingPipe ? "Missing" : "Unexpected"} leading pipe`,
-            undefined,
-            makeRange(row.startColumn, firstCell.startColumn)
-          );
-        }
-        if (actualTrailingPipe !== expectedTrailingPipe) {
-          addErrorDetailIf(
-            onError,
-            lastCell.endLine,
-            expectedStyle,
-            actualStyle,
-            `${expectedTrailingPipe ? "Missing" : "Unexpected"} trailing pipe`,
-            undefined,
-            makeRange(lastCell.endColumn - 1, row.endColumn - 1)
-          );
-        }
+    const rows = filterByTypesCached([ "tableDelimiterRow", "tableRow" ]);
+    for (const row of rows) {
+      // The following uses of first/lastOrNothing lack fallback handling
+      // because it seems not to be possible (i.e., 0% coverage)
+      const firstCell = firstOrNothing(row.children);
+      const leadingToken = firstOrNothing(ignoreWhitespace(firstCell.children));
+      const actualLeadingPipe = (leadingToken.type === "tableCellDivider");
+      const lastCell = lastOrNothing(row.children);
+      const trailingToken = lastOrNothing(ignoreWhitespace(lastCell.children));
+      const actualTrailingPipe = (trailingToken.type === "tableCellDivider");
+      const actualStyle = actualLeadingPipe ?
+        (actualTrailingPipe ? "leading_and_trailing" : "leading_only") :
+        (actualTrailingPipe ? "trailing_only" : "no_leading_or_trailing");
+      if (expectedStyle === "consistent") {
+        expectedStyle = actualStyle;
+        expectedLeadingPipe = actualLeadingPipe;
+        expectedTrailingPipe = actualTrailingPipe;
+      }
+      if (actualLeadingPipe !== expectedLeadingPipe) {
+        addErrorDetailIf(
+          onError,
+          firstCell.startLine,
+          expectedStyle,
+          actualStyle,
+          `${expectedLeadingPipe ? "Missing" : "Unexpected"} leading pipe`,
+          undefined,
+          makeRange(row.startColumn, firstCell.startColumn)
+        );
+      }
+      if (actualTrailingPipe !== expectedTrailingPipe) {
+        addErrorDetailIf(
+          onError,
+          lastCell.endLine,
+          expectedStyle,
+          actualStyle,
+          `${expectedTrailingPipe ? "Missing" : "Unexpected"} trailing pipe`,
+          undefined,
+          makeRange(lastCell.endColumn - 1, row.endColumn - 1)
+        );
       }
     }
   }
@@ -57167,7 +56951,7 @@ module.exports = {
 
 
 const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { filterByTypes } = __nccwpck_require__(3302);
+const { getParentOfType } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 const makeRange = (start, end) => [ start, end - start + 1 ];
@@ -57180,44 +56964,39 @@ module.exports = {
   "tags": [ "table" ],
   "parser": "micromark",
   "function": function MD056(params, onError) {
-    const tables = filterByTypesCached([ "table" ]);
-    for (const table of tables) {
-      const rows = filterByTypes(
-        table.children,
-        [ "tableDelimiterRow", "tableRow" ]
-      );
-      let expectedCount = 0;
-      for (const row of rows) {
-        const cells = filterByTypes(
-          row.children,
-          [ "tableData", "tableDelimiter", "tableHeader" ]
-        );
-        const actualCount = cells.length;
-        expectedCount ||= actualCount;
-        // eslint-disable-next-line no-undef-init
-        let detail = undefined;
-        // eslint-disable-next-line no-undef-init
-        let range = undefined;
-        if (actualCount < expectedCount) {
-          detail = "Too few cells, row will be missing data";
-          range = [ row.endColumn - 1, 1 ];
-        } else if (expectedCount < actualCount) {
-          detail = "Too many cells, extra data will be missing";
-          range = makeRange(cells[expectedCount].startColumn, row.endColumn - 1);
-        }
-        addErrorDetailIf(
-          onError,
-          row.endLine,
-          expectedCount,
-          actualCount,
-          detail,
-          undefined,
-          range
-        );
+    const rows = filterByTypesCached([ "tableDelimiterRow", "tableRow" ]);
+    let expectedCount = 0;
+    let currentTable = null;
+    for (const row of rows) {
+      const table = getParentOfType(row, [ "table" ]);
+      if (currentTable !== table) {
+        expectedCount = 0;
+        currentTable = table;
       }
+      const cells = row.children.filter((child) => [ "tableData", "tableDelimiter", "tableHeader" ].includes(child.type));
+      const actualCount = cells.length;
+      expectedCount ||= actualCount;
+      let detail = undefined;
+      let range = undefined;
+      if (actualCount < expectedCount) {
+        detail = "Too few cells, row will be missing data";
+        range = [ row.endColumn - 1, 1 ];
+      } else if (expectedCount < actualCount) {
+        detail = "Too many cells, extra data will be missing";
+        range = makeRange(cells[expectedCount].startColumn, row.endColumn - 1);
+      }
+      addErrorDetailIf(
+        onError,
+        row.endLine,
+        expectedCount,
+        actualCount,
+        detail,
+        undefined,
+        range
+      );
     }
   }
-}
+};
 
 
 /***/ }),
@@ -57230,7 +57009,8 @@ module.exports = {
 
 
 
-const { addErrorContextForLine, isBlankLine } = __nccwpck_require__(8307);
+const { addErrorContext, isBlankLine } = __nccwpck_require__(8307);
+const { getBlockQuotePrefixText } = __nccwpck_require__(1670);
 const { filterByTypesCached } = __nccwpck_require__(5791);
 
 // eslint-disable-next-line jsdoc/valid-types
@@ -57242,28 +57022,42 @@ module.exports = {
   "parser": "micromark",
   "function": function MD058(params, onError) {
     const { lines } = params;
+    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
+
     // For every table...
     const tables = filterByTypesCached([ "table" ]);
     for (const table of tables) {
+
       // Look for a blank line above the table
-      const firstIndex = table.startLine - 1;
-      if (!isBlankLine(lines[firstIndex - 1])) {
-        addErrorContextForLine(
+      const firstLineNumber = table.startLine;
+      if (!isBlankLine(lines[firstLineNumber - 2])) {
+        addErrorContext(
           onError,
-          // @ts-ignore
-          lines,
-          firstIndex
+          firstLineNumber,
+          lines[firstLineNumber - 1].trim(),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "insertText": getBlockQuotePrefixText(blockQuotePrefixes, firstLineNumber)
+          }
         );
       }
+
       // Look for a blank line below the table
-      const lastIndex = table.endLine - 1;
-      if (!isBlankLine(lines[lastIndex + 1])) {
-        addErrorContextForLine(
+      const lastLineNumber = table.endLine;
+      if (!isBlankLine(lines[lastLineNumber])) {
+        addErrorContext(
           onError,
-          // @ts-ignore
-          lines,
-          lastIndex,
-          lastIndex + 2
+          lastLineNumber,
+          lines[lastLineNumber - 1].trim(),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "lineNumber": lastLineNumber + 1,
+            "insertText": getBlockQuotePrefixText(blockQuotePrefixes, lastLineNumber)
+          }
         );
       }
     }
@@ -57358,11 +57152,11 @@ module.exports = rules;
 /***/ 9520:
 /***/ ((__unused_webpack_module, exports) => {
 
-/*! markdownlint-micromark 0.1.10 https://github.com/DavidAnson/markdownlint */(()=>{"use strict";var e={d:(t,n)=>{for(var r in n)e.o(n,r)&&!e.o(t,r)&&Object.defineProperty(t,r,{enumerable:!0,get:n[r]})},o:(e,t)=>Object.prototype.hasOwnProperty.call(e,t),r:e=>{"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})}},t={};e.r(t),e.d(t,{directive:()=>F,gfmAutolinkLiteral:()=>B,gfmFootnote:()=>K,gfmTable:()=>ce,math:()=>be,parse:()=>It,postprocess:()=>Mt,preprocess:()=>Ot});var n={};e.r(n),e.d(n,{attentionMarkers:()=>Ft,contentInitial:()=>Lt,disable:()=>zt,document:()=>St,flow:()=>Dt,flowInitial:()=>Tt,insideSpan:()=>Ct,string:()=>Et,text:()=>At});const r=g(/[A-Za-z]/),i=g(/[\dA-Za-z]/),o=g(/[#-'*+\--9=?A-Z^-~]/);function c(e){return null!==e&&(e<32||127===e)}const u=g(/\d/),a=g(/[\dA-Fa-f]/),l=g(/[!-/:-@[-`{-~]/);function s(e){return null!==e&&e<-2}function f(e){return null!==e&&(e<0||32===e)}function p(e){return-2===e||-1===e||32===e}const d=g(/\p{P}|\p{S}/u),m=g(/\s/);function g(e){return function(t){return null!==t&&t>-1&&e.test(String.fromCharCode(t))}}function h(e,t,n,r){const i=r?r-1:Number.POSITIVE_INFINITY;let o=0;return function(r){return p(r)?(e.enter(n),c(r)):t(r)};function c(r){return p(r)&&o++<i?(e.consume(r),c):(e.exit(n),t(r))}}function b(e,t){let n;return function r(i){return s(i)?(e.enter("lineEnding"),e.consume(i),e.exit("lineEnding"),n=!0,r):p(i)?h(e,r,n?"linePrefix":"lineSuffix")(i):t(i)}}function x(e,t,n,o,c,u,a,l,d,m,g,x,v,k,y){let w,q;return function(t){return e.enter(o),e.enter(c),e.consume(t),e.exit(c),S};function S(t){return 35===t?(w=a,L(t)):46===t?(w=l,L(t)):58===t||95===t||r(t)?(e.enter(u),e.enter(d),e.consume(t),E):y&&p(t)?h(e,S,"whitespace")(t):!y&&f(t)?b(e,S)(t):O(t)}function L(t){const n=w+"Marker";return e.enter(u),e.enter(w),e.enter(n),e.consume(t),e.exit(n),T}function T(t){if(null===t||34===t||35===t||39===t||46===t||60===t||61===t||62===t||96===t||125===t||f(t))return n(t);const r=w+"Value";return e.enter(r),e.consume(t),D}function D(t){if(null===t||34===t||39===t||60===t||61===t||62===t||96===t)return n(t);if(35===t||46===t||125===t||f(t)){const n=w+"Value";return e.exit(n),e.exit(w),e.exit(u),S(t)}return e.consume(t),D}function E(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),E):(e.exit(d),y&&p(t)?h(e,A,"whitespace")(t):!y&&f(t)?b(e,A)(t):A(t))}function A(t){return 61===t?(e.enter(m),e.consume(t),e.exit(m),C):(e.exit(u),S(t))}function C(t){return null===t||60===t||61===t||62===t||96===t||125===t||y&&s(t)?n(t):34===t||39===t?(e.enter(g),e.enter(v),e.consume(t),e.exit(v),q=t,z):y&&p(t)?h(e,C,"whitespace")(t):!y&&f(t)?b(e,C)(t):(e.enter(x),e.enter(k),e.consume(t),q=void 0,F)}function F(t){return null===t||34===t||39===t||60===t||61===t||62===t||96===t?n(t):125===t||f(t)?(e.exit(k),e.exit(x),e.exit(u),S(t)):(e.consume(t),F)}function z(t){return t===q?(e.enter(v),e.consume(t),e.exit(v),e.exit(g),e.exit(u),R):(e.enter(x),I(t))}function I(t){return t===q?(e.exit(x),z(t)):null===t?n(t):s(t)?y?n(t):b(e,I)(t):(e.enter(k),e.consume(t),M)}function M(t){return t===q||null===t||s(t)?(e.exit(k),I(t)):(e.consume(t),M)}function R(e){return 125===e||f(e)?S(e):O(e)}function O(r){return 125===r?(e.enter(c),e.consume(r),e.exit(c),e.exit(o),t):n(r)}}function v(e,t,n,r,i,o,c){let u,a=0,l=0;return function(t){return e.enter(r),e.enter(i),e.consume(t),e.exit(i),f};function f(n){return 93===n?(e.enter(i),e.consume(n),e.exit(i),e.exit(r),t):(e.enter(o),p(n))}function p(t){if(93===t&&!l)return g(t);const n=e.enter("chunkText",{contentType:"text",previous:u});return u&&(u.next=n),u=n,d(t)}function d(t){return null===t||a>999||91===t&&++l>32?n(t):93!==t||l--?s(t)?c?n(t):(e.consume(t),e.exit("chunkText"),p):(e.consume(t),92===t?m:d):(e.exit("chunkText"),g(t))}function m(t){return 91===t||92===t||93===t?(e.consume(t),a++,d):d(t)}function g(n){return e.exit(o),e.enter(i),e.consume(n),e.exit(i),e.exit(r),t}}function k(e,t,n,o){const c=this;return function(t){return r(t)?(e.enter(o),e.consume(t),u):n(t)};function u(r){return 45===r||95===r||i(r)?(e.consume(r),u):(e.exit(o),45===c.previous||95===c.previous?n(r):t(r))}}const y={tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1],o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0;let c,u=0;return function(t){return e.enter("directiveContainer"),e.enter("directiveContainerFence"),e.enter("directiveContainerSequence"),a(t)};function a(t){return 58===t?(e.consume(t),u++,a):u<3?n(t):(e.exit("directiveContainerSequence"),k.call(r,e,l,n,"directiveContainerName")(t))}function l(t){return 91===t?e.attempt(w,f,f)(t):f(t)}function f(t){return 123===t?e.attempt(q,p,p)(t):p(t)}function p(t){return h(e,d,"whitespace")(t)}function d(i){return e.exit("directiveContainerFence"),null===i?m(i):s(i)?r.interrupt?t(i):e.attempt(S,g,m)(i):n(i)}function m(n){return e.exit("directiveContainer"),t(n)}function g(n){return null===n?(e.exit("directiveContainer"),t(n)):(e.enter("directiveContainerContent"),b(n))}function b(t){return null===t?T(t):e.attempt({tokenize:D,partial:!0},T,o?h(e,x,"linePrefix",o+1):x)(t)}function x(t){if(null===t)return T(t);const n=e.enter("chunkDocument",{contentType:"document",previous:c});return c&&(c.next=n),c=n,v(t)}function v(t){if(null===t){const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,T(t)}return s(t)?e.check(S,y,L)(t):(e.consume(t),v)}function y(t){e.consume(t);const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,b}function L(t){const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,T(t)}function T(n){return e.exit("directiveContainerContent"),e.exit("directiveContainer"),t(n)}function D(e,t,n){let r=0;return h(e,(function(t){return e.enter("directiveContainerFence"),e.enter("directiveContainerSequence"),i(t)}),"linePrefix",4);function i(t){return 58===t?(e.consume(t),r++,i):r<u?n(t):(e.exit("directiveContainerSequence"),h(e,o,"whitespace")(t))}function o(r){return null===r||s(r)?(e.exit("directiveContainerFence"),t(r)):n(r)}}},concrete:!0},w={tokenize:function(e,t,n){return v(e,t,n,"directiveContainerLabel","directiveContainerLabelMarker","directiveContainerLabelString",!0)},partial:!0},q={tokenize:function(e,t,n){return x(e,t,n,"directiveContainerAttributes","directiveContainerAttributesMarker","directiveContainerAttribute","directiveContainerAttributeId","directiveContainerAttributeClass","directiveContainerAttributeName","directiveContainerAttributeInitializerMarker","directiveContainerAttributeValueLiteral","directiveContainerAttributeValue","directiveContainerAttributeValueMarker","directiveContainerAttributeValueData",!0)},partial:!0},S={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},L={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("directiveLeaf"),e.enter("directiveLeafSequence"),e.consume(t),i};function i(t){return 58===t?(e.consume(t),e.exit("directiveLeafSequence"),k.call(r,e,o,n,"directiveLeafName")):n(t)}function o(t){return 91===t?e.attempt(T,c,c)(t):c(t)}function c(t){return 123===t?e.attempt(D,u,u)(t):u(t)}function u(t){return h(e,a,"whitespace")(t)}function a(r){return null===r||s(r)?(e.exit("directiveLeaf"),t(r)):n(r)}}},T={tokenize:function(e,t,n){return v(e,t,n,"directiveLeafLabel","directiveLeafLabelMarker","directiveLeafLabelString",!0)},partial:!0},D={tokenize:function(e,t,n){return x(e,t,n,"directiveLeafAttributes","directiveLeafAttributesMarker","directiveLeafAttribute","directiveLeafAttributeId","directiveLeafAttributeClass","directiveLeafAttributeName","directiveLeafAttributeInitializerMarker","directiveLeafAttributeValueLiteral","directiveLeafAttributeValue","directiveLeafAttributeValueMarker","directiveLeafAttributeValueData",!0)},partial:!0},E={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("directiveText"),e.enter("directiveTextMarker"),e.consume(t),e.exit("directiveTextMarker"),k.call(r,e,i,n,"directiveTextName")};function i(t){return 58===t?n(t):91===t?e.attempt(A,o,o)(t):o(t)}function o(t){return 123===t?e.attempt(C,c,c)(t):c(t)}function c(n){return e.exit("directiveText"),t(n)}},previous:function(e){return 58!==e||"characterEscape"===this.events[this.events.length-1][1].type}},A={tokenize:function(e,t,n){return v(e,t,n,"directiveTextLabel","directiveTextLabelMarker","directiveTextLabelString")},partial:!0},C={tokenize:function(e,t,n){return x(e,t,n,"directiveTextAttributes","directiveTextAttributesMarker","directiveTextAttribute","directiveTextAttributeId","directiveTextAttributeClass","directiveTextAttributeName","directiveTextAttributeInitializerMarker","directiveTextAttributeValueLiteral","directiveTextAttributeValue","directiveTextAttributeValueMarker","directiveTextAttributeValueData")},partial:!0};function F(){return{text:{58:E},flow:{58:[y,L]}}}const z={tokenize:function(e,t,n){let r=0;return function t(o){return(87===o||119===o)&&r<3?(r++,e.consume(o),t):46===o&&3===r?(e.consume(o),i):n(o)};function i(e){return null===e?n(e):t(e)}},partial:!0},I={tokenize:function(e,t,n){let r,i,o;return c;function c(t){return 46===t||95===t?e.check(R,a,u)(t):null===t||f(t)||m(t)||45!==t&&d(t)?a(t):(o=!0,e.consume(t),c)}function u(t){return 95===t?r=!0:(i=r,r=void 0),e.consume(t),c}function a(e){return i||r||!o?n(e):t(e)}},partial:!0},M={tokenize:function(e,t){let n=0,r=0;return i;function i(c){return 40===c?(n++,e.consume(c),i):41===c&&r<n?o(c):33===c||34===c||38===c||39===c||41===c||42===c||44===c||46===c||58===c||59===c||60===c||63===c||93===c||95===c||126===c?e.check(R,t,o)(c):null===c||f(c)||m(c)?t(c):(e.consume(c),i)}function o(t){return 41===t&&r++,e.consume(t),i}},partial:!0},R={tokenize:function(e,t,n){return i;function i(r){return 33===r||34===r||39===r||41===r||42===r||44===r||46===r||58===r||59===r||63===r||95===r||126===r?(e.consume(r),i):38===r?(e.consume(r),c):93===r?(e.consume(r),o):60===r||null===r||f(r)||m(r)?t(r):n(r)}function o(e){return null===e||40===e||91===e||f(e)||m(e)?t(e):i(e)}function c(e){return r(e)?u(e):n(e)}function u(t){return 59===t?(e.consume(t),i):r(t)?(e.consume(t),u):n(t)}},partial:!0},O={tokenize:function(e,t,n){return function(t){return e.consume(t),r};function r(e){return i(e)?n(e):t(e)}},partial:!0},P={tokenize:function(e,t,n){const r=this;return function(t){return 87!==t&&119!==t||!H.call(r,r.previous)||W(r.events)?n(t):(e.enter("literalAutolink"),e.enter("literalAutolinkWww"),e.check(z,e.attempt(I,e.attempt(M,i),n),n)(t))};function i(n){return e.exit("literalAutolinkWww"),e.exit("literalAutolink"),t(n)}},previous:H},N={tokenize:function(e,t,n){const i=this;let o="",u=!1;return function(t){return 72!==t&&104!==t||!U.call(i,i.previous)||W(i.events)?n(t):(e.enter("literalAutolink"),e.enter("literalAutolinkHttp"),o+=String.fromCodePoint(t),e.consume(t),a)};function a(t){if(r(t)&&o.length<5)return o+=String.fromCodePoint(t),e.consume(t),a;if(58===t){const n=o.toLowerCase();if("http"===n||"https"===n)return e.consume(t),l}return n(t)}function l(t){return 47===t?(e.consume(t),u?s:(u=!0,l)):n(t)}function s(t){return null===t||c(t)||f(t)||m(t)||d(t)?n(t):e.attempt(I,e.attempt(M,p),n)(t)}function p(n){return e.exit("literalAutolinkHttp"),e.exit("literalAutolink"),t(n)}},previous:U},V={tokenize:function(e,t,n){const o=this;let c,u;return function(t){return Q(t)&&G.call(o,o.previous)&&!W(o.events)?(e.enter("literalAutolink"),e.enter("literalAutolinkEmail"),a(t)):n(t)};function a(t){return Q(t)?(e.consume(t),a):64===t?(e.consume(t),l):n(t)}function l(t){return 46===t?e.check(O,f,s)(t):45===t||95===t||i(t)?(u=!0,e.consume(t),l):f(t)}function s(t){return e.consume(t),c=!0,l}function f(i){return u&&c&&r(o.previous)?(e.exit("literalAutolinkEmail"),e.exit("literalAutolink"),t(i)):n(i)}},previous:G},_={};function B(){return{text:_}}let j=48;for(;j<123;)_[j]=V,j++,58===j?j=65:91===j&&(j=97);function H(e){return null===e||40===e||42===e||95===e||91===e||93===e||126===e||f(e)}function U(e){return!r(e)}function G(e){return!(47===e||Q(e))}function Q(e){return 43===e||45===e||46===e||95===e||i(e)}function W(e){let t=e.length,n=!1;for(;t--;){const r=e[t][1];if(("labelLink"===r.type||"labelImage"===r.type)&&!r._balanced){n=!0;break}if(r._gfmAutolinkLiteralWalkedInto){n=!1;break}}return e.length>0&&!n&&(e[e.length-1][1]._gfmAutolinkLiteralWalkedInto=!0),n}_[43]=V,_[45]=V,_[46]=V,_[95]=V,_[72]=[V,N],_[104]=[V,N],_[87]=[V,P],_[119]=[V,P];const Z={tokenize:function(e,t,n){return function(t){return p(t)?h(e,r,"linePrefix")(t):r(t)};function r(e){return null===e||s(e)?t(e):n(e)}},partial:!0};function J(e){return e.replace(/[\t\n\r ]+/g," ").replace(/^ | $/g,"").toLowerCase().toUpperCase()}const Y={tokenize:function(e,t,n){const r=this;return h(e,(function(e){const i=r.events[r.events.length-1];return i&&"gfmFootnoteDefinitionIndent"===i[1].type&&4===i[2].sliceSerialize(i[1],!0).length?t(e):n(e)}),"gfmFootnoteDefinitionIndent",5)},partial:!0};function K(){return{document:{91:{tokenize:te,continuation:{tokenize:ne},exit:re}},text:{91:{tokenize:ee},93:{add:"after",tokenize:X,resolveTo:$}}}}function X(e,t,n){const r=this;let i=r.events.length;const o=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let c;for(;i--;){const e=r.events[i][1];if("labelImage"===e.type){c=e;break}if("gfmFootnoteCall"===e.type||"labelLink"===e.type||"label"===e.type||"image"===e.type||"link"===e.type)break}return function(i){if(!c||!c._balanced)return n(i);const u=J(r.sliceSerialize({start:c.end,end:r.now()}));return 94===u.codePointAt(0)&&o.includes(u.slice(1))?(e.enter("gfmFootnoteCallLabelMarker"),e.consume(i),e.exit("gfmFootnoteCallLabelMarker"),t(i)):n(i)}}function $(e,t){let n,r=e.length;for(;r--;)if("labelImage"===e[r][1].type&&"enter"===e[r][0]){n=e[r][1];break}e[r+1][1].type="data",e[r+3][1].type="gfmFootnoteCallLabelMarker";const i={type:"gfmFootnoteCall",start:Object.assign({},e[r+3][1].start),end:Object.assign({},e[e.length-1][1].end)},o={type:"gfmFootnoteCallMarker",start:Object.assign({},e[r+3][1].end),end:Object.assign({},e[r+3][1].end)};o.end.column++,o.end.offset++,o.end._bufferIndex++;const c={type:"gfmFootnoteCallString",start:Object.assign({},o.end),end:Object.assign({},e[e.length-1][1].start)},u={type:"chunkString",contentType:"string",start:Object.assign({},c.start),end:Object.assign({},c.end)},a=[e[r+1],e[r+2],["enter",i,t],e[r+3],e[r+4],["enter",o,t],["exit",o,t],["enter",c,t],["enter",u,t],["exit",u,t],["exit",c,t],e[e.length-2],e[e.length-1],["exit",i,t]];return e.splice(r,e.length-r+1,...a),e}function ee(e,t,n){const r=this,i=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let o,c=0;return function(t){return e.enter("gfmFootnoteCall"),e.enter("gfmFootnoteCallLabelMarker"),e.consume(t),e.exit("gfmFootnoteCallLabelMarker"),u};function u(t){return 94!==t?n(t):(e.enter("gfmFootnoteCallMarker"),e.consume(t),e.exit("gfmFootnoteCallMarker"),e.enter("gfmFootnoteCallString"),e.enter("chunkString").contentType="string",a)}function a(u){if(c>999||93===u&&!o||null===u||91===u||f(u))return n(u);if(93===u){e.exit("chunkString");const o=e.exit("gfmFootnoteCallString");return i.includes(J(r.sliceSerialize(o)))?(e.enter("gfmFootnoteCallLabelMarker"),e.consume(u),e.exit("gfmFootnoteCallLabelMarker"),e.exit("gfmFootnoteCall"),t):n(u)}return f(u)||(o=!0),c++,e.consume(u),92===u?l:a}function l(t){return 91===t||92===t||93===t?(e.consume(t),c++,a):a(t)}}function te(e,t,n){const r=this,i=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let o,c,u=0;return function(t){return e.enter("gfmFootnoteDefinition")._container=!0,e.enter("gfmFootnoteDefinitionLabel"),e.enter("gfmFootnoteDefinitionLabelMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionLabelMarker"),a};function a(t){return 94===t?(e.enter("gfmFootnoteDefinitionMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionMarker"),e.enter("gfmFootnoteDefinitionLabelString"),e.enter("chunkString").contentType="string",l):n(t)}function l(t){if(u>999||93===t&&!c||null===t||91===t||f(t))return n(t);if(93===t){e.exit("chunkString");const n=e.exit("gfmFootnoteDefinitionLabelString");return o=J(r.sliceSerialize(n)),e.enter("gfmFootnoteDefinitionLabelMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionLabelMarker"),e.exit("gfmFootnoteDefinitionLabel"),p}return f(t)||(c=!0),u++,e.consume(t),92===t?s:l}function s(t){return 91===t||92===t||93===t?(e.consume(t),u++,l):l(t)}function p(t){return 58===t?(e.enter("definitionMarker"),e.consume(t),e.exit("definitionMarker"),i.includes(o)||i.push(o),h(e,d,"gfmFootnoteDefinitionWhitespace")):n(t)}function d(e){return t(e)}}function ne(e,t,n){return e.check(Z,t,e.attempt(Y,t,n))}function re(e){e.exit("gfmFootnoteDefinition")}class ie{constructor(){this.map=[]}add(e,t,n){!function(e,t,n,r){let i=0;if(0!==n||0!==r.length){for(;i<e.map.length;){if(e.map[i][0]===t)return e.map[i][1]+=n,void e.map[i][2].push(...r);i+=1}e.map.push([t,n,r])}}(this,e,t,n)}consume(e){if(this.map.sort((function(e,t){return e[0]-t[0]})),0===this.map.length)return;let t=this.map.length;const n=[];for(;t>0;)t-=1,n.push(e.slice(this.map[t][0]+this.map[t][1]),this.map[t][2]),e.length=this.map[t][0];n.push([...e]),e.length=0;let r=n.pop();for(;r;)e.push(...r),r=n.pop();this.map.length=0}}function oe(e,t){let n=!1;const r=[];for(;t<e.length;){const i=e[t];if(n){if("enter"===i[0])"tableContent"===i[1].type&&r.push("tableDelimiterMarker"===e[t+1][1].type?"left":"none");else if("tableContent"===i[1].type){if("tableDelimiterMarker"===e[t-1][1].type){const e=r.length-1;r[e]="left"===r[e]?"center":"right"}}else if("tableDelimiterRow"===i[1].type)break}else"enter"===i[0]&&"tableDelimiterRow"===i[1].type&&(n=!0);t+=1}return r}function ce(){return{flow:{null:{tokenize:ue,resolveAll:ae}}}}function ue(e,t,n){const r=this;let i,o=0,c=0;return function(e){let t=r.events.length-1;for(;t>-1;){const e=r.events[t][1].type;if("lineEnding"!==e&&"linePrefix"!==e)break;t--}const i=t>-1?r.events[t][1].type:null,o="tableHead"===i||"tableRow"===i?S:u;return o===S&&r.parser.lazy[r.now().line]?n(e):o(e)};function u(t){return e.enter("tableHead"),e.enter("tableRow"),function(e){return 124===e||(i=!0,c+=1),a(e)}(t)}function a(t){return null===t?n(t):s(t)?c>1?(c=0,r.interrupt=!0,e.exit("tableRow"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),m):n(t):p(t)?h(e,a,"whitespace")(t):(c+=1,i&&(i=!1,o+=1),124===t?(e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),i=!0,a):(e.enter("data"),l(t)))}function l(t){return null===t||124===t||f(t)?(e.exit("data"),a(t)):(e.consume(t),92===t?d:l)}function d(t){return 92===t||124===t?(e.consume(t),l):l(t)}function m(t){return r.interrupt=!1,r.parser.lazy[r.now().line]?n(t):(e.enter("tableDelimiterRow"),i=!1,p(t)?h(e,g,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):g(t))}function g(t){return 45===t||58===t?x(t):124===t?(i=!0,e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),b):q(t)}function b(t){return p(t)?h(e,x,"whitespace")(t):x(t)}function x(t){return 58===t?(c+=1,i=!0,e.enter("tableDelimiterMarker"),e.consume(t),e.exit("tableDelimiterMarker"),v):45===t?(c+=1,v(t)):null===t||s(t)?w(t):q(t)}function v(t){return 45===t?(e.enter("tableDelimiterFiller"),k(t)):q(t)}function k(t){return 45===t?(e.consume(t),k):58===t?(i=!0,e.exit("tableDelimiterFiller"),e.enter("tableDelimiterMarker"),e.consume(t),e.exit("tableDelimiterMarker"),y):(e.exit("tableDelimiterFiller"),y(t))}function y(t){return p(t)?h(e,w,"whitespace")(t):w(t)}function w(n){return 124===n?g(n):(null===n||s(n))&&i&&o===c?(e.exit("tableDelimiterRow"),e.exit("tableHead"),t(n)):q(n)}function q(e){return n(e)}function S(t){return e.enter("tableRow"),L(t)}function L(n){return 124===n?(e.enter("tableCellDivider"),e.consume(n),e.exit("tableCellDivider"),L):null===n||s(n)?(e.exit("tableRow"),t(n)):p(n)?h(e,L,"whitespace")(n):(e.enter("data"),T(n))}function T(t){return null===t||124===t||f(t)?(e.exit("data"),L(t)):(e.consume(t),92===t?D:T)}function D(t){return 92===t||124===t?(e.consume(t),T):T(t)}}function ae(e,t){let n,r,i,o=-1,c=!0,u=0,a=[0,0,0,0],l=[0,0,0,0],s=!1,f=0;const p=new ie;for(;++o<e.length;){const d=e[o],m=d[1];"enter"===d[0]?"tableHead"===m.type?(s=!1,0!==f&&(se(p,t,f,n,r),r=void 0,f=0),n={type:"table",start:Object.assign({},m.start),end:Object.assign({},m.end)},p.add(o,0,[["enter",n,t]])):"tableRow"===m.type||"tableDelimiterRow"===m.type?(c=!0,i=void 0,a=[0,0,0,0],l=[0,o+1,0,0],s&&(s=!1,r={type:"tableBody",start:Object.assign({},m.start),end:Object.assign({},m.end)},p.add(o,0,[["enter",r,t]])),u="tableDelimiterRow"===m.type?2:r?3:1):!u||"data"!==m.type&&"tableDelimiterMarker"!==m.type&&"tableDelimiterFiller"!==m.type?"tableCellDivider"===m.type&&(c?c=!1:(0!==a[1]&&(l[0]=l[1],i=le(p,t,a,u,void 0,i)),a=l,l=[a[1],o,0,0])):(c=!1,0===l[2]&&(0!==a[1]&&(l[0]=l[1],i=le(p,t,a,u,void 0,i),a=[0,0,0,0]),l[2]=o)):"tableHead"===m.type?(s=!0,f=o):"tableRow"===m.type||"tableDelimiterRow"===m.type?(f=o,0!==a[1]?(l[0]=l[1],i=le(p,t,a,u,o,i)):0!==l[1]&&(i=le(p,t,l,u,o,i)),u=0):!u||"data"!==m.type&&"tableDelimiterMarker"!==m.type&&"tableDelimiterFiller"!==m.type||(l[3]=o)}for(0!==f&&se(p,t,f,n,r),p.consume(t.events),o=-1;++o<t.events.length;){const e=t.events[o];"enter"===e[0]&&"table"===e[1].type&&(e[1]._align=oe(t.events,o))}return e}function le(e,t,n,r,i,o){const c=1===r?"tableHeader":2===r?"tableDelimiter":"tableData";0!==n[0]&&(o.end=Object.assign({},fe(t.events,n[0])),e.add(n[0],0,[["exit",o,t]]));const u=fe(t.events,n[1]);if(o={type:c,start:Object.assign({},u),end:Object.assign({},u)},e.add(n[1],0,[["enter",o,t]]),0!==n[2]){const i=fe(t.events,n[2]),o=fe(t.events,n[3]),c={type:"tableContent",start:Object.assign({},i),end:Object.assign({},o)};if(e.add(n[2],0,[["enter",c,t]]),2!==r){const r=t.events[n[2]],i=t.events[n[3]];if(r[1].end=Object.assign({},i[1].end),r[1].type="chunkText",r[1].contentType="text",n[3]>n[2]+1){const t=n[2]+1,r=n[3]-n[2]-1;e.add(t,r,[])}}e.add(n[3]+1,0,[["exit",c,t]])}return void 0!==i&&(o.end=Object.assign({},fe(t.events,i)),e.add(i,0,[["exit",o,t]]),o=void 0),o}function se(e,t,n,r,i){const o=[],c=fe(t.events,n);i&&(i.end=Object.assign({},c),o.push(["exit",i,t])),r.end=Object.assign({},c),o.push(["exit",r,t]),e.add(n+1,0,o)}function fe(e,t){const n=e[t],r="enter"===n[0]?"start":"end";return n[1][r]}const pe={tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1],o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0;let c=0;return function(t){return e.enter("mathFlow"),e.enter("mathFlowFence"),e.enter("mathFlowFenceSequence"),u(t)};function u(t){return 36===t?(e.consume(t),c++,u):c<2?n(t):(e.exit("mathFlowFenceSequence"),h(e,a,"whitespace")(t))}function a(t){return null===t||s(t)?f(t):(e.enter("mathFlowFenceMeta"),e.enter("chunkString",{contentType:"string"}),l(t))}function l(t){return null===t||s(t)?(e.exit("chunkString"),e.exit("mathFlowFenceMeta"),f(t)):36===t?n(t):(e.consume(t),l)}function f(n){return e.exit("mathFlowFence"),r.interrupt?t(n):e.attempt(de,p,b)(n)}function p(t){return e.attempt({tokenize:x,partial:!0},b,d)(t)}function d(t){return(o?h(e,m,"linePrefix",o+1):m)(t)}function m(t){return null===t?b(t):s(t)?e.attempt(de,p,b)(t):(e.enter("mathFlowValue"),g(t))}function g(t){return null===t||s(t)?(e.exit("mathFlowValue"),m(t)):(e.consume(t),g)}function b(n){return e.exit("mathFlow"),t(n)}function x(e,t,n){let i=0;return h(e,(function(t){return e.enter("mathFlowFence"),e.enter("mathFlowFenceSequence"),o(t)}),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4);function o(t){return 36===t?(i++,e.consume(t),o):i<c?n(t):(e.exit("mathFlowFenceSequence"),h(e,u,"whitespace")(t))}function u(r){return null===r||s(r)?(e.exit("mathFlowFence"),t(r)):n(r)}}},concrete:!0},de={tokenize:function(e,t,n){const r=this;return function(n){return null===n?t(n):(e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),i)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0};function me(e){let t=(e||{}).singleDollarTextMath;return null==t&&(t=!0),{tokenize:function(e,n,r){let i,o,c=0;return function(t){return e.enter("mathText"),e.enter("mathTextSequence"),u(t)};function u(n){return 36===n?(e.consume(n),c++,u):c<2&&!t?r(n):(e.exit("mathTextSequence"),a(n))}function a(t){return null===t?r(t):36===t?(o=e.enter("mathTextSequence"),i=0,f(t)):32===t?(e.enter("space"),e.consume(t),e.exit("space"),a):s(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),a):(e.enter("mathTextData"),l(t))}function l(t){return null===t||32===t||36===t||s(t)?(e.exit("mathTextData"),a(t)):(e.consume(t),l)}function f(t){return 36===t?(e.consume(t),i++,f):i===c?(e.exit("mathTextSequence"),e.exit("mathText"),n(t)):(o.type="mathTextData",l(t))}},resolve:ge,previous:he}}function ge(e){let t,n,r=e.length-4,i=3;if(!("lineEnding"!==e[i][1].type&&"space"!==e[i][1].type||"lineEnding"!==e[r][1].type&&"space"!==e[r][1].type))for(t=i;++t<r;)if("mathTextData"===e[t][1].type){e[r][1].type="mathTextPadding",e[i][1].type="mathTextPadding",i+=2,r-=2;break}for(t=i-1,r++;++t<=r;)void 0===n?t!==r&&"lineEnding"!==e[t][1].type&&(n=t):t!==r&&"lineEnding"!==e[t][1].type||(e[n][1].type="mathTextData",t!==n+2&&(e[n][1].end=e[t-1][1].end,e.splice(n+2,t-n-2),r-=t-n-2,t=n+2),n=void 0);return e}function he(e){return 36!==e||"characterEscape"===this.events[this.events.length-1][1].type}function be(e){return{flow:{36:pe},text:{36:me(e)}}}function xe(e,t,n,r){const i=e.length;let o,c=0;if(t=t<0?-t>i?0:i+t:t>i?i:t,n=n>0?n:0,r.length<1e4)o=Array.from(r),o.unshift(t,n),e.splice(...o);else for(n&&e.splice(t,n);c<r.length;)o=r.slice(c,c+1e4),o.unshift(t,0),e.splice(...o),c+=1e4,t+=1e4}function ve(e,t){return e.length>0?(xe(e,e.length,0,t),e):t}const ke={}.hasOwnProperty;function ye(e,t){let n;for(n in t){const r=(ke.call(e,n)?e[n]:void 0)||(e[n]={}),i=t[n];let o;if(i)for(o in i){ke.call(r,o)||(r[o]=[]);const e=i[o];we(r[o],Array.isArray(e)?e:e?[e]:[])}}}function we(e,t){let n=-1;const r=[];for(;++n<t.length;)("after"===t[n].add?e:r).push(t[n]);xe(e,0,0,r)}const qe={tokenize:function(e){const t=e.attempt(this.parser.constructs.contentInitial,(function(n){if(null!==n)return e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),h(e,t,"linePrefix");e.consume(n)}),(function(t){return e.enter("paragraph"),r(t)}));let n;return t;function r(t){const r=e.enter("chunkText",{contentType:"text",previous:n});return n&&(n.next=r),n=r,i(t)}function i(t){return null===t?(e.exit("chunkText"),e.exit("paragraph"),void e.consume(t)):s(t)?(e.consume(t),e.exit("chunkText"),r):(e.consume(t),i)}}},Se={tokenize:function(e){const t=this,n=[];let r,i,o,c=0;return u;function u(r){if(c<n.length){const i=n[c];return t.containerState=i[1],e.attempt(i[0].continuation,a,l)(r)}return l(r)}function a(e){if(c++,t.containerState._closeFlow){t.containerState._closeFlow=void 0,r&&v();const n=t.events.length;let i,o=n;for(;o--;)if("exit"===t.events[o][0]&&"chunkFlow"===t.events[o][1].type){i=t.events[o][1].end;break}x(c);let u=n;for(;u<t.events.length;)t.events[u][1].end=Object.assign({},i),u++;return xe(t.events,o+1,0,t.events.slice(n)),t.events.length=u,l(e)}return u(e)}function l(i){if(c===n.length){if(!r)return d(i);if(r.currentConstruct&&r.currentConstruct.concrete)return g(i);t.interrupt=Boolean(r.currentConstruct&&!r._gfmTableDynamicInterruptHack)}return t.containerState={},e.check(Le,f,p)(i)}function f(e){return r&&v(),x(c),d(e)}function p(e){return t.parser.lazy[t.now().line]=c!==n.length,o=t.now().offset,g(e)}function d(n){return t.containerState={},e.attempt(Le,m,g)(n)}function m(e){return c++,n.push([t.currentConstruct,t.containerState]),d(e)}function g(n){return null===n?(r&&v(),x(0),void e.consume(n)):(r=r||t.parser.flow(t.now()),e.enter("chunkFlow",{contentType:"flow",previous:i,_tokenizer:r}),h(n))}function h(n){return null===n?(b(e.exit("chunkFlow"),!0),x(0),void e.consume(n)):s(n)?(e.consume(n),b(e.exit("chunkFlow")),c=0,t.interrupt=void 0,u):(e.consume(n),h)}function b(e,n){const u=t.sliceStream(e);if(n&&u.push(null),e.previous=i,i&&(i.next=e),i=e,r.defineSkip(e.start),r.write(u),t.parser.lazy[e.start.line]){let e=r.events.length;for(;e--;)if(r.events[e][1].start.offset<o&&(!r.events[e][1].end||r.events[e][1].end.offset>o))return;const n=t.events.length;let i,u,a=n;for(;a--;)if("exit"===t.events[a][0]&&"chunkFlow"===t.events[a][1].type){if(i){u=t.events[a][1].end;break}i=!0}for(x(c),e=n;e<t.events.length;)t.events[e][1].end=Object.assign({},u),e++;xe(t.events,a+1,0,t.events.slice(n)),t.events.length=e}}function x(r){let i=n.length;for(;i-- >r;){const r=n[i];t.containerState=r[1],r[0].exit.call(t,e)}n.length=r}function v(){r.write([null]),i=void 0,r=void 0,t.containerState._closeFlow=void 0}}},Le={tokenize:function(e,t,n){return h(e,e.attempt(this.parser.constructs.document,t,n),"linePrefix",this.parser.constructs.disable.null.includes("codeIndented")?void 0:4)}};function Te(e){const t={};let n,r,i,o,c,u,a,l=-1;for(;++l<e.length;){for(;l in t;)l=t[l];if(n=e[l],l&&"chunkFlow"===n[1].type&&"listItemPrefix"===e[l-1][1].type&&(u=n[1]._tokenizer.events,i=0,i<u.length&&"lineEndingBlank"===u[i][1].type&&(i+=2),i<u.length&&"content"===u[i][1].type))for(;++i<u.length&&"content"!==u[i][1].type;)"chunkText"===u[i][1].type&&(u[i][1]._isInFirstContentOfListItem=!0,i++);if("enter"===n[0])n[1].contentType&&(Object.assign(t,De(e,l)),l=t[l],a=!0);else if(n[1]._container){for(i=l,r=void 0;i--&&(o=e[i],"lineEnding"===o[1].type||"lineEndingBlank"===o[1].type);)"enter"===o[0]&&(r&&(e[r][1].type="lineEndingBlank"),o[1].type="lineEnding",r=i);r&&(n[1].end=Object.assign({},e[r][1].start),c=e.slice(r,l),c.unshift(n),xe(e,r,l-r+1,c))}}return!a}function De(e,t){const n=e[t][1],r=e[t][2];let i=t-1;const o=[],c=n._tokenizer||r.parser[n.contentType](n.start),u=c.events,a=[],l={};let s,f,p=-1,d=n,m=0,g=0;const h=[g];for(;d;){for(;e[++i][1]!==d;);o.push(i),d._tokenizer||(s=r.sliceStream(d),d.next||s.push(null),f&&c.defineSkip(d.start),d._isInFirstContentOfListItem&&(c._gfmTasklistFirstContentOfListItem=!0),c.write(s),d._isInFirstContentOfListItem&&(c._gfmTasklistFirstContentOfListItem=void 0)),f=d,d=d.next}for(d=n;++p<u.length;)"exit"===u[p][0]&&"enter"===u[p-1][0]&&u[p][1].type===u[p-1][1].type&&u[p][1].start.line!==u[p][1].end.line&&(g=p+1,h.push(g),d._tokenizer=void 0,d.previous=void 0,d=d.next);for(c.events=[],d?(d._tokenizer=void 0,d.previous=void 0):h.pop(),p=h.length;p--;){const t=u.slice(h[p],h[p+1]),n=o.pop();a.unshift([n,n+t.length-1]),xe(e,n,2,t)}for(p=-1;++p<a.length;)l[m+a[p][0]]=m+a[p][1],m+=a[p][1]-a[p][0]-1;return l}const Ee={tokenize:function(e,t){let n;return function(t){return e.enter("content"),n=e.enter("chunkContent",{contentType:"content"}),r(t)};function r(t){return null===t?i(t):s(t)?e.check(Ae,o,i)(t):(e.consume(t),r)}function i(n){return e.exit("chunkContent"),e.exit("content"),t(n)}function o(t){return e.consume(t),e.exit("chunkContent"),n.next=e.enter("chunkContent",{contentType:"content",previous:n}),n=n.next,r}},resolve:function(e){return Te(e),e}},Ae={tokenize:function(e,t,n){const r=this;return function(t){return e.exit("chunkContent"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),h(e,i,"linePrefix")};function i(i){if(null===i||s(i))return n(i);const o=r.events[r.events.length-1];return!r.parser.constructs.disable.null.includes("codeIndented")&&o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?t(i):e.interrupt(r.parser.constructs.flow,n,t)(i)}},partial:!0},Ce={tokenize:function(e){const t=this,n=e.attempt(Z,(function(r){if(null!==r)return e.enter("lineEndingBlank"),e.consume(r),e.exit("lineEndingBlank"),t.currentConstruct=void 0,n;e.consume(r)}),e.attempt(this.parser.constructs.flowInitial,r,h(e,e.attempt(this.parser.constructs.flow,r,e.attempt(Ee,r)),"linePrefix")));return n;function r(r){if(null!==r)return e.enter("lineEnding"),e.consume(r),e.exit("lineEnding"),t.currentConstruct=void 0,n;e.consume(r)}}},Fe={resolveAll:Re()},ze=Me("string"),Ie=Me("text");function Me(e){return{tokenize:function(t){const n=this,r=this.parser.constructs[e],i=t.attempt(r,o,c);return o;function o(e){return a(e)?i(e):c(e)}function c(e){if(null!==e)return t.enter("data"),t.consume(e),u;t.consume(e)}function u(e){return a(e)?(t.exit("data"),i(e)):(t.consume(e),u)}function a(e){if(null===e)return!0;const t=r[e];let i=-1;if(t)for(;++i<t.length;){const e=t[i];if(!e.previous||e.previous.call(n,n.previous))return!0}return!1}},resolveAll:Re("text"===e?Oe:void 0)}}function Re(e){return function(t,n){let r,i=-1;for(;++i<=t.length;)void 0===r?t[i]&&"data"===t[i][1].type&&(r=i,i++):t[i]&&"data"===t[i][1].type||(i!==r+2&&(t[r][1].end=t[i-1][1].end,t.splice(r+2,i-r-2),i=r+2),r=void 0);return e?e(t,n):t}}function Oe(e,t){let n=0;for(;++n<=e.length;)if((n===e.length||"lineEnding"===e[n][1].type)&&"data"===e[n-1][1].type){const r=e[n-1][1],i=t.sliceStream(r);let o,c=i.length,u=-1,a=0;for(;c--;){const e=i[c];if("string"==typeof e){for(u=e.length;32===e.charCodeAt(u-1);)a++,u--;if(u)break;u=-1}else if(-2===e)o=!0,a++;else if(-1!==e){c++;break}}if(a){const i={type:n===e.length||o||a<2?"lineSuffix":"hardBreakTrailing",start:{line:r.end.line,column:r.end.column-a,offset:r.end.offset-a,_index:r.start._index+c,_bufferIndex:c?u:r.start._bufferIndex+u},end:Object.assign({},r.end)};r.end=Object.assign({},i.start),r.start.offset===r.end.offset?Object.assign(r,i):(e.splice(n,0,["enter",i,t],["exit",i,t]),n+=2)}n++}return e}function Pe(e,t,n){const r=[];let i=-1;for(;++i<e.length;){const o=e[i].resolveAll;o&&!r.includes(o)&&(t=o(t,n),r.push(o))}return t}function Ne(e,t,n){let r=Object.assign(n?Object.assign({},n):{line:1,column:1,offset:0},{_index:0,_bufferIndex:-1});const i={},o=[];let c=[],u=[],a=!0;const l={consume:function(e){s(e)?(r.line++,r.column=1,r.offset+=-3===e?2:1,k()):-1!==e&&(r.column++,r.offset++),r._bufferIndex<0?r._index++:(r._bufferIndex++,r._bufferIndex===c[r._index].length&&(r._bufferIndex=-1,r._index++)),f.previous=e,a=!0},enter:function(e,t){const n=t||{};return n.type=e,n.start=g(),f.events.push(["enter",n,f]),u.push(n),n},exit:function(e){const t=u.pop();return t.end=g(),f.events.push(["exit",t,f]),t},attempt:x((function(e,t){v(e,t.from)})),check:x(b),interrupt:x(b,{interrupt:!0})},f={previous:null,code:null,containerState:{},events:[],parser:e,sliceStream:m,sliceSerialize:function(e,t){return function(e,t){let n=-1;const r=[];let i;for(;++n<e.length;){const o=e[n];let c;if("string"==typeof o)c=o;else switch(o){case-5:c="\r";break;case-4:c="\n";break;case-3:c="\r\n";break;case-2:c=t?" ":"\t";break;case-1:if(!t&&i)continue;c=" ";break;default:c=String.fromCharCode(o)}i=-2===o,r.push(c)}return r.join("")}(m(e),t)},now:g,defineSkip:function(e){i[e.line]=e.column,k()},write:function(e){return c=ve(c,e),function(){let e;for(;r._index<c.length;){const t=c[r._index];if("string"==typeof t)for(e=r._index,r._bufferIndex<0&&(r._bufferIndex=0);r._index===e&&r._bufferIndex<t.length;)h(t.charCodeAt(r._bufferIndex));else h(t)}}(),null!==c[c.length-1]?[]:(v(t,0),f.events=Pe(o,f.events,f),f.events)}};let p,d=t.tokenize.call(f,l);return t.resolveAll&&o.push(t),f;function m(e){return function(e,t){const n=t.start._index,r=t.start._bufferIndex,i=t.end._index,o=t.end._bufferIndex;let c;if(n===i)c=[e[n].slice(r,o)];else{if(c=e.slice(n,i),r>-1){const e=c[0];"string"==typeof e?c[0]=e.slice(r):c.shift()}o>0&&c.push(e[i].slice(0,o))}return c}(c,e)}function g(){const{line:e,column:t,offset:n,_index:i,_bufferIndex:o}=r;return{line:e,column:t,offset:n,_index:i,_bufferIndex:o}}function h(e){a=void 0,p=e,d=d(e)}function b(e,t){t.restore()}function x(e,t){return function(n,i,o){let c,s,p,d;return Array.isArray(n)?h(n):"tokenize"in n?h([n]):(m=n,function(e){const t=null!==e&&m[e],n=null!==e&&m.null;return h([...Array.isArray(t)?t:t?[t]:[],...Array.isArray(n)?n:n?[n]:[]])(e)});var m;function h(e){return c=e,s=0,0===e.length?o:b(e[s])}function b(e){return function(n){return d=function(){const e=g(),t=f.previous,n=f.currentConstruct,i=f.events.length,o=Array.from(u);return{restore:function(){r=e,f.previous=t,f.currentConstruct=n,f.events.length=i,u=o,k()},from:i}}(),p=e,e.partial||(f.currentConstruct=e),e.name&&f.parser.constructs.disable.null.includes(e.name)?v():e.tokenize.call(t?Object.assign(Object.create(f),t):f,l,x,v)(n)}}function x(t){return a=!0,e(p,d),i}function v(e){return a=!0,d.restore(),++s<c.length?b(c[s]):o}}}function v(e,t){e.resolveAll&&!o.includes(e)&&o.push(e),e.resolve&&xe(f.events,t,f.events.length-t,e.resolve(f.events.slice(t),f)),e.resolveTo&&(f.events=e.resolveTo(f.events,f))}function k(){r.line in i&&r.column<2&&(r.column=i[r.line],r.offset+=i[r.line]-1)}}const Ve={name:"thematicBreak",tokenize:function(e,t,n){let r,i=0;return function(t){return e.enter("thematicBreak"),function(e){return r=e,o(e)}(t)};function o(o){return o===r?(e.enter("thematicBreakSequence"),c(o)):i>=3&&(null===o||s(o))?(e.exit("thematicBreak"),t(o)):n(o)}function c(t){return t===r?(e.consume(t),i++,c):(e.exit("thematicBreakSequence"),p(t)?h(e,o,"whitespace")(t):o(t))}}},_e={name:"list",tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1];let o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0,c=0;return function(t){const i=r.containerState.type||(42===t||43===t||45===t?"listUnordered":"listOrdered");if("listUnordered"===i?!r.containerState.marker||t===r.containerState.marker:u(t)){if(r.containerState.type||(r.containerState.type=i,e.enter(i,{_container:!0})),"listUnordered"===i)return e.enter("listItemPrefix"),42===t||45===t?e.check(Ve,n,l)(t):l(t);if(!r.interrupt||49===t)return e.enter("listItemPrefix"),e.enter("listItemValue"),a(t)}return n(t)};function a(t){return u(t)&&++c<10?(e.consume(t),a):(!r.interrupt||c<2)&&(r.containerState.marker?t===r.containerState.marker:41===t||46===t)?(e.exit("listItemValue"),l(t)):n(t)}function l(t){return e.enter("listItemMarker"),e.consume(t),e.exit("listItemMarker"),r.containerState.marker=r.containerState.marker||t,e.check(Z,r.interrupt?n:s,e.attempt(Be,d,f))}function s(e){return r.containerState.initialBlankLine=!0,o++,d(e)}function f(t){return p(t)?(e.enter("listItemPrefixWhitespace"),e.consume(t),e.exit("listItemPrefixWhitespace"),d):n(t)}function d(n){return r.containerState.size=o+r.sliceSerialize(e.exit("listItemPrefix"),!0).length,t(n)}},continuation:{tokenize:function(e,t,n){const r=this;return r.containerState._closeFlow=void 0,e.check(Z,(function(n){return r.containerState.furtherBlankLines=r.containerState.furtherBlankLines||r.containerState.initialBlankLine,h(e,t,"listItemIndent",r.containerState.size+1)(n)}),(function(n){return r.containerState.furtherBlankLines||!p(n)?(r.containerState.furtherBlankLines=void 0,r.containerState.initialBlankLine=void 0,i(n)):(r.containerState.furtherBlankLines=void 0,r.containerState.initialBlankLine=void 0,e.attempt(je,t,i)(n))}));function i(i){return r.containerState._closeFlow=!0,r.interrupt=void 0,h(e,e.attempt(_e,t,n),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(i)}}},exit:function(e){e.exit(this.containerState.type)}},Be={tokenize:function(e,t,n){const r=this;return h(e,(function(e){const i=r.events[r.events.length-1];return!p(e)&&i&&"listItemPrefixWhitespace"===i[1].type?t(e):n(e)}),"listItemPrefixWhitespace",r.parser.constructs.disable.null.includes("codeIndented")?void 0:5)},partial:!0},je={tokenize:function(e,t,n){const r=this;return h(e,(function(e){const i=r.events[r.events.length-1];return i&&"listItemIndent"===i[1].type&&i[2].sliceSerialize(i[1],!0).length===r.containerState.size?t(e):n(e)}),"listItemIndent",r.containerState.size+1)},partial:!0},He={name:"blockQuote",tokenize:function(e,t,n){const r=this;return function(t){if(62===t){const n=r.containerState;return n.open||(e.enter("blockQuote",{_container:!0}),n.open=!0),e.enter("blockQuotePrefix"),e.enter("blockQuoteMarker"),e.consume(t),e.exit("blockQuoteMarker"),i}return n(t)};function i(n){return p(n)?(e.enter("blockQuotePrefixWhitespace"),e.consume(n),e.exit("blockQuotePrefixWhitespace"),e.exit("blockQuotePrefix"),t):(e.exit("blockQuotePrefix"),t(n))}},continuation:{tokenize:function(e,t,n){const r=this;return function(t){return p(t)?h(e,i,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):i(t)};function i(r){return e.attempt(He,t,n)(r)}}},exit:function(e){e.exit("blockQuote")}};function Ue(e,t,n,r,i,o,u,a,l){const p=l||Number.POSITIVE_INFINITY;let d=0;return function(t){return 60===t?(e.enter(r),e.enter(i),e.enter(o),e.consume(t),e.exit(o),m):null===t||32===t||41===t||c(t)?n(t):(e.enter(r),e.enter(u),e.enter(a),e.enter("chunkString",{contentType:"string"}),b(t))};function m(n){return 62===n?(e.enter(o),e.consume(n),e.exit(o),e.exit(i),e.exit(r),t):(e.enter(a),e.enter("chunkString",{contentType:"string"}),g(n))}function g(t){return 62===t?(e.exit("chunkString"),e.exit(a),m(t)):null===t||60===t||s(t)?n(t):(e.consume(t),92===t?h:g)}function h(t){return 60===t||62===t||92===t?(e.consume(t),g):g(t)}function b(i){return d||null!==i&&41!==i&&!f(i)?d<p&&40===i?(e.consume(i),d++,b):41===i?(e.consume(i),d--,b):null===i||32===i||40===i||c(i)?n(i):(e.consume(i),92===i?x:b):(e.exit("chunkString"),e.exit(a),e.exit(u),e.exit(r),t(i))}function x(t){return 40===t||41===t||92===t?(e.consume(t),b):b(t)}}function Ge(e,t,n,r,i,o){const c=this;let u,a=0;return function(t){return e.enter(r),e.enter(i),e.consume(t),e.exit(i),e.enter(o),l};function l(p){return a>999||null===p||91===p||93===p&&!u||94===p&&!a&&"_hiddenFootnoteSupport"in c.parser.constructs?n(p):93===p?(e.exit(o),e.enter(i),e.consume(p),e.exit(i),e.exit(r),t):s(p)?(e.enter("lineEnding"),e.consume(p),e.exit("lineEnding"),l):(e.enter("chunkString",{contentType:"string"}),f(p))}function f(t){return null===t||91===t||93===t||s(t)||a++>999?(e.exit("chunkString"),l(t)):(e.consume(t),u||(u=!p(t)),92===t?d:f)}function d(t){return 91===t||92===t||93===t?(e.consume(t),a++,f):f(t)}}function Qe(e,t,n,r,i,o){let c;return function(t){return 34===t||39===t||40===t?(e.enter(r),e.enter(i),e.consume(t),e.exit(i),c=40===t?41:t,u):n(t)};function u(n){return n===c?(e.enter(i),e.consume(n),e.exit(i),e.exit(r),t):(e.enter(o),a(n))}function a(t){return t===c?(e.exit(o),u(c)):null===t?n(t):s(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),h(e,a,"linePrefix")):(e.enter("chunkString",{contentType:"string"}),l(t))}function l(t){return t===c||null===t||s(t)?(e.exit("chunkString"),a(t)):(e.consume(t),92===t?f:l)}function f(t){return t===c||92===t?(e.consume(t),l):l(t)}}const We={name:"definition",tokenize:function(e,t,n){const r=this;let i;return function(t){return e.enter("definition"),function(t){return Ge.call(r,e,o,n,"definitionLabel","definitionLabelMarker","definitionLabelString")(t)}(t)};function o(t){return i=J(r.sliceSerialize(r.events[r.events.length-1][1]).slice(1,-1)),58===t?(e.enter("definitionMarker"),e.consume(t),e.exit("definitionMarker"),c):n(t)}function c(t){return f(t)?b(e,u)(t):u(t)}function u(t){return Ue(e,a,n,"definitionDestination","definitionDestinationLiteral","definitionDestinationLiteralMarker","definitionDestinationRaw","definitionDestinationString")(t)}function a(t){return e.attempt(Ze,l,l)(t)}function l(t){return p(t)?h(e,d,"whitespace")(t):d(t)}function d(o){return null===o||s(o)?(e.exit("definition"),r.parser.defined.push(i),t(o)):n(o)}}},Ze={tokenize:function(e,t,n){return function(t){return f(t)?b(e,r)(t):n(t)};function r(t){return Qe(e,i,n,"definitionTitle","definitionTitleMarker","definitionTitleString")(t)}function i(t){return p(t)?h(e,o,"whitespace")(t):o(t)}function o(e){return null===e||s(e)?t(e):n(e)}},partial:!0},Je={name:"codeIndented",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("codeIndented"),h(e,i,"linePrefix",5)(t)};function i(e){const t=r.events[r.events.length-1];return t&&"linePrefix"===t[1].type&&t[2].sliceSerialize(t[1],!0).length>=4?o(e):n(e)}function o(t){return null===t?u(t):s(t)?e.attempt(Ye,o,u)(t):(e.enter("codeFlowValue"),c(t))}function c(t){return null===t||s(t)?(e.exit("codeFlowValue"),o(t)):(e.consume(t),c)}function u(n){return e.exit("codeIndented"),t(n)}}},Ye={tokenize:function(e,t,n){const r=this;return i;function i(t){return r.parser.lazy[r.now().line]?n(t):s(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i):h(e,o,"linePrefix",5)(t)}function o(e){const o=r.events[r.events.length-1];return o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?t(e):s(e)?i(e):n(e)}},partial:!0},Ke={name:"headingAtx",tokenize:function(e,t,n){let r=0;return function(t){return e.enter("atxHeading"),function(t){return e.enter("atxHeadingSequence"),i(t)}(t)};function i(t){return 35===t&&r++<6?(e.consume(t),i):null===t||f(t)?(e.exit("atxHeadingSequence"),o(t)):n(t)}function o(n){return 35===n?(e.enter("atxHeadingSequence"),c(n)):null===n||s(n)?(e.exit("atxHeading"),t(n)):p(n)?h(e,o,"whitespace")(n):(e.enter("atxHeadingText"),u(n))}function c(t){return 35===t?(e.consume(t),c):(e.exit("atxHeadingSequence"),o(t))}function u(t){return null===t||35===t||f(t)?(e.exit("atxHeadingText"),o(t)):(e.consume(t),u)}},resolve:function(e,t){let n,r,i=e.length-2,o=3;return"whitespace"===e[o][1].type&&(o+=2),i-2>o&&"whitespace"===e[i][1].type&&(i-=2),"atxHeadingSequence"===e[i][1].type&&(o===i-1||i-4>o&&"whitespace"===e[i-2][1].type)&&(i-=o+1===i?2:4),i>o&&(n={type:"atxHeadingText",start:e[o][1].start,end:e[i][1].end},r={type:"chunkText",start:e[o][1].start,end:e[i][1].end,contentType:"text"},xe(e,o,i-o+1,[["enter",n,t],["enter",r,t],["exit",r,t],["exit",n,t]])),e}},Xe={name:"setextUnderline",tokenize:function(e,t,n){const r=this;let i;return function(t){let c,u=r.events.length;for(;u--;)if("lineEnding"!==r.events[u][1].type&&"linePrefix"!==r.events[u][1].type&&"content"!==r.events[u][1].type){c="paragraph"===r.events[u][1].type;break}return r.parser.lazy[r.now().line]||!r.interrupt&&!c?n(t):(e.enter("setextHeadingLine"),i=t,function(t){return e.enter("setextHeadingLineSequence"),o(t)}(t))};function o(t){return t===i?(e.consume(t),o):(e.exit("setextHeadingLineSequence"),p(t)?h(e,c,"lineSuffix")(t):c(t))}function c(r){return null===r||s(r)?(e.exit("setextHeadingLine"),t(r)):n(r)}},resolveTo:function(e,t){let n,r,i,o=e.length;for(;o--;)if("enter"===e[o][0]){if("content"===e[o][1].type){n=o;break}"paragraph"===e[o][1].type&&(r=o)}else"content"===e[o][1].type&&e.splice(o,1),i||"definition"!==e[o][1].type||(i=o);const c={type:"setextHeading",start:Object.assign({},e[r][1].start),end:Object.assign({},e[e.length-1][1].end)};return e[r][1].type="setextHeadingText",i?(e.splice(r,0,["enter",c,t]),e.splice(i+1,0,["exit",e[n][1],t]),e[n][1].end=Object.assign({},e[i][1].end)):e[n][1]=c,e.push(["exit",c,t]),e}},$e=["address","article","aside","base","basefont","blockquote","body","caption","center","col","colgroup","dd","details","dialog","dir","div","dl","dt","fieldset","figcaption","figure","footer","form","frame","frameset","h1","h2","h3","h4","h5","h6","head","header","hr","html","iframe","legend","li","link","main","menu","menuitem","nav","noframes","ol","optgroup","option","p","param","search","section","summary","table","tbody","td","tfoot","th","thead","title","tr","track","ul"],et=["pre","script","style","textarea"],tt={name:"htmlFlow",tokenize:function(e,t,n){const o=this;let c,u,a,l,d;return function(t){return function(t){return e.enter("htmlFlow"),e.enter("htmlFlowData"),e.consume(t),m}(t)};function m(i){return 33===i?(e.consume(i),g):47===i?(e.consume(i),u=!0,x):63===i?(e.consume(i),c=3,o.interrupt?t:V):r(i)?(e.consume(i),a=String.fromCharCode(i),v):n(i)}function g(i){return 45===i?(e.consume(i),c=2,h):91===i?(e.consume(i),c=5,l=0,b):r(i)?(e.consume(i),c=4,o.interrupt?t:V):n(i)}function h(r){return 45===r?(e.consume(r),o.interrupt?t:V):n(r)}function b(r){return r==="CDATA[".charCodeAt(l++)?(e.consume(r),6===l?o.interrupt?t:F:b):n(r)}function x(t){return r(t)?(e.consume(t),a=String.fromCharCode(t),v):n(t)}function v(r){if(null===r||47===r||62===r||f(r)){const i=47===r,l=a.toLowerCase();return i||u||!et.includes(l)?$e.includes(a.toLowerCase())?(c=6,i?(e.consume(r),k):o.interrupt?t(r):F(r)):(c=7,o.interrupt&&!o.parser.lazy[o.now().line]?n(r):u?y(r):w(r)):(c=1,o.interrupt?t(r):F(r))}return 45===r||i(r)?(e.consume(r),a+=String.fromCharCode(r),v):n(r)}function k(r){return 62===r?(e.consume(r),o.interrupt?t:F):n(r)}function y(t){return p(t)?(e.consume(t),y):A(t)}function w(t){return 47===t?(e.consume(t),A):58===t||95===t||r(t)?(e.consume(t),q):p(t)?(e.consume(t),w):A(t)}function q(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),q):S(t)}function S(t){return 61===t?(e.consume(t),L):p(t)?(e.consume(t),S):w(t)}function L(t){return null===t||60===t||61===t||62===t||96===t?n(t):34===t||39===t?(e.consume(t),d=t,T):p(t)?(e.consume(t),L):D(t)}function T(t){return t===d?(e.consume(t),d=null,E):null===t||s(t)?n(t):(e.consume(t),T)}function D(t){return null===t||34===t||39===t||47===t||60===t||61===t||62===t||96===t||f(t)?S(t):(e.consume(t),D)}function E(e){return 47===e||62===e||p(e)?w(e):n(e)}function A(t){return 62===t?(e.consume(t),C):n(t)}function C(t){return null===t||s(t)?F(t):p(t)?(e.consume(t),C):n(t)}function F(t){return 45===t&&2===c?(e.consume(t),R):60===t&&1===c?(e.consume(t),O):62===t&&4===c?(e.consume(t),_):63===t&&3===c?(e.consume(t),V):93===t&&5===c?(e.consume(t),N):!s(t)||6!==c&&7!==c?null===t||s(t)?(e.exit("htmlFlowData"),z(t)):(e.consume(t),F):(e.exit("htmlFlowData"),e.check(nt,B,z)(t))}function z(t){return e.check(rt,I,B)(t)}function I(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),M}function M(t){return null===t||s(t)?z(t):(e.enter("htmlFlowData"),F(t))}function R(t){return 45===t?(e.consume(t),V):F(t)}function O(t){return 47===t?(e.consume(t),a="",P):F(t)}function P(t){if(62===t){const n=a.toLowerCase();return et.includes(n)?(e.consume(t),_):F(t)}return r(t)&&a.length<8?(e.consume(t),a+=String.fromCharCode(t),P):F(t)}function N(t){return 93===t?(e.consume(t),V):F(t)}function V(t){return 62===t?(e.consume(t),_):45===t&&2===c?(e.consume(t),V):F(t)}function _(t){return null===t||s(t)?(e.exit("htmlFlowData"),B(t)):(e.consume(t),_)}function B(n){return e.exit("htmlFlow"),t(n)}},resolveTo:function(e){let t=e.length;for(;t--&&("enter"!==e[t][0]||"htmlFlow"!==e[t][1].type););return t>1&&"linePrefix"===e[t-2][1].type&&(e[t][1].start=e[t-2][1].start,e[t+1][1].start=e[t-2][1].start,e.splice(t-2,2)),e},concrete:!0},nt={tokenize:function(e,t,n){return function(r){return e.enter("lineEnding"),e.consume(r),e.exit("lineEnding"),e.attempt(Z,t,n)}},partial:!0},rt={tokenize:function(e,t,n){const r=this;return function(t){return s(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i):n(t)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},it={tokenize:function(e,t,n){const r=this;return function(t){return null===t?n(t):(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},ot={name:"codeFenced",tokenize:function(e,t,n){const r=this,i={tokenize:function(e,t,n){let i=0;return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),c};function c(t){return e.enter("codeFencedFence"),p(t)?h(e,a,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):a(t)}function a(t){return t===o?(e.enter("codeFencedFenceSequence"),l(t)):n(t)}function l(t){return t===o?(i++,e.consume(t),l):i>=u?(e.exit("codeFencedFenceSequence"),p(t)?h(e,f,"whitespace")(t):f(t)):n(t)}function f(r){return null===r||s(r)?(e.exit("codeFencedFence"),t(r)):n(r)}},partial:!0};let o,c=0,u=0;return function(t){return function(t){const n=r.events[r.events.length-1];return c=n&&"linePrefix"===n[1].type?n[2].sliceSerialize(n[1],!0).length:0,o=t,e.enter("codeFenced"),e.enter("codeFencedFence"),e.enter("codeFencedFenceSequence"),a(t)}(t)};function a(t){return t===o?(u++,e.consume(t),a):u<3?n(t):(e.exit("codeFencedFenceSequence"),p(t)?h(e,l,"whitespace")(t):l(t))}function l(n){return null===n||s(n)?(e.exit("codeFencedFence"),r.interrupt?t(n):e.check(it,g,y)(n)):(e.enter("codeFencedFenceInfo"),e.enter("chunkString",{contentType:"string"}),f(n))}function f(t){return null===t||s(t)?(e.exit("chunkString"),e.exit("codeFencedFenceInfo"),l(t)):p(t)?(e.exit("chunkString"),e.exit("codeFencedFenceInfo"),h(e,d,"whitespace")(t)):96===t&&t===o?n(t):(e.consume(t),f)}function d(t){return null===t||s(t)?l(t):(e.enter("codeFencedFenceMeta"),e.enter("chunkString",{contentType:"string"}),m(t))}function m(t){return null===t||s(t)?(e.exit("chunkString"),e.exit("codeFencedFenceMeta"),l(t)):96===t&&t===o?n(t):(e.consume(t),m)}function g(t){return e.attempt(i,y,b)(t)}function b(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),x}function x(t){return c>0&&p(t)?h(e,v,"linePrefix",c+1)(t):v(t)}function v(t){return null===t||s(t)?e.check(it,g,y)(t):(e.enter("codeFlowValue"),k(t))}function k(t){return null===t||s(t)?(e.exit("codeFlowValue"),v(t)):(e.consume(t),k)}function y(n){return e.exit("codeFenced"),t(n)}},concrete:!0},ct={AElig:"Æ",AMP:"&",Aacute:"Á",Abreve:"Ă",Acirc:"Â",Acy:"А",Afr:"𝔄",Agrave:"À",Alpha:"Α",Amacr:"Ā",And:"⩓",Aogon:"Ą",Aopf:"𝔸",ApplyFunction:"⁡",Aring:"Å",Ascr:"𝒜",Assign:"≔",Atilde:"Ã",Auml:"Ä",Backslash:"∖",Barv:"⫧",Barwed:"⌆",Bcy:"Б",Because:"∵",Bernoullis:"ℬ",Beta:"Β",Bfr:"𝔅",Bopf:"𝔹",Breve:"˘",Bscr:"ℬ",Bumpeq:"≎",CHcy:"Ч",COPY:"©",Cacute:"Ć",Cap:"⋒",CapitalDifferentialD:"ⅅ",Cayleys:"ℭ",Ccaron:"Č",Ccedil:"Ç",Ccirc:"Ĉ",Cconint:"∰",Cdot:"Ċ",Cedilla:"¸",CenterDot:"·",Cfr:"ℭ",Chi:"Χ",CircleDot:"⊙",CircleMinus:"⊖",CirclePlus:"⊕",CircleTimes:"⊗",ClockwiseContourIntegral:"∲",CloseCurlyDoubleQuote:"”",CloseCurlyQuote:"’",Colon:"∷",Colone:"⩴",Congruent:"≡",Conint:"∯",ContourIntegral:"∮",Copf:"ℂ",Coproduct:"∐",CounterClockwiseContourIntegral:"∳",Cross:"⨯",Cscr:"𝒞",Cup:"⋓",CupCap:"≍",DD:"ⅅ",DDotrahd:"⤑",DJcy:"Ђ",DScy:"Ѕ",DZcy:"Џ",Dagger:"‡",Darr:"↡",Dashv:"⫤",Dcaron:"Ď",Dcy:"Д",Del:"∇",Delta:"Δ",Dfr:"𝔇",DiacriticalAcute:"´",DiacriticalDot:"˙",DiacriticalDoubleAcute:"˝",DiacriticalGrave:"`",DiacriticalTilde:"˜",Diamond:"⋄",DifferentialD:"ⅆ",Dopf:"𝔻",Dot:"¨",DotDot:"⃜",DotEqual:"≐",DoubleContourIntegral:"∯",DoubleDot:"¨",DoubleDownArrow:"⇓",DoubleLeftArrow:"⇐",DoubleLeftRightArrow:"⇔",DoubleLeftTee:"⫤",DoubleLongLeftArrow:"⟸",DoubleLongLeftRightArrow:"⟺",DoubleLongRightArrow:"⟹",DoubleRightArrow:"⇒",DoubleRightTee:"⊨",DoubleUpArrow:"⇑",DoubleUpDownArrow:"⇕",DoubleVerticalBar:"∥",DownArrow:"↓",DownArrowBar:"⤓",DownArrowUpArrow:"⇵",DownBreve:"̑",DownLeftRightVector:"⥐",DownLeftTeeVector:"⥞",DownLeftVector:"↽",DownLeftVectorBar:"⥖",DownRightTeeVector:"⥟",DownRightVector:"⇁",DownRightVectorBar:"⥗",DownTee:"⊤",DownTeeArrow:"↧",Downarrow:"⇓",Dscr:"𝒟",Dstrok:"Đ",ENG:"Ŋ",ETH:"Ð",Eacute:"É",Ecaron:"Ě",Ecirc:"Ê",Ecy:"Э",Edot:"Ė",Efr:"𝔈",Egrave:"È",Element:"∈",Emacr:"Ē",EmptySmallSquare:"◻",EmptyVerySmallSquare:"▫",Eogon:"Ę",Eopf:"𝔼",Epsilon:"Ε",Equal:"⩵",EqualTilde:"≂",Equilibrium:"⇌",Escr:"ℰ",Esim:"⩳",Eta:"Η",Euml:"Ë",Exists:"∃",ExponentialE:"ⅇ",Fcy:"Ф",Ffr:"𝔉",FilledSmallSquare:"◼",FilledVerySmallSquare:"▪",Fopf:"𝔽",ForAll:"∀",Fouriertrf:"ℱ",Fscr:"ℱ",GJcy:"Ѓ",GT:">",Gamma:"Γ",Gammad:"Ϝ",Gbreve:"Ğ",Gcedil:"Ģ",Gcirc:"Ĝ",Gcy:"Г",Gdot:"Ġ",Gfr:"𝔊",Gg:"⋙",Gopf:"𝔾",GreaterEqual:"≥",GreaterEqualLess:"⋛",GreaterFullEqual:"≧",GreaterGreater:"⪢",GreaterLess:"≷",GreaterSlantEqual:"⩾",GreaterTilde:"≳",Gscr:"𝒢",Gt:"≫",HARDcy:"Ъ",Hacek:"ˇ",Hat:"^",Hcirc:"Ĥ",Hfr:"ℌ",HilbertSpace:"ℋ",Hopf:"ℍ",HorizontalLine:"─",Hscr:"ℋ",Hstrok:"Ħ",HumpDownHump:"≎",HumpEqual:"≏",IEcy:"Е",IJlig:"Ĳ",IOcy:"Ё",Iacute:"Í",Icirc:"Î",Icy:"И",Idot:"İ",Ifr:"ℑ",Igrave:"Ì",Im:"ℑ",Imacr:"Ī",ImaginaryI:"ⅈ",Implies:"⇒",Int:"∬",Integral:"∫",Intersection:"⋂",InvisibleComma:"⁣",InvisibleTimes:"⁢",Iogon:"Į",Iopf:"𝕀",Iota:"Ι",Iscr:"ℐ",Itilde:"Ĩ",Iukcy:"І",Iuml:"Ï",Jcirc:"Ĵ",Jcy:"Й",Jfr:"𝔍",Jopf:"𝕁",Jscr:"𝒥",Jsercy:"Ј",Jukcy:"Є",KHcy:"Х",KJcy:"Ќ",Kappa:"Κ",Kcedil:"Ķ",Kcy:"К",Kfr:"𝔎",Kopf:"𝕂",Kscr:"𝒦",LJcy:"Љ",LT:"<",Lacute:"Ĺ",Lambda:"Λ",Lang:"⟪",Laplacetrf:"ℒ",Larr:"↞",Lcaron:"Ľ",Lcedil:"Ļ",Lcy:"Л",LeftAngleBracket:"⟨",LeftArrow:"←",LeftArrowBar:"⇤",LeftArrowRightArrow:"⇆",LeftCeiling:"⌈",LeftDoubleBracket:"⟦",LeftDownTeeVector:"⥡",LeftDownVector:"⇃",LeftDownVectorBar:"⥙",LeftFloor:"⌊",LeftRightArrow:"↔",LeftRightVector:"⥎",LeftTee:"⊣",LeftTeeArrow:"↤",LeftTeeVector:"⥚",LeftTriangle:"⊲",LeftTriangleBar:"⧏",LeftTriangleEqual:"⊴",LeftUpDownVector:"⥑",LeftUpTeeVector:"⥠",LeftUpVector:"↿",LeftUpVectorBar:"⥘",LeftVector:"↼",LeftVectorBar:"⥒",Leftarrow:"⇐",Leftrightarrow:"⇔",LessEqualGreater:"⋚",LessFullEqual:"≦",LessGreater:"≶",LessLess:"⪡",LessSlantEqual:"⩽",LessTilde:"≲",Lfr:"𝔏",Ll:"⋘",Lleftarrow:"⇚",Lmidot:"Ŀ",LongLeftArrow:"⟵",LongLeftRightArrow:"⟷",LongRightArrow:"⟶",Longleftarrow:"⟸",Longleftrightarrow:"⟺",Longrightarrow:"⟹",Lopf:"𝕃",LowerLeftArrow:"↙",LowerRightArrow:"↘",Lscr:"ℒ",Lsh:"↰",Lstrok:"Ł",Lt:"≪",Map:"⤅",Mcy:"М",MediumSpace:" ",Mellintrf:"ℳ",Mfr:"𝔐",MinusPlus:"∓",Mopf:"𝕄",Mscr:"ℳ",Mu:"Μ",NJcy:"Њ",Nacute:"Ń",Ncaron:"Ň",Ncedil:"Ņ",Ncy:"Н",NegativeMediumSpace:"​",NegativeThickSpace:"​",NegativeThinSpace:"​",NegativeVeryThinSpace:"​",NestedGreaterGreater:"≫",NestedLessLess:"≪",NewLine:"\n",Nfr:"𝔑",NoBreak:"⁠",NonBreakingSpace:" ",Nopf:"ℕ",Not:"⫬",NotCongruent:"≢",NotCupCap:"≭",NotDoubleVerticalBar:"∦",NotElement:"∉",NotEqual:"≠",NotEqualTilde:"≂̸",NotExists:"∄",NotGreater:"≯",NotGreaterEqual:"≱",NotGreaterFullEqual:"≧̸",NotGreaterGreater:"≫̸",NotGreaterLess:"≹",NotGreaterSlantEqual:"⩾̸",NotGreaterTilde:"≵",NotHumpDownHump:"≎̸",NotHumpEqual:"≏̸",NotLeftTriangle:"⋪",NotLeftTriangleBar:"⧏̸",NotLeftTriangleEqual:"⋬",NotLess:"≮",NotLessEqual:"≰",NotLessGreater:"≸",NotLessLess:"≪̸",NotLessSlantEqual:"⩽̸",NotLessTilde:"≴",NotNestedGreaterGreater:"⪢̸",NotNestedLessLess:"⪡̸",NotPrecedes:"⊀",NotPrecedesEqual:"⪯̸",NotPrecedesSlantEqual:"⋠",NotReverseElement:"∌",NotRightTriangle:"⋫",NotRightTriangleBar:"⧐̸",NotRightTriangleEqual:"⋭",NotSquareSubset:"⊏̸",NotSquareSubsetEqual:"⋢",NotSquareSuperset:"⊐̸",NotSquareSupersetEqual:"⋣",NotSubset:"⊂⃒",NotSubsetEqual:"⊈",NotSucceeds:"⊁",NotSucceedsEqual:"⪰̸",NotSucceedsSlantEqual:"⋡",NotSucceedsTilde:"≿̸",NotSuperset:"⊃⃒",NotSupersetEqual:"⊉",NotTilde:"≁",NotTildeEqual:"≄",NotTildeFullEqual:"≇",NotTildeTilde:"≉",NotVerticalBar:"∤",Nscr:"𝒩",Ntilde:"Ñ",Nu:"Ν",OElig:"Œ",Oacute:"Ó",Ocirc:"Ô",Ocy:"О",Odblac:"Ő",Ofr:"𝔒",Ograve:"Ò",Omacr:"Ō",Omega:"Ω",Omicron:"Ο",Oopf:"𝕆",OpenCurlyDoubleQuote:"“",OpenCurlyQuote:"‘",Or:"⩔",Oscr:"𝒪",Oslash:"Ø",Otilde:"Õ",Otimes:"⨷",Ouml:"Ö",OverBar:"‾",OverBrace:"⏞",OverBracket:"⎴",OverParenthesis:"⏜",PartialD:"∂",Pcy:"П",Pfr:"𝔓",Phi:"Φ",Pi:"Π",PlusMinus:"±",Poincareplane:"ℌ",Popf:"ℙ",Pr:"⪻",Precedes:"≺",PrecedesEqual:"⪯",PrecedesSlantEqual:"≼",PrecedesTilde:"≾",Prime:"″",Product:"∏",Proportion:"∷",Proportional:"∝",Pscr:"𝒫",Psi:"Ψ",QUOT:'"',Qfr:"𝔔",Qopf:"ℚ",Qscr:"𝒬",RBarr:"⤐",REG:"®",Racute:"Ŕ",Rang:"⟫",Rarr:"↠",Rarrtl:"⤖",Rcaron:"Ř",Rcedil:"Ŗ",Rcy:"Р",Re:"ℜ",ReverseElement:"∋",ReverseEquilibrium:"⇋",ReverseUpEquilibrium:"⥯",Rfr:"ℜ",Rho:"Ρ",RightAngleBracket:"⟩",RightArrow:"→",RightArrowBar:"⇥",RightArrowLeftArrow:"⇄",RightCeiling:"⌉",RightDoubleBracket:"⟧",RightDownTeeVector:"⥝",RightDownVector:"⇂",RightDownVectorBar:"⥕",RightFloor:"⌋",RightTee:"⊢",RightTeeArrow:"↦",RightTeeVector:"⥛",RightTriangle:"⊳",RightTriangleBar:"⧐",RightTriangleEqual:"⊵",RightUpDownVector:"⥏",RightUpTeeVector:"⥜",RightUpVector:"↾",RightUpVectorBar:"⥔",RightVector:"⇀",RightVectorBar:"⥓",Rightarrow:"⇒",Ropf:"ℝ",RoundImplies:"⥰",Rrightarrow:"⇛",Rscr:"ℛ",Rsh:"↱",RuleDelayed:"⧴",SHCHcy:"Щ",SHcy:"Ш",SOFTcy:"Ь",Sacute:"Ś",Sc:"⪼",Scaron:"Š",Scedil:"Ş",Scirc:"Ŝ",Scy:"С",Sfr:"𝔖",ShortDownArrow:"↓",ShortLeftArrow:"←",ShortRightArrow:"→",ShortUpArrow:"↑",Sigma:"Σ",SmallCircle:"∘",Sopf:"𝕊",Sqrt:"√",Square:"□",SquareIntersection:"⊓",SquareSubset:"⊏",SquareSubsetEqual:"⊑",SquareSuperset:"⊐",SquareSupersetEqual:"⊒",SquareUnion:"⊔",Sscr:"𝒮",Star:"⋆",Sub:"⋐",Subset:"⋐",SubsetEqual:"⊆",Succeeds:"≻",SucceedsEqual:"⪰",SucceedsSlantEqual:"≽",SucceedsTilde:"≿",SuchThat:"∋",Sum:"∑",Sup:"⋑",Superset:"⊃",SupersetEqual:"⊇",Supset:"⋑",THORN:"Þ",TRADE:"™",TSHcy:"Ћ",TScy:"Ц",Tab:"\t",Tau:"Τ",Tcaron:"Ť",Tcedil:"Ţ",Tcy:"Т",Tfr:"𝔗",Therefore:"∴",Theta:"Θ",ThickSpace:"  ",ThinSpace:" ",Tilde:"∼",TildeEqual:"≃",TildeFullEqual:"≅",TildeTilde:"≈",Topf:"𝕋",TripleDot:"⃛",Tscr:"𝒯",Tstrok:"Ŧ",Uacute:"Ú",Uarr:"↟",Uarrocir:"⥉",Ubrcy:"Ў",Ubreve:"Ŭ",Ucirc:"Û",Ucy:"У",Udblac:"Ű",Ufr:"𝔘",Ugrave:"Ù",Umacr:"Ū",UnderBar:"_",UnderBrace:"⏟",UnderBracket:"⎵",UnderParenthesis:"⏝",Union:"⋃",UnionPlus:"⊎",Uogon:"Ų",Uopf:"𝕌",UpArrow:"↑",UpArrowBar:"⤒",UpArrowDownArrow:"⇅",UpDownArrow:"↕",UpEquilibrium:"⥮",UpTee:"⊥",UpTeeArrow:"↥",Uparrow:"⇑",Updownarrow:"⇕",UpperLeftArrow:"↖",UpperRightArrow:"↗",Upsi:"ϒ",Upsilon:"Υ",Uring:"Ů",Uscr:"𝒰",Utilde:"Ũ",Uuml:"Ü",VDash:"⊫",Vbar:"⫫",Vcy:"В",Vdash:"⊩",Vdashl:"⫦",Vee:"⋁",Verbar:"‖",Vert:"‖",VerticalBar:"∣",VerticalLine:"|",VerticalSeparator:"❘",VerticalTilde:"≀",VeryThinSpace:" ",Vfr:"𝔙",Vopf:"𝕍",Vscr:"𝒱",Vvdash:"⊪",Wcirc:"Ŵ",Wedge:"⋀",Wfr:"𝔚",Wopf:"𝕎",Wscr:"𝒲",Xfr:"𝔛",Xi:"Ξ",Xopf:"𝕏",Xscr:"𝒳",YAcy:"Я",YIcy:"Ї",YUcy:"Ю",Yacute:"Ý",Ycirc:"Ŷ",Ycy:"Ы",Yfr:"𝔜",Yopf:"𝕐",Yscr:"𝒴",Yuml:"Ÿ",ZHcy:"Ж",Zacute:"Ź",Zcaron:"Ž",Zcy:"З",Zdot:"Ż",ZeroWidthSpace:"​",Zeta:"Ζ",Zfr:"ℨ",Zopf:"ℤ",Zscr:"𝒵",aacute:"á",abreve:"ă",ac:"∾",acE:"∾̳",acd:"∿",acirc:"â",acute:"´",acy:"а",aelig:"æ",af:"⁡",afr:"𝔞",agrave:"à",alefsym:"ℵ",aleph:"ℵ",alpha:"α",amacr:"ā",amalg:"⨿",amp:"&",and:"∧",andand:"⩕",andd:"⩜",andslope:"⩘",andv:"⩚",ang:"∠",ange:"⦤",angle:"∠",angmsd:"∡",angmsdaa:"⦨",angmsdab:"⦩",angmsdac:"⦪",angmsdad:"⦫",angmsdae:"⦬",angmsdaf:"⦭",angmsdag:"⦮",angmsdah:"⦯",angrt:"∟",angrtvb:"⊾",angrtvbd:"⦝",angsph:"∢",angst:"Å",angzarr:"⍼",aogon:"ą",aopf:"𝕒",ap:"≈",apE:"⩰",apacir:"⩯",ape:"≊",apid:"≋",apos:"'",approx:"≈",approxeq:"≊",aring:"å",ascr:"𝒶",ast:"*",asymp:"≈",asympeq:"≍",atilde:"ã",auml:"ä",awconint:"∳",awint:"⨑",bNot:"⫭",backcong:"≌",backepsilon:"϶",backprime:"‵",backsim:"∽",backsimeq:"⋍",barvee:"⊽",barwed:"⌅",barwedge:"⌅",bbrk:"⎵",bbrktbrk:"⎶",bcong:"≌",bcy:"б",bdquo:"„",becaus:"∵",because:"∵",bemptyv:"⦰",bepsi:"϶",bernou:"ℬ",beta:"β",beth:"ℶ",between:"≬",bfr:"𝔟",bigcap:"⋂",bigcirc:"◯",bigcup:"⋃",bigodot:"⨀",bigoplus:"⨁",bigotimes:"⨂",bigsqcup:"⨆",bigstar:"★",bigtriangledown:"▽",bigtriangleup:"△",biguplus:"⨄",bigvee:"⋁",bigwedge:"⋀",bkarow:"⤍",blacklozenge:"⧫",blacksquare:"▪",blacktriangle:"▴",blacktriangledown:"▾",blacktriangleleft:"◂",blacktriangleright:"▸",blank:"␣",blk12:"▒",blk14:"░",blk34:"▓",block:"█",bne:"=⃥",bnequiv:"≡⃥",bnot:"⌐",bopf:"𝕓",bot:"⊥",bottom:"⊥",bowtie:"⋈",boxDL:"╗",boxDR:"╔",boxDl:"╖",boxDr:"╓",boxH:"═",boxHD:"╦",boxHU:"╩",boxHd:"╤",boxHu:"╧",boxUL:"╝",boxUR:"╚",boxUl:"╜",boxUr:"╙",boxV:"║",boxVH:"╬",boxVL:"╣",boxVR:"╠",boxVh:"╫",boxVl:"╢",boxVr:"╟",boxbox:"⧉",boxdL:"╕",boxdR:"╒",boxdl:"┐",boxdr:"┌",boxh:"─",boxhD:"╥",boxhU:"╨",boxhd:"┬",boxhu:"┴",boxminus:"⊟",boxplus:"⊞",boxtimes:"⊠",boxuL:"╛",boxuR:"╘",boxul:"┘",boxur:"└",boxv:"│",boxvH:"╪",boxvL:"╡",boxvR:"╞",boxvh:"┼",boxvl:"┤",boxvr:"├",bprime:"‵",breve:"˘",brvbar:"¦",bscr:"𝒷",bsemi:"⁏",bsim:"∽",bsime:"⋍",bsol:"\\",bsolb:"⧅",bsolhsub:"⟈",bull:"•",bullet:"•",bump:"≎",bumpE:"⪮",bumpe:"≏",bumpeq:"≏",cacute:"ć",cap:"∩",capand:"⩄",capbrcup:"⩉",capcap:"⩋",capcup:"⩇",capdot:"⩀",caps:"∩︀",caret:"⁁",caron:"ˇ",ccaps:"⩍",ccaron:"č",ccedil:"ç",ccirc:"ĉ",ccups:"⩌",ccupssm:"⩐",cdot:"ċ",cedil:"¸",cemptyv:"⦲",cent:"¢",centerdot:"·",cfr:"𝔠",chcy:"ч",check:"✓",checkmark:"✓",chi:"χ",cir:"○",cirE:"⧃",circ:"ˆ",circeq:"≗",circlearrowleft:"↺",circlearrowright:"↻",circledR:"®",circledS:"Ⓢ",circledast:"⊛",circledcirc:"⊚",circleddash:"⊝",cire:"≗",cirfnint:"⨐",cirmid:"⫯",cirscir:"⧂",clubs:"♣",clubsuit:"♣",colon:":",colone:"≔",coloneq:"≔",comma:",",commat:"@",comp:"∁",compfn:"∘",complement:"∁",complexes:"ℂ",cong:"≅",congdot:"⩭",conint:"∮",copf:"𝕔",coprod:"∐",copy:"©",copysr:"℗",crarr:"↵",cross:"✗",cscr:"𝒸",csub:"⫏",csube:"⫑",csup:"⫐",csupe:"⫒",ctdot:"⋯",cudarrl:"⤸",cudarrr:"⤵",cuepr:"⋞",cuesc:"⋟",cularr:"↶",cularrp:"⤽",cup:"∪",cupbrcap:"⩈",cupcap:"⩆",cupcup:"⩊",cupdot:"⊍",cupor:"⩅",cups:"∪︀",curarr:"↷",curarrm:"⤼",curlyeqprec:"⋞",curlyeqsucc:"⋟",curlyvee:"⋎",curlywedge:"⋏",curren:"¤",curvearrowleft:"↶",curvearrowright:"↷",cuvee:"⋎",cuwed:"⋏",cwconint:"∲",cwint:"∱",cylcty:"⌭",dArr:"⇓",dHar:"⥥",dagger:"†",daleth:"ℸ",darr:"↓",dash:"‐",dashv:"⊣",dbkarow:"⤏",dblac:"˝",dcaron:"ď",dcy:"д",dd:"ⅆ",ddagger:"‡",ddarr:"⇊",ddotseq:"⩷",deg:"°",delta:"δ",demptyv:"⦱",dfisht:"⥿",dfr:"𝔡",dharl:"⇃",dharr:"⇂",diam:"⋄",diamond:"⋄",diamondsuit:"♦",diams:"♦",die:"¨",digamma:"ϝ",disin:"⋲",div:"÷",divide:"÷",divideontimes:"⋇",divonx:"⋇",djcy:"ђ",dlcorn:"⌞",dlcrop:"⌍",dollar:"$",dopf:"𝕕",dot:"˙",doteq:"≐",doteqdot:"≑",dotminus:"∸",dotplus:"∔",dotsquare:"⊡",doublebarwedge:"⌆",downarrow:"↓",downdownarrows:"⇊",downharpoonleft:"⇃",downharpoonright:"⇂",drbkarow:"⤐",drcorn:"⌟",drcrop:"⌌",dscr:"𝒹",dscy:"ѕ",dsol:"⧶",dstrok:"đ",dtdot:"⋱",dtri:"▿",dtrif:"▾",duarr:"⇵",duhar:"⥯",dwangle:"⦦",dzcy:"џ",dzigrarr:"⟿",eDDot:"⩷",eDot:"≑",eacute:"é",easter:"⩮",ecaron:"ě",ecir:"≖",ecirc:"ê",ecolon:"≕",ecy:"э",edot:"ė",ee:"ⅇ",efDot:"≒",efr:"𝔢",eg:"⪚",egrave:"è",egs:"⪖",egsdot:"⪘",el:"⪙",elinters:"⏧",ell:"ℓ",els:"⪕",elsdot:"⪗",emacr:"ē",empty:"∅",emptyset:"∅",emptyv:"∅",emsp13:" ",emsp14:" ",emsp:" ",eng:"ŋ",ensp:" ",eogon:"ę",eopf:"𝕖",epar:"⋕",eparsl:"⧣",eplus:"⩱",epsi:"ε",epsilon:"ε",epsiv:"ϵ",eqcirc:"≖",eqcolon:"≕",eqsim:"≂",eqslantgtr:"⪖",eqslantless:"⪕",equals:"=",equest:"≟",equiv:"≡",equivDD:"⩸",eqvparsl:"⧥",erDot:"≓",erarr:"⥱",escr:"ℯ",esdot:"≐",esim:"≂",eta:"η",eth:"ð",euml:"ë",euro:"€",excl:"!",exist:"∃",expectation:"ℰ",exponentiale:"ⅇ",fallingdotseq:"≒",fcy:"ф",female:"♀",ffilig:"ﬃ",fflig:"ﬀ",ffllig:"ﬄ",ffr:"𝔣",filig:"ﬁ",fjlig:"fj",flat:"♭",fllig:"ﬂ",fltns:"▱",fnof:"ƒ",fopf:"𝕗",forall:"∀",fork:"⋔",forkv:"⫙",fpartint:"⨍",frac12:"½",frac13:"⅓",frac14:"¼",frac15:"⅕",frac16:"⅙",frac18:"⅛",frac23:"⅔",frac25:"⅖",frac34:"¾",frac35:"⅗",frac38:"⅜",frac45:"⅘",frac56:"⅚",frac58:"⅝",frac78:"⅞",frasl:"⁄",frown:"⌢",fscr:"𝒻",gE:"≧",gEl:"⪌",gacute:"ǵ",gamma:"γ",gammad:"ϝ",gap:"⪆",gbreve:"ğ",gcirc:"ĝ",gcy:"г",gdot:"ġ",ge:"≥",gel:"⋛",geq:"≥",geqq:"≧",geqslant:"⩾",ges:"⩾",gescc:"⪩",gesdot:"⪀",gesdoto:"⪂",gesdotol:"⪄",gesl:"⋛︀",gesles:"⪔",gfr:"𝔤",gg:"≫",ggg:"⋙",gimel:"ℷ",gjcy:"ѓ",gl:"≷",glE:"⪒",gla:"⪥",glj:"⪤",gnE:"≩",gnap:"⪊",gnapprox:"⪊",gne:"⪈",gneq:"⪈",gneqq:"≩",gnsim:"⋧",gopf:"𝕘",grave:"`",gscr:"ℊ",gsim:"≳",gsime:"⪎",gsiml:"⪐",gt:">",gtcc:"⪧",gtcir:"⩺",gtdot:"⋗",gtlPar:"⦕",gtquest:"⩼",gtrapprox:"⪆",gtrarr:"⥸",gtrdot:"⋗",gtreqless:"⋛",gtreqqless:"⪌",gtrless:"≷",gtrsim:"≳",gvertneqq:"≩︀",gvnE:"≩︀",hArr:"⇔",hairsp:" ",half:"½",hamilt:"ℋ",hardcy:"ъ",harr:"↔",harrcir:"⥈",harrw:"↭",hbar:"ℏ",hcirc:"ĥ",hearts:"♥",heartsuit:"♥",hellip:"…",hercon:"⊹",hfr:"𝔥",hksearow:"⤥",hkswarow:"⤦",hoarr:"⇿",homtht:"∻",hookleftarrow:"↩",hookrightarrow:"↪",hopf:"𝕙",horbar:"―",hscr:"𝒽",hslash:"ℏ",hstrok:"ħ",hybull:"⁃",hyphen:"‐",iacute:"í",ic:"⁣",icirc:"î",icy:"и",iecy:"е",iexcl:"¡",iff:"⇔",ifr:"𝔦",igrave:"ì",ii:"ⅈ",iiiint:"⨌",iiint:"∭",iinfin:"⧜",iiota:"℩",ijlig:"ĳ",imacr:"ī",image:"ℑ",imagline:"ℐ",imagpart:"ℑ",imath:"ı",imof:"⊷",imped:"Ƶ",in:"∈",incare:"℅",infin:"∞",infintie:"⧝",inodot:"ı",int:"∫",intcal:"⊺",integers:"ℤ",intercal:"⊺",intlarhk:"⨗",intprod:"⨼",iocy:"ё",iogon:"į",iopf:"𝕚",iota:"ι",iprod:"⨼",iquest:"¿",iscr:"𝒾",isin:"∈",isinE:"⋹",isindot:"⋵",isins:"⋴",isinsv:"⋳",isinv:"∈",it:"⁢",itilde:"ĩ",iukcy:"і",iuml:"ï",jcirc:"ĵ",jcy:"й",jfr:"𝔧",jmath:"ȷ",jopf:"𝕛",jscr:"𝒿",jsercy:"ј",jukcy:"є",kappa:"κ",kappav:"ϰ",kcedil:"ķ",kcy:"к",kfr:"𝔨",kgreen:"ĸ",khcy:"х",kjcy:"ќ",kopf:"𝕜",kscr:"𝓀",lAarr:"⇚",lArr:"⇐",lAtail:"⤛",lBarr:"⤎",lE:"≦",lEg:"⪋",lHar:"⥢",lacute:"ĺ",laemptyv:"⦴",lagran:"ℒ",lambda:"λ",lang:"⟨",langd:"⦑",langle:"⟨",lap:"⪅",laquo:"«",larr:"←",larrb:"⇤",larrbfs:"⤟",larrfs:"⤝",larrhk:"↩",larrlp:"↫",larrpl:"⤹",larrsim:"⥳",larrtl:"↢",lat:"⪫",latail:"⤙",late:"⪭",lates:"⪭︀",lbarr:"⤌",lbbrk:"❲",lbrace:"{",lbrack:"[",lbrke:"⦋",lbrksld:"⦏",lbrkslu:"⦍",lcaron:"ľ",lcedil:"ļ",lceil:"⌈",lcub:"{",lcy:"л",ldca:"⤶",ldquo:"“",ldquor:"„",ldrdhar:"⥧",ldrushar:"⥋",ldsh:"↲",le:"≤",leftarrow:"←",leftarrowtail:"↢",leftharpoondown:"↽",leftharpoonup:"↼",leftleftarrows:"⇇",leftrightarrow:"↔",leftrightarrows:"⇆",leftrightharpoons:"⇋",leftrightsquigarrow:"↭",leftthreetimes:"⋋",leg:"⋚",leq:"≤",leqq:"≦",leqslant:"⩽",les:"⩽",lescc:"⪨",lesdot:"⩿",lesdoto:"⪁",lesdotor:"⪃",lesg:"⋚︀",lesges:"⪓",lessapprox:"⪅",lessdot:"⋖",lesseqgtr:"⋚",lesseqqgtr:"⪋",lessgtr:"≶",lesssim:"≲",lfisht:"⥼",lfloor:"⌊",lfr:"𝔩",lg:"≶",lgE:"⪑",lhard:"↽",lharu:"↼",lharul:"⥪",lhblk:"▄",ljcy:"љ",ll:"≪",llarr:"⇇",llcorner:"⌞",llhard:"⥫",lltri:"◺",lmidot:"ŀ",lmoust:"⎰",lmoustache:"⎰",lnE:"≨",lnap:"⪉",lnapprox:"⪉",lne:"⪇",lneq:"⪇",lneqq:"≨",lnsim:"⋦",loang:"⟬",loarr:"⇽",lobrk:"⟦",longleftarrow:"⟵",longleftrightarrow:"⟷",longmapsto:"⟼",longrightarrow:"⟶",looparrowleft:"↫",looparrowright:"↬",lopar:"⦅",lopf:"𝕝",loplus:"⨭",lotimes:"⨴",lowast:"∗",lowbar:"_",loz:"◊",lozenge:"◊",lozf:"⧫",lpar:"(",lparlt:"⦓",lrarr:"⇆",lrcorner:"⌟",lrhar:"⇋",lrhard:"⥭",lrm:"‎",lrtri:"⊿",lsaquo:"‹",lscr:"𝓁",lsh:"↰",lsim:"≲",lsime:"⪍",lsimg:"⪏",lsqb:"[",lsquo:"‘",lsquor:"‚",lstrok:"ł",lt:"<",ltcc:"⪦",ltcir:"⩹",ltdot:"⋖",lthree:"⋋",ltimes:"⋉",ltlarr:"⥶",ltquest:"⩻",ltrPar:"⦖",ltri:"◃",ltrie:"⊴",ltrif:"◂",lurdshar:"⥊",luruhar:"⥦",lvertneqq:"≨︀",lvnE:"≨︀",mDDot:"∺",macr:"¯",male:"♂",malt:"✠",maltese:"✠",map:"↦",mapsto:"↦",mapstodown:"↧",mapstoleft:"↤",mapstoup:"↥",marker:"▮",mcomma:"⨩",mcy:"м",mdash:"—",measuredangle:"∡",mfr:"𝔪",mho:"℧",micro:"µ",mid:"∣",midast:"*",midcir:"⫰",middot:"·",minus:"−",minusb:"⊟",minusd:"∸",minusdu:"⨪",mlcp:"⫛",mldr:"…",mnplus:"∓",models:"⊧",mopf:"𝕞",mp:"∓",mscr:"𝓂",mstpos:"∾",mu:"μ",multimap:"⊸",mumap:"⊸",nGg:"⋙̸",nGt:"≫⃒",nGtv:"≫̸",nLeftarrow:"⇍",nLeftrightarrow:"⇎",nLl:"⋘̸",nLt:"≪⃒",nLtv:"≪̸",nRightarrow:"⇏",nVDash:"⊯",nVdash:"⊮",nabla:"∇",nacute:"ń",nang:"∠⃒",nap:"≉",napE:"⩰̸",napid:"≋̸",napos:"ŉ",napprox:"≉",natur:"♮",natural:"♮",naturals:"ℕ",nbsp:" ",nbump:"≎̸",nbumpe:"≏̸",ncap:"⩃",ncaron:"ň",ncedil:"ņ",ncong:"≇",ncongdot:"⩭̸",ncup:"⩂",ncy:"н",ndash:"–",ne:"≠",neArr:"⇗",nearhk:"⤤",nearr:"↗",nearrow:"↗",nedot:"≐̸",nequiv:"≢",nesear:"⤨",nesim:"≂̸",nexist:"∄",nexists:"∄",nfr:"𝔫",ngE:"≧̸",nge:"≱",ngeq:"≱",ngeqq:"≧̸",ngeqslant:"⩾̸",nges:"⩾̸",ngsim:"≵",ngt:"≯",ngtr:"≯",nhArr:"⇎",nharr:"↮",nhpar:"⫲",ni:"∋",nis:"⋼",nisd:"⋺",niv:"∋",njcy:"њ",nlArr:"⇍",nlE:"≦̸",nlarr:"↚",nldr:"‥",nle:"≰",nleftarrow:"↚",nleftrightarrow:"↮",nleq:"≰",nleqq:"≦̸",nleqslant:"⩽̸",nles:"⩽̸",nless:"≮",nlsim:"≴",nlt:"≮",nltri:"⋪",nltrie:"⋬",nmid:"∤",nopf:"𝕟",not:"¬",notin:"∉",notinE:"⋹̸",notindot:"⋵̸",notinva:"∉",notinvb:"⋷",notinvc:"⋶",notni:"∌",notniva:"∌",notnivb:"⋾",notnivc:"⋽",npar:"∦",nparallel:"∦",nparsl:"⫽⃥",npart:"∂̸",npolint:"⨔",npr:"⊀",nprcue:"⋠",npre:"⪯̸",nprec:"⊀",npreceq:"⪯̸",nrArr:"⇏",nrarr:"↛",nrarrc:"⤳̸",nrarrw:"↝̸",nrightarrow:"↛",nrtri:"⋫",nrtrie:"⋭",nsc:"⊁",nsccue:"⋡",nsce:"⪰̸",nscr:"𝓃",nshortmid:"∤",nshortparallel:"∦",nsim:"≁",nsime:"≄",nsimeq:"≄",nsmid:"∤",nspar:"∦",nsqsube:"⋢",nsqsupe:"⋣",nsub:"⊄",nsubE:"⫅̸",nsube:"⊈",nsubset:"⊂⃒",nsubseteq:"⊈",nsubseteqq:"⫅̸",nsucc:"⊁",nsucceq:"⪰̸",nsup:"⊅",nsupE:"⫆̸",nsupe:"⊉",nsupset:"⊃⃒",nsupseteq:"⊉",nsupseteqq:"⫆̸",ntgl:"≹",ntilde:"ñ",ntlg:"≸",ntriangleleft:"⋪",ntrianglelefteq:"⋬",ntriangleright:"⋫",ntrianglerighteq:"⋭",nu:"ν",num:"#",numero:"№",numsp:" ",nvDash:"⊭",nvHarr:"⤄",nvap:"≍⃒",nvdash:"⊬",nvge:"≥⃒",nvgt:">⃒",nvinfin:"⧞",nvlArr:"⤂",nvle:"≤⃒",nvlt:"<⃒",nvltrie:"⊴⃒",nvrArr:"⤃",nvrtrie:"⊵⃒",nvsim:"∼⃒",nwArr:"⇖",nwarhk:"⤣",nwarr:"↖",nwarrow:"↖",nwnear:"⤧",oS:"Ⓢ",oacute:"ó",oast:"⊛",ocir:"⊚",ocirc:"ô",ocy:"о",odash:"⊝",odblac:"ő",odiv:"⨸",odot:"⊙",odsold:"⦼",oelig:"œ",ofcir:"⦿",ofr:"𝔬",ogon:"˛",ograve:"ò",ogt:"⧁",ohbar:"⦵",ohm:"Ω",oint:"∮",olarr:"↺",olcir:"⦾",olcross:"⦻",oline:"‾",olt:"⧀",omacr:"ō",omega:"ω",omicron:"ο",omid:"⦶",ominus:"⊖",oopf:"𝕠",opar:"⦷",operp:"⦹",oplus:"⊕",or:"∨",orarr:"↻",ord:"⩝",order:"ℴ",orderof:"ℴ",ordf:"ª",ordm:"º",origof:"⊶",oror:"⩖",orslope:"⩗",orv:"⩛",oscr:"ℴ",oslash:"ø",osol:"⊘",otilde:"õ",otimes:"⊗",otimesas:"⨶",ouml:"ö",ovbar:"⌽",par:"∥",para:"¶",parallel:"∥",parsim:"⫳",parsl:"⫽",part:"∂",pcy:"п",percnt:"%",period:".",permil:"‰",perp:"⊥",pertenk:"‱",pfr:"𝔭",phi:"φ",phiv:"ϕ",phmmat:"ℳ",phone:"☎",pi:"π",pitchfork:"⋔",piv:"ϖ",planck:"ℏ",planckh:"ℎ",plankv:"ℏ",plus:"+",plusacir:"⨣",plusb:"⊞",pluscir:"⨢",plusdo:"∔",plusdu:"⨥",pluse:"⩲",plusmn:"±",plussim:"⨦",plustwo:"⨧",pm:"±",pointint:"⨕",popf:"𝕡",pound:"£",pr:"≺",prE:"⪳",prap:"⪷",prcue:"≼",pre:"⪯",prec:"≺",precapprox:"⪷",preccurlyeq:"≼",preceq:"⪯",precnapprox:"⪹",precneqq:"⪵",precnsim:"⋨",precsim:"≾",prime:"′",primes:"ℙ",prnE:"⪵",prnap:"⪹",prnsim:"⋨",prod:"∏",profalar:"⌮",profline:"⌒",profsurf:"⌓",prop:"∝",propto:"∝",prsim:"≾",prurel:"⊰",pscr:"𝓅",psi:"ψ",puncsp:" ",qfr:"𝔮",qint:"⨌",qopf:"𝕢",qprime:"⁗",qscr:"𝓆",quaternions:"ℍ",quatint:"⨖",quest:"?",questeq:"≟",quot:'"',rAarr:"⇛",rArr:"⇒",rAtail:"⤜",rBarr:"⤏",rHar:"⥤",race:"∽̱",racute:"ŕ",radic:"√",raemptyv:"⦳",rang:"⟩",rangd:"⦒",range:"⦥",rangle:"⟩",raquo:"»",rarr:"→",rarrap:"⥵",rarrb:"⇥",rarrbfs:"⤠",rarrc:"⤳",rarrfs:"⤞",rarrhk:"↪",rarrlp:"↬",rarrpl:"⥅",rarrsim:"⥴",rarrtl:"↣",rarrw:"↝",ratail:"⤚",ratio:"∶",rationals:"ℚ",rbarr:"⤍",rbbrk:"❳",rbrace:"}",rbrack:"]",rbrke:"⦌",rbrksld:"⦎",rbrkslu:"⦐",rcaron:"ř",rcedil:"ŗ",rceil:"⌉",rcub:"}",rcy:"р",rdca:"⤷",rdldhar:"⥩",rdquo:"”",rdquor:"”",rdsh:"↳",real:"ℜ",realine:"ℛ",realpart:"ℜ",reals:"ℝ",rect:"▭",reg:"®",rfisht:"⥽",rfloor:"⌋",rfr:"𝔯",rhard:"⇁",rharu:"⇀",rharul:"⥬",rho:"ρ",rhov:"ϱ",rightarrow:"→",rightarrowtail:"↣",rightharpoondown:"⇁",rightharpoonup:"⇀",rightleftarrows:"⇄",rightleftharpoons:"⇌",rightrightarrows:"⇉",rightsquigarrow:"↝",rightthreetimes:"⋌",ring:"˚",risingdotseq:"≓",rlarr:"⇄",rlhar:"⇌",rlm:"‏",rmoust:"⎱",rmoustache:"⎱",rnmid:"⫮",roang:"⟭",roarr:"⇾",robrk:"⟧",ropar:"⦆",ropf:"𝕣",roplus:"⨮",rotimes:"⨵",rpar:")",rpargt:"⦔",rppolint:"⨒",rrarr:"⇉",rsaquo:"›",rscr:"𝓇",rsh:"↱",rsqb:"]",rsquo:"’",rsquor:"’",rthree:"⋌",rtimes:"⋊",rtri:"▹",rtrie:"⊵",rtrif:"▸",rtriltri:"⧎",ruluhar:"⥨",rx:"℞",sacute:"ś",sbquo:"‚",sc:"≻",scE:"⪴",scap:"⪸",scaron:"š",sccue:"≽",sce:"⪰",scedil:"ş",scirc:"ŝ",scnE:"⪶",scnap:"⪺",scnsim:"⋩",scpolint:"⨓",scsim:"≿",scy:"с",sdot:"⋅",sdotb:"⊡",sdote:"⩦",seArr:"⇘",searhk:"⤥",searr:"↘",searrow:"↘",sect:"§",semi:";",seswar:"⤩",setminus:"∖",setmn:"∖",sext:"✶",sfr:"𝔰",sfrown:"⌢",sharp:"♯",shchcy:"щ",shcy:"ш",shortmid:"∣",shortparallel:"∥",shy:"­",sigma:"σ",sigmaf:"ς",sigmav:"ς",sim:"∼",simdot:"⩪",sime:"≃",simeq:"≃",simg:"⪞",simgE:"⪠",siml:"⪝",simlE:"⪟",simne:"≆",simplus:"⨤",simrarr:"⥲",slarr:"←",smallsetminus:"∖",smashp:"⨳",smeparsl:"⧤",smid:"∣",smile:"⌣",smt:"⪪",smte:"⪬",smtes:"⪬︀",softcy:"ь",sol:"/",solb:"⧄",solbar:"⌿",sopf:"𝕤",spades:"♠",spadesuit:"♠",spar:"∥",sqcap:"⊓",sqcaps:"⊓︀",sqcup:"⊔",sqcups:"⊔︀",sqsub:"⊏",sqsube:"⊑",sqsubset:"⊏",sqsubseteq:"⊑",sqsup:"⊐",sqsupe:"⊒",sqsupset:"⊐",sqsupseteq:"⊒",squ:"□",square:"□",squarf:"▪",squf:"▪",srarr:"→",sscr:"𝓈",ssetmn:"∖",ssmile:"⌣",sstarf:"⋆",star:"☆",starf:"★",straightepsilon:"ϵ",straightphi:"ϕ",strns:"¯",sub:"⊂",subE:"⫅",subdot:"⪽",sube:"⊆",subedot:"⫃",submult:"⫁",subnE:"⫋",subne:"⊊",subplus:"⪿",subrarr:"⥹",subset:"⊂",subseteq:"⊆",subseteqq:"⫅",subsetneq:"⊊",subsetneqq:"⫋",subsim:"⫇",subsub:"⫕",subsup:"⫓",succ:"≻",succapprox:"⪸",succcurlyeq:"≽",succeq:"⪰",succnapprox:"⪺",succneqq:"⪶",succnsim:"⋩",succsim:"≿",sum:"∑",sung:"♪",sup1:"¹",sup2:"²",sup3:"³",sup:"⊃",supE:"⫆",supdot:"⪾",supdsub:"⫘",supe:"⊇",supedot:"⫄",suphsol:"⟉",suphsub:"⫗",suplarr:"⥻",supmult:"⫂",supnE:"⫌",supne:"⊋",supplus:"⫀",supset:"⊃",supseteq:"⊇",supseteqq:"⫆",supsetneq:"⊋",supsetneqq:"⫌",supsim:"⫈",supsub:"⫔",supsup:"⫖",swArr:"⇙",swarhk:"⤦",swarr:"↙",swarrow:"↙",swnwar:"⤪",szlig:"ß",target:"⌖",tau:"τ",tbrk:"⎴",tcaron:"ť",tcedil:"ţ",tcy:"т",tdot:"⃛",telrec:"⌕",tfr:"𝔱",there4:"∴",therefore:"∴",theta:"θ",thetasym:"ϑ",thetav:"ϑ",thickapprox:"≈",thicksim:"∼",thinsp:" ",thkap:"≈",thksim:"∼",thorn:"þ",tilde:"˜",times:"×",timesb:"⊠",timesbar:"⨱",timesd:"⨰",tint:"∭",toea:"⤨",top:"⊤",topbot:"⌶",topcir:"⫱",topf:"𝕥",topfork:"⫚",tosa:"⤩",tprime:"‴",trade:"™",triangle:"▵",triangledown:"▿",triangleleft:"◃",trianglelefteq:"⊴",triangleq:"≜",triangleright:"▹",trianglerighteq:"⊵",tridot:"◬",trie:"≜",triminus:"⨺",triplus:"⨹",trisb:"⧍",tritime:"⨻",trpezium:"⏢",tscr:"𝓉",tscy:"ц",tshcy:"ћ",tstrok:"ŧ",twixt:"≬",twoheadleftarrow:"↞",twoheadrightarrow:"↠",uArr:"⇑",uHar:"⥣",uacute:"ú",uarr:"↑",ubrcy:"ў",ubreve:"ŭ",ucirc:"û",ucy:"у",udarr:"⇅",udblac:"ű",udhar:"⥮",ufisht:"⥾",ufr:"𝔲",ugrave:"ù",uharl:"↿",uharr:"↾",uhblk:"▀",ulcorn:"⌜",ulcorner:"⌜",ulcrop:"⌏",ultri:"◸",umacr:"ū",uml:"¨",uogon:"ų",uopf:"𝕦",uparrow:"↑",updownarrow:"↕",upharpoonleft:"↿",upharpoonright:"↾",uplus:"⊎",upsi:"υ",upsih:"ϒ",upsilon:"υ",upuparrows:"⇈",urcorn:"⌝",urcorner:"⌝",urcrop:"⌎",uring:"ů",urtri:"◹",uscr:"𝓊",utdot:"⋰",utilde:"ũ",utri:"▵",utrif:"▴",uuarr:"⇈",uuml:"ü",uwangle:"⦧",vArr:"⇕",vBar:"⫨",vBarv:"⫩",vDash:"⊨",vangrt:"⦜",varepsilon:"ϵ",varkappa:"ϰ",varnothing:"∅",varphi:"ϕ",varpi:"ϖ",varpropto:"∝",varr:"↕",varrho:"ϱ",varsigma:"ς",varsubsetneq:"⊊︀",varsubsetneqq:"⫋︀",varsupsetneq:"⊋︀",varsupsetneqq:"⫌︀",vartheta:"ϑ",vartriangleleft:"⊲",vartriangleright:"⊳",vcy:"в",vdash:"⊢",vee:"∨",veebar:"⊻",veeeq:"≚",vellip:"⋮",verbar:"|",vert:"|",vfr:"𝔳",vltri:"⊲",vnsub:"⊂⃒",vnsup:"⊃⃒",vopf:"𝕧",vprop:"∝",vrtri:"⊳",vscr:"𝓋",vsubnE:"⫋︀",vsubne:"⊊︀",vsupnE:"⫌︀",vsupne:"⊋︀",vzigzag:"⦚",wcirc:"ŵ",wedbar:"⩟",wedge:"∧",wedgeq:"≙",weierp:"℘",wfr:"𝔴",wopf:"𝕨",wp:"℘",wr:"≀",wreath:"≀",wscr:"𝓌",xcap:"⋂",xcirc:"◯",xcup:"⋃",xdtri:"▽",xfr:"𝔵",xhArr:"⟺",xharr:"⟷",xi:"ξ",xlArr:"⟸",xlarr:"⟵",xmap:"⟼",xnis:"⋻",xodot:"⨀",xopf:"𝕩",xoplus:"⨁",xotime:"⨂",xrArr:"⟹",xrarr:"⟶",xscr:"𝓍",xsqcup:"⨆",xuplus:"⨄",xutri:"△",xvee:"⋁",xwedge:"⋀",yacute:"ý",yacy:"я",ycirc:"ŷ",ycy:"ы",yen:"¥",yfr:"𝔶",yicy:"ї",yopf:"𝕪",yscr:"𝓎",yucy:"ю",yuml:"ÿ",zacute:"ź",zcaron:"ž",zcy:"з",zdot:"ż",zeetrf:"ℨ",zeta:"ζ",zfr:"𝔷",zhcy:"ж",zigrarr:"⇝",zopf:"𝕫",zscr:"𝓏",zwj:"‍",zwnj:"‌"},ut={}.hasOwnProperty,at={name:"characterReference",tokenize:function(e,t,n){const r=this;let o,c,l=0;return function(t){return e.enter("characterReference"),e.enter("characterReferenceMarker"),e.consume(t),e.exit("characterReferenceMarker"),s};function s(t){return 35===t?(e.enter("characterReferenceMarkerNumeric"),e.consume(t),e.exit("characterReferenceMarkerNumeric"),f):(e.enter("characterReferenceValue"),o=31,c=i,p(t))}function f(t){return 88===t||120===t?(e.enter("characterReferenceMarkerHexadecimal"),e.consume(t),e.exit("characterReferenceMarkerHexadecimal"),e.enter("characterReferenceValue"),o=6,c=a,p):(e.enter("characterReferenceValue"),o=7,c=u,p(t))}function p(u){if(59===u&&l){const o=e.exit("characterReferenceValue");return c!==i||function(e){return!!ut.call(ct,e)&&ct[e]}(r.sliceSerialize(o))?(e.enter("characterReferenceMarker"),e.consume(u),e.exit("characterReferenceMarker"),e.exit("characterReference"),t):n(u)}return c(u)&&l++<o?(e.consume(u),p):n(u)}}},lt={name:"characterEscape",tokenize:function(e,t,n){return function(t){return e.enter("characterEscape"),e.enter("escapeMarker"),e.consume(t),e.exit("escapeMarker"),r};function r(r){return l(r)?(e.enter("characterEscapeValue"),e.consume(r),e.exit("characterEscapeValue"),e.exit("characterEscape"),t):n(r)}}},st={name:"lineEnding",tokenize:function(e,t){return function(n){return e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),h(e,t,"linePrefix")}}},ft={name:"labelEnd",tokenize:function(e,t,n){const r=this;let i,o,c=r.events.length;for(;c--;)if(("labelImage"===r.events[c][1].type||"labelLink"===r.events[c][1].type)&&!r.events[c][1]._balanced){i=r.events[c][1];break}return function(t){return i?i._inactive?s(t):(o=r.parser.defined.includes(J(r.sliceSerialize({start:i.end,end:r.now()}))),e.enter("labelEnd"),e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelEnd"),u):n(t)};function u(t){return 40===t?e.attempt(pt,l,o?l:s)(t):91===t?e.attempt(dt,l,o?a:s)(t):o?l(t):s(t)}function a(t){return e.attempt(mt,l,s)(t)}function l(e){return t(e)}function s(e){return i._balanced=!0,n(e)}},resolveTo:function(e,t){let n,r,i,o,c=e.length,u=0;for(;c--;)if(n=e[c][1],r){if("link"===n.type||"labelLink"===n.type&&n._inactive)break;"enter"===e[c][0]&&"labelLink"===n.type&&(n._inactive=!0)}else if(i){if("enter"===e[c][0]&&("labelImage"===n.type||"labelLink"===n.type)&&!n._balanced&&(r=c,"labelLink"!==n.type)){u=2;break}}else"labelEnd"===n.type&&(i=c);const a={type:"labelLink"===e[r][1].type?"link":"image",start:Object.assign({},e[r][1].start),end:Object.assign({},e[e.length-1][1].end)},l={type:"label",start:Object.assign({},e[r][1].start),end:Object.assign({},e[i][1].end)},s={type:"labelText",start:Object.assign({},e[r+u+2][1].end),end:Object.assign({},e[i-2][1].start)};return o=[["enter",a,t],["enter",l,t]],o=ve(o,e.slice(r+1,r+u+3)),o=ve(o,[["enter",s,t]]),o=ve(o,Pe(t.parser.constructs.insideSpan.null,e.slice(r+u+4,i-3),t)),o=ve(o,[["exit",s,t],e[i-2],e[i-1],["exit",l,t]]),o=ve(o,e.slice(i+1)),o=ve(o,[["exit",a,t]]),xe(e,r,e.length,o),e},resolveAll:function(e){let t=-1;for(;++t<e.length;){const n=e[t][1];"labelImage"!==n.type&&"labelLink"!==n.type&&"labelEnd"!==n.type||(e.splice(t+1,"labelImage"===n.type?4:2),n.type="data",t++)}return e}},pt={tokenize:function(e,t,n){return function(t){return e.enter("resource"),e.enter("resourceMarker"),e.consume(t),e.exit("resourceMarker"),r};function r(t){return f(t)?b(e,i)(t):i(t)}function i(t){return 41===t?l(t):Ue(e,o,c,"resourceDestination","resourceDestinationLiteral","resourceDestinationLiteralMarker","resourceDestinationRaw","resourceDestinationString",32)(t)}function o(t){return f(t)?b(e,u)(t):l(t)}function c(e){return n(e)}function u(t){return 34===t||39===t||40===t?Qe(e,a,n,"resourceTitle","resourceTitleMarker","resourceTitleString")(t):l(t)}function a(t){return f(t)?b(e,l)(t):l(t)}function l(r){return 41===r?(e.enter("resourceMarker"),e.consume(r),e.exit("resourceMarker"),e.exit("resource"),t):n(r)}}},dt={tokenize:function(e,t,n){const r=this;return function(t){return Ge.call(r,e,i,o,"reference","referenceMarker","referenceString")(t)};function i(e){return r.parser.defined.includes(J(r.sliceSerialize(r.events[r.events.length-1][1]).slice(1,-1)))?t(e):n(e)}function o(e){return n(e)}}},mt={tokenize:function(e,t,n){return function(t){return e.enter("reference"),e.enter("referenceMarker"),e.consume(t),e.exit("referenceMarker"),r};function r(r){return 93===r?(e.enter("referenceMarker"),e.consume(r),e.exit("referenceMarker"),e.exit("reference"),t):n(r)}}},gt={name:"labelStartImage",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("labelImage"),e.enter("labelImageMarker"),e.consume(t),e.exit("labelImageMarker"),i};function i(t){return 91===t?(e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelImage"),o):n(t)}function o(e){return 94===e&&"_hiddenFootnoteSupport"in r.parser.constructs?n(e):t(e)}},resolveAll:ft.resolveAll};function ht(e){return null===e||f(e)||m(e)?1:d(e)?2:void 0}const bt={name:"attention",tokenize:function(e,t){const n=this.parser.constructs.attentionMarkers.null,r=this.previous,i=ht(r);let o;return function(t){return o=t,e.enter("attentionSequence"),c(t)};function c(u){if(u===o)return e.consume(u),c;const a=e.exit("attentionSequence"),l=ht(u),s=!l||2===l&&i||n.includes(u),f=!i||2===i&&l||n.includes(r);return a._open=Boolean(42===o?s:s&&(i||!f)),a._close=Boolean(42===o?f:f&&(l||!s)),t(u)}},resolveAll:function(e,t){let n,r,i,o,c,u,a,l,s=-1;for(;++s<e.length;)if("enter"===e[s][0]&&"attentionSequence"===e[s][1].type&&e[s][1]._close)for(n=s;n--;)if("exit"===e[n][0]&&"attentionSequence"===e[n][1].type&&e[n][1]._open&&t.sliceSerialize(e[n][1]).charCodeAt(0)===t.sliceSerialize(e[s][1]).charCodeAt(0)){if((e[n][1]._close||e[s][1]._open)&&(e[s][1].end.offset-e[s][1].start.offset)%3&&!((e[n][1].end.offset-e[n][1].start.offset+e[s][1].end.offset-e[s][1].start.offset)%3))continue;u=e[n][1].end.offset-e[n][1].start.offset>1&&e[s][1].end.offset-e[s][1].start.offset>1?2:1;const f=Object.assign({},e[n][1].end),p=Object.assign({},e[s][1].start);xt(f,-u),xt(p,u),o={type:u>1?"strongSequence":"emphasisSequence",start:f,end:Object.assign({},e[n][1].end)},c={type:u>1?"strongSequence":"emphasisSequence",start:Object.assign({},e[s][1].start),end:p},i={type:u>1?"strongText":"emphasisText",start:Object.assign({},e[n][1].end),end:Object.assign({},e[s][1].start)},r={type:u>1?"strong":"emphasis",start:Object.assign({},o.start),end:Object.assign({},c.end)},e[n][1].end=Object.assign({},o.start),e[s][1].start=Object.assign({},c.end),a=[],e[n][1].end.offset-e[n][1].start.offset&&(a=ve(a,[["enter",e[n][1],t],["exit",e[n][1],t]])),a=ve(a,[["enter",r,t],["enter",o,t],["exit",o,t],["enter",i,t]]),a=ve(a,Pe(t.parser.constructs.insideSpan.null,e.slice(n+1,s),t)),a=ve(a,[["exit",i,t],["enter",c,t],["exit",c,t],["exit",r,t]]),e[s][1].end.offset-e[s][1].start.offset?(l=2,a=ve(a,[["enter",e[s][1],t],["exit",e[s][1],t]])):l=0,xe(e,n-1,s-n+3,a),s=n+a.length-l-2;break}for(s=-1;++s<e.length;)"attentionSequence"===e[s][1].type&&(e[s][1].type="data");return e}};function xt(e,t){e.column+=t,e.offset+=t,e._bufferIndex+=t}const vt={name:"autolink",tokenize:function(e,t,n){let u=0;return function(t){return e.enter("autolink"),e.enter("autolinkMarker"),e.consume(t),e.exit("autolinkMarker"),e.enter("autolinkProtocol"),a};function a(t){return r(t)?(e.consume(t),l):p(t)}function l(e){return 43===e||45===e||46===e||i(e)?(u=1,s(e)):p(e)}function s(t){return 58===t?(e.consume(t),u=0,f):(43===t||45===t||46===t||i(t))&&u++<32?(e.consume(t),s):(u=0,p(t))}function f(r){return 62===r?(e.exit("autolinkProtocol"),e.enter("autolinkMarker"),e.consume(r),e.exit("autolinkMarker"),e.exit("autolink"),t):null===r||32===r||60===r||c(r)?n(r):(e.consume(r),f)}function p(t){return 64===t?(e.consume(t),d):o(t)?(e.consume(t),p):n(t)}function d(e){return i(e)?m(e):n(e)}function m(n){return 46===n?(e.consume(n),u=0,d):62===n?(e.exit("autolinkProtocol").type="autolinkEmail",e.enter("autolinkMarker"),e.consume(n),e.exit("autolinkMarker"),e.exit("autolink"),t):g(n)}function g(t){if((45===t||i(t))&&u++<63){const n=45===t?g:m;return e.consume(t),n}return n(t)}}},kt={name:"htmlText",tokenize:function(e,t,n){const o=this;let c,u,a;return function(t){return e.enter("htmlText"),e.enter("htmlTextData"),e.consume(t),l};function l(t){return 33===t?(e.consume(t),d):47===t?(e.consume(t),T):63===t?(e.consume(t),S):r(t)?(e.consume(t),A):n(t)}function d(t){return 45===t?(e.consume(t),m):91===t?(e.consume(t),u=0,v):r(t)?(e.consume(t),q):n(t)}function m(t){return 45===t?(e.consume(t),x):n(t)}function g(t){return null===t?n(t):45===t?(e.consume(t),b):s(t)?(a=g,N(t)):(e.consume(t),g)}function b(t){return 45===t?(e.consume(t),x):g(t)}function x(e){return 62===e?P(e):45===e?b(e):g(e)}function v(t){return t==="CDATA[".charCodeAt(u++)?(e.consume(t),6===u?k:v):n(t)}function k(t){return null===t?n(t):93===t?(e.consume(t),y):s(t)?(a=k,N(t)):(e.consume(t),k)}function y(t){return 93===t?(e.consume(t),w):k(t)}function w(t){return 62===t?P(t):93===t?(e.consume(t),w):k(t)}function q(t){return null===t||62===t?P(t):s(t)?(a=q,N(t)):(e.consume(t),q)}function S(t){return null===t?n(t):63===t?(e.consume(t),L):s(t)?(a=S,N(t)):(e.consume(t),S)}function L(e){return 62===e?P(e):S(e)}function T(t){return r(t)?(e.consume(t),D):n(t)}function D(t){return 45===t||i(t)?(e.consume(t),D):E(t)}function E(t){return s(t)?(a=E,N(t)):p(t)?(e.consume(t),E):P(t)}function A(t){return 45===t||i(t)?(e.consume(t),A):47===t||62===t||f(t)?C(t):n(t)}function C(t){return 47===t?(e.consume(t),P):58===t||95===t||r(t)?(e.consume(t),F):s(t)?(a=C,N(t)):p(t)?(e.consume(t),C):P(t)}function F(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),F):z(t)}function z(t){return 61===t?(e.consume(t),I):s(t)?(a=z,N(t)):p(t)?(e.consume(t),z):C(t)}function I(t){return null===t||60===t||61===t||62===t||96===t?n(t):34===t||39===t?(e.consume(t),c=t,M):s(t)?(a=I,N(t)):p(t)?(e.consume(t),I):(e.consume(t),R)}function M(t){return t===c?(e.consume(t),c=void 0,O):null===t?n(t):s(t)?(a=M,N(t)):(e.consume(t),M)}function R(t){return null===t||34===t||39===t||60===t||61===t||96===t?n(t):47===t||62===t||f(t)?C(t):(e.consume(t),R)}function O(e){return 47===e||62===e||f(e)?C(e):n(e)}function P(r){return 62===r?(e.consume(r),e.exit("htmlTextData"),e.exit("htmlText"),t):n(r)}function N(t){return e.exit("htmlTextData"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),V}function V(t){return p(t)?h(e,_,"linePrefix",o.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):_(t)}function _(t){return e.enter("htmlTextData"),a(t)}}},yt={name:"labelStartLink",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("labelLink"),e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelLink"),i};function i(e){return 94===e&&"_hiddenFootnoteSupport"in r.parser.constructs?n(e):t(e)}},resolveAll:ft.resolveAll},wt={name:"hardBreakEscape",tokenize:function(e,t,n){return function(t){return e.enter("hardBreakEscape"),e.consume(t),r};function r(r){return s(r)?(e.exit("hardBreakEscape"),t(r)):n(r)}}},qt={name:"codeText",tokenize:function(e,t,n){let r,i,o=0;return function(t){return e.enter("codeText"),e.enter("codeTextSequence"),c(t)};function c(t){return 96===t?(e.consume(t),o++,c):(e.exit("codeTextSequence"),u(t))}function u(t){return null===t?n(t):32===t?(e.enter("space"),e.consume(t),e.exit("space"),u):96===t?(i=e.enter("codeTextSequence"),r=0,l(t)):s(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),u):(e.enter("codeTextData"),a(t))}function a(t){return null===t||32===t||96===t||s(t)?(e.exit("codeTextData"),u(t)):(e.consume(t),a)}function l(n){return 96===n?(e.consume(n),r++,l):r===o?(e.exit("codeTextSequence"),e.exit("codeText"),t(n)):(i.type="codeTextData",a(n))}},resolve:function(e){let t,n,r=e.length-4,i=3;if(!("lineEnding"!==e[i][1].type&&"space"!==e[i][1].type||"lineEnding"!==e[r][1].type&&"space"!==e[r][1].type))for(t=i;++t<r;)if("codeTextData"===e[t][1].type){e[i][1].type="codeTextPadding",e[r][1].type="codeTextPadding",i+=2,r-=2;break}for(t=i-1,r++;++t<=r;)void 0===n?t!==r&&"lineEnding"!==e[t][1].type&&(n=t):t!==r&&"lineEnding"!==e[t][1].type||(e[n][1].type="codeTextData",t!==n+2&&(e[n][1].end=e[t-1][1].end,e.splice(n+2,t-n-2),r-=t-n-2,t=n+2),n=void 0);return e},previous:function(e){return 96!==e||"characterEscape"===this.events[this.events.length-1][1].type}},St={42:_e,43:_e,45:_e,48:_e,49:_e,50:_e,51:_e,52:_e,53:_e,54:_e,55:_e,56:_e,57:_e,62:He},Lt={91:We},Tt={[-2]:Je,[-1]:Je,32:Je},Dt={35:Ke,42:Ve,45:[Xe,Ve],60:tt,61:Xe,95:Ve,96:ot,126:ot},Et={38:at,92:lt},At={[-5]:st,[-4]:st,[-3]:st,33:gt,38:at,42:bt,60:[vt,kt],91:yt,92:[wt,lt],93:ft,95:bt,96:qt},Ct={null:[bt,Fe]},Ft={null:[42,95]},zt={null:[]};function It(e){const t={defined:[],lazy:{},constructs:function(e){const t={};let n=-1;for(;++n<e.length;)ye(t,e[n]);return t}([n,...(e||{}).extensions||[]]),content:r(qe),document:r(Se),flow:r(Ce),string:r(ze),text:r(Ie)};return t;function r(e){return function(n){return Ne(t,e,n)}}}function Mt(e){for(;!Te(e););return e}const Rt=/[\0\t\n\r]/g;function Ot(){let e,t=1,n="",r=!0;return function(i,o,c){const u=[];let a,l,s,f,p;for(i=n+("string"==typeof i?i.toString():new TextDecoder(o||void 0).decode(i)),s=0,n="",r&&(65279===i.charCodeAt(0)&&s++,r=void 0);s<i.length;){if(Rt.lastIndex=s,a=Rt.exec(i),f=a&&void 0!==a.index?a.index:i.length,p=i.charCodeAt(f),!a){n=i.slice(s);break}if(10===p&&s===f&&e)u.push(-3),e=void 0;else switch(e&&(u.push(-5),e=void 0),s<f&&(u.push(i.slice(s,f)),t+=f-s),p){case 0:u.push(65533),t++;break;case 9:for(l=4*Math.ceil(t/4),u.push(-2);t++<l;)u.push(-1);break;case 10:u.push(-4),t=1;break;default:e=!0,t=1}s=f+1}return c&&(e&&u.push(-5),n&&u.push(n),u.push(null)),u}}var Pt=exports;for(var Nt in t)Pt[Nt]=t[Nt];t.__esModule&&Object.defineProperty(Pt,"__esModule",{value:!0})})();
+/*! markdownlint-micromark 0.1.12 https://github.com/DavidAnson/markdownlint */(()=>{"use strict";var e={d:(t,n)=>{for(var r in n)e.o(n,r)&&!e.o(t,r)&&Object.defineProperty(t,r,{enumerable:!0,get:n[r]})},o:(e,t)=>Object.prototype.hasOwnProperty.call(e,t),r:e=>{"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})}},t={};e.r(t),e.d(t,{directive:()=>I,gfmAutolinkLiteral:()=>B,gfmFootnote:()=>K,gfmTable:()=>ce,labelEnd:()=>dt,math:()=>be,parse:()=>Mt,postprocess:()=>Rt,preprocess:()=>Pt});var n={};e.r(n),e.d(n,{attentionMarkers:()=>zt,contentInitial:()=>Lt,disable:()=>Nt,document:()=>Et,flow:()=>At,flowInitial:()=>Dt,insideSpan:()=>Ft,string:()=>Ct,text:()=>It});const r=h(/[A-Za-z]/),i=h(/[\dA-Za-z]/),o=h(/[#-'*+\--9=?A-Z^-~]/);function c(e){return null!==e&&(e<32||127===e)}const u=h(/\d/),a=h(/[\dA-Fa-f]/),s=h(/[!-/:-@[-`{-~]/);function l(e){return null!==e&&e<-2}function f(e){return null!==e&&(e<0||32===e)}function p(e){return-2===e||-1===e||32===e}const d=h(/\p{P}|\p{S}/u),m=h(/\s/);function h(e){return function(t){return null!==t&&t>-1&&e.test(String.fromCharCode(t))}}function g(e,t,n,r){const i=r?r-1:Number.POSITIVE_INFINITY;let o=0;return function(r){return p(r)?(e.enter(n),c(r)):t(r)};function c(r){return p(r)&&o++<i?(e.consume(r),c):(e.exit(n),t(r))}}function b(e,t){let n;return function r(i){return l(i)?(e.enter("lineEnding"),e.consume(i),e.exit("lineEnding"),n=!0,r):p(i)?g(e,r,n?"linePrefix":"lineSuffix")(i):t(i)}}function x(e,t,n,o,c,u,a,s,d,m,h,x,v,k,y){let w,S;return function(t){return e.enter(o),e.enter(c),e.consume(t),e.exit(c),q};function q(t){return 35===t?(w=a,T(t)):46===t?(w=s,T(t)):58===t||95===t||r(t)?(e.enter(u),e.enter(d),e.consume(t),D):y&&p(t)?g(e,q,"whitespace")(t):!y&&f(t)?b(e,q)(t):R(t)}function T(t){const n=w+"Marker";return e.enter(u),e.enter(w),e.enter(n),e.consume(t),e.exit(n),E}function E(t){if(null===t||34===t||35===t||39===t||46===t||60===t||61===t||62===t||96===t||125===t||f(t))return n(t);const r=w+"Value";return e.enter(r),e.consume(t),L}function L(t){if(null===t||34===t||39===t||60===t||61===t||62===t||96===t)return n(t);if(35===t||46===t||125===t||f(t)){const n=w+"Value";return e.exit(n),e.exit(w),e.exit(u),q(t)}return e.consume(t),L}function D(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),D):(e.exit(d),y&&p(t)?g(e,A,"whitespace")(t):!y&&f(t)?b(e,A)(t):A(t))}function A(t){return 61===t?(e.enter(m),e.consume(t),e.exit(m),C):(e.exit(u),q(t))}function C(t){return null===t||60===t||61===t||62===t||96===t||125===t||y&&l(t)?n(t):34===t||39===t?(e.enter(h),e.enter(v),e.consume(t),e.exit(v),S=t,F):y&&p(t)?g(e,C,"whitespace")(t):!y&&f(t)?b(e,C)(t):(e.enter(x),e.enter(k),e.consume(t),S=void 0,I)}function I(t){return null===t||34===t||39===t||60===t||61===t||62===t||96===t?n(t):125===t||f(t)?(e.exit(k),e.exit(x),e.exit(u),q(t)):(e.consume(t),I)}function F(t){return t===S?(e.enter(v),e.consume(t),e.exit(v),e.exit(h),e.exit(u),M):(e.enter(x),z(t))}function z(t){return t===S?(e.exit(x),F(t)):null===t?n(t):l(t)?y?n(t):b(e,z)(t):(e.enter(k),e.consume(t),N)}function N(t){return t===S||null===t||l(t)?(e.exit(k),z(t)):(e.consume(t),N)}function M(e){return 125===e||f(e)?q(e):R(e)}function R(r){return 125===r?(e.enter(c),e.consume(r),e.exit(c),e.exit(o),t):n(r)}}function v(e,t,n,r,i,o,c){let u,a=0,s=0;return function(t){return e.enter(r),e.enter(i),e.consume(t),e.exit(i),f};function f(n){return 93===n?(e.enter(i),e.consume(n),e.exit(i),e.exit(r),t):(e.enter(o),p(n))}function p(t){if(93===t&&!s)return h(t);const n=e.enter("chunkText",{contentType:"text",previous:u});return u&&(u.next=n),u=n,d(t)}function d(t){return null===t||a>999||91===t&&++s>32?n(t):93!==t||s--?l(t)?c?n(t):(e.consume(t),e.exit("chunkText"),p):(e.consume(t),92===t?m:d):(e.exit("chunkText"),h(t))}function m(t){return 91===t||92===t||93===t?(e.consume(t),a++,d):d(t)}function h(n){return e.exit(o),e.enter(i),e.consume(n),e.exit(i),e.exit(r),t}}function k(e,t,n,o){const c=this;return function(t){return r(t)?(e.enter(o),e.consume(t),u):n(t)};function u(r){return 45===r||95===r||i(r)?(e.consume(r),u):(e.exit(o),45===c.previous||95===c.previous?n(r):t(r))}}const y={tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1],o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0;let c,u=0;return function(t){return e.enter("directiveContainer"),e.enter("directiveContainerFence"),e.enter("directiveContainerSequence"),a(t)};function a(t){return 58===t?(e.consume(t),u++,a):u<3?n(t):(e.exit("directiveContainerSequence"),k.call(r,e,s,n,"directiveContainerName")(t))}function s(t){return 91===t?e.attempt(w,f,f)(t):f(t)}function f(t){return 123===t?e.attempt(S,p,p)(t):p(t)}function p(t){return g(e,d,"whitespace")(t)}function d(i){return e.exit("directiveContainerFence"),null===i?D(i):l(i)?r.interrupt?t(i):e.attempt(q,m,D)(i):n(i)}function m(t){return null===t?D(t):l(t)?e.check(q,y,D)(t):(e.enter("directiveContainerContent"),h(t))}function h(t){return e.attempt({tokenize:A,partial:!0},L,o?g(e,b,"linePrefix",o+1):b)(t)}function b(t){return null===t?L(t):l(t)?e.check(q,v,L)(t):v(t)}function x(t){if(null===t){const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,L(t)}return l(t)?e.check(q,T,E)(t):(e.consume(t),x)}function v(t){const n=e.enter("chunkDocument",{contentType:"document",previous:c});return c&&(c.next=n),c=n,x(t)}function y(t){return e.enter("directiveContainerContent"),h(t)}function T(t){e.consume(t);const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,h}function E(t){const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,L(t)}function L(t){return e.exit("directiveContainerContent"),D(t)}function D(n){return e.exit("directiveContainer"),t(n)}function A(e,t,n){let i=0;return g(e,(function(t){return e.enter("directiveContainerFence"),e.enter("directiveContainerSequence"),o(t)}),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4);function o(t){return 58===t?(e.consume(t),i++,o):i<u?n(t):(e.exit("directiveContainerSequence"),g(e,c,"whitespace")(t))}function c(r){return null===r||l(r)?(e.exit("directiveContainerFence"),t(r)):n(r)}}},concrete:!0},w={tokenize:function(e,t,n){return v(e,t,n,"directiveContainerLabel","directiveContainerLabelMarker","directiveContainerLabelString",!0)},partial:!0},S={tokenize:function(e,t,n){return x(e,t,n,"directiveContainerAttributes","directiveContainerAttributesMarker","directiveContainerAttribute","directiveContainerAttributeId","directiveContainerAttributeClass","directiveContainerAttributeName","directiveContainerAttributeInitializerMarker","directiveContainerAttributeValueLiteral","directiveContainerAttributeValue","directiveContainerAttributeValueMarker","directiveContainerAttributeValueData",!0)},partial:!0},q={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},T={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("directiveLeaf"),e.enter("directiveLeafSequence"),e.consume(t),i};function i(t){return 58===t?(e.consume(t),e.exit("directiveLeafSequence"),k.call(r,e,o,n,"directiveLeafName")):n(t)}function o(t){return 91===t?e.attempt(E,c,c)(t):c(t)}function c(t){return 123===t?e.attempt(L,u,u)(t):u(t)}function u(t){return g(e,a,"whitespace")(t)}function a(r){return null===r||l(r)?(e.exit("directiveLeaf"),t(r)):n(r)}}},E={tokenize:function(e,t,n){return v(e,t,n,"directiveLeafLabel","directiveLeafLabelMarker","directiveLeafLabelString",!0)},partial:!0},L={tokenize:function(e,t,n){return x(e,t,n,"directiveLeafAttributes","directiveLeafAttributesMarker","directiveLeafAttribute","directiveLeafAttributeId","directiveLeafAttributeClass","directiveLeafAttributeName","directiveLeafAttributeInitializerMarker","directiveLeafAttributeValueLiteral","directiveLeafAttributeValue","directiveLeafAttributeValueMarker","directiveLeafAttributeValueData",!0)},partial:!0},D={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("directiveText"),e.enter("directiveTextMarker"),e.consume(t),e.exit("directiveTextMarker"),k.call(r,e,i,n,"directiveTextName")};function i(t){return 58===t?n(t):91===t?e.attempt(A,o,o)(t):o(t)}function o(t){return 123===t?e.attempt(C,c,c)(t):c(t)}function c(n){return e.exit("directiveText"),t(n)}},previous:function(e){return 58!==e||"characterEscape"===this.events[this.events.length-1][1].type}},A={tokenize:function(e,t,n){return v(e,t,n,"directiveTextLabel","directiveTextLabelMarker","directiveTextLabelString")},partial:!0},C={tokenize:function(e,t,n){return x(e,t,n,"directiveTextAttributes","directiveTextAttributesMarker","directiveTextAttribute","directiveTextAttributeId","directiveTextAttributeClass","directiveTextAttributeName","directiveTextAttributeInitializerMarker","directiveTextAttributeValueLiteral","directiveTextAttributeValue","directiveTextAttributeValueMarker","directiveTextAttributeValueData")},partial:!0};function I(){return{text:{58:D},flow:{58:[y,T]}}}const F={tokenize:function(e,t,n){let r=0;return function t(o){return(87===o||119===o)&&r<3?(r++,e.consume(o),t):46===o&&3===r?(e.consume(o),i):n(o)};function i(e){return null===e?n(e):t(e)}},partial:!0},z={tokenize:function(e,t,n){let r,i,o;return c;function c(t){return 46===t||95===t?e.check(M,a,u)(t):null===t||f(t)||m(t)||45!==t&&d(t)?a(t):(o=!0,e.consume(t),c)}function u(t){return 95===t?r=!0:(i=r,r=void 0),e.consume(t),c}function a(e){return i||r||!o?n(e):t(e)}},partial:!0},N={tokenize:function(e,t){let n=0,r=0;return i;function i(c){return 40===c?(n++,e.consume(c),i):41===c&&r<n?o(c):33===c||34===c||38===c||39===c||41===c||42===c||44===c||46===c||58===c||59===c||60===c||63===c||93===c||95===c||126===c?e.check(M,t,o)(c):null===c||f(c)||m(c)?t(c):(e.consume(c),i)}function o(t){return 41===t&&r++,e.consume(t),i}},partial:!0},M={tokenize:function(e,t,n){return i;function i(r){return 33===r||34===r||39===r||41===r||42===r||44===r||46===r||58===r||59===r||63===r||95===r||126===r?(e.consume(r),i):38===r?(e.consume(r),c):93===r?(e.consume(r),o):60===r||null===r||f(r)||m(r)?t(r):n(r)}function o(e){return null===e||40===e||91===e||f(e)||m(e)?t(e):i(e)}function c(e){return r(e)?u(e):n(e)}function u(t){return 59===t?(e.consume(t),i):r(t)?(e.consume(t),u):n(t)}},partial:!0},R={tokenize:function(e,t,n){return function(t){return e.consume(t),r};function r(e){return i(e)?n(e):t(e)}},partial:!0},O={name:"wwwAutolink",tokenize:function(e,t,n){const r=this;return function(t){return 87!==t&&119!==t||!H.call(r,r.previous)||Q(r.events)?n(t):(e.enter("literalAutolink"),e.enter("literalAutolinkWww"),e.check(F,e.attempt(z,e.attempt(N,i),n),n)(t))};function i(n){return e.exit("literalAutolinkWww"),e.exit("literalAutolink"),t(n)}},previous:H},P={name:"protocolAutolink",tokenize:function(e,t,n){const i=this;let o="",u=!1;return function(t){return 72!==t&&104!==t||!U.call(i,i.previous)||Q(i.events)?n(t):(e.enter("literalAutolink"),e.enter("literalAutolinkHttp"),o+=String.fromCodePoint(t),e.consume(t),a)};function a(t){if(r(t)&&o.length<5)return o+=String.fromCodePoint(t),e.consume(t),a;if(58===t){const n=o.toLowerCase();if("http"===n||"https"===n)return e.consume(t),s}return n(t)}function s(t){return 47===t?(e.consume(t),u?l:(u=!0,s)):n(t)}function l(t){return null===t||c(t)||f(t)||m(t)||d(t)?n(t):e.attempt(z,e.attempt(N,p),n)(t)}function p(n){return e.exit("literalAutolinkHttp"),e.exit("literalAutolink"),t(n)}},previous:U},V={name:"emailAutolink",tokenize:function(e,t,n){const o=this;let c,u;return function(t){return Y(t)&&G.call(o,o.previous)&&!Q(o.events)?(e.enter("literalAutolink"),e.enter("literalAutolinkEmail"),a(t)):n(t)};function a(t){return Y(t)?(e.consume(t),a):64===t?(e.consume(t),s):n(t)}function s(t){return 46===t?e.check(R,f,l)(t):45===t||95===t||i(t)?(u=!0,e.consume(t),s):f(t)}function l(t){return e.consume(t),c=!0,s}function f(i){return u&&c&&r(o.previous)?(e.exit("literalAutolinkEmail"),e.exit("literalAutolink"),t(i)):n(i)}},previous:G},_={};function B(){return{text:_}}let j=48;for(;j<123;)_[j]=V,j++,58===j?j=65:91===j&&(j=97);function H(e){return null===e||40===e||42===e||95===e||91===e||93===e||126===e||f(e)}function U(e){return!r(e)}function G(e){return!(47===e||Y(e))}function Y(e){return 43===e||45===e||46===e||95===e||i(e)}function Q(e){let t=e.length,n=!1;for(;t--;){const r=e[t][1];if(("labelLink"===r.type||"labelImage"===r.type)&&!r._balanced){n=!0;break}if(r._gfmAutolinkLiteralWalkedInto){n=!1;break}}return e.length>0&&!n&&(e[e.length-1][1]._gfmAutolinkLiteralWalkedInto=!0),n}_[43]=V,_[45]=V,_[46]=V,_[95]=V,_[72]=[V,P],_[104]=[V,P],_[87]=[V,O],_[119]=[V,O];const W={tokenize:function(e,t,n){return function(t){return p(t)?g(e,r,"linePrefix")(t):r(t)};function r(e){return null===e||l(e)?t(e):n(e)}},partial:!0};function Z(e){return e.replace(/[\t\n\r ]+/g," ").replace(/^ | $/g,"").toLowerCase().toUpperCase()}const J={tokenize:function(e,t,n){const r=this;return g(e,(function(e){const i=r.events[r.events.length-1];return i&&"gfmFootnoteDefinitionIndent"===i[1].type&&4===i[2].sliceSerialize(i[1],!0).length?t(e):n(e)}),"gfmFootnoteDefinitionIndent",5)},partial:!0};function K(){return{document:{91:{name:"gfmFootnoteDefinition",tokenize:te,continuation:{tokenize:ne},exit:re}},text:{91:{name:"gfmFootnoteCall",tokenize:ee},93:{name:"gfmPotentialFootnoteCall",add:"after",tokenize:X,resolveTo:$}}}}function X(e,t,n){const r=this;let i=r.events.length;const o=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let c;for(;i--;){const e=r.events[i][1];if("labelImage"===e.type){c=e;break}if("gfmFootnoteCall"===e.type||"labelLink"===e.type||"label"===e.type||"image"===e.type||"link"===e.type)break}return function(i){if(!c||!c._balanced)return n(i);const u=Z(r.sliceSerialize({start:c.end,end:r.now()}));return 94===u.codePointAt(0)&&o.includes(u.slice(1))?(e.enter("gfmFootnoteCallLabelMarker"),e.consume(i),e.exit("gfmFootnoteCallLabelMarker"),t(i)):n(i)}}function $(e,t){let n,r=e.length;for(;r--;)if("labelImage"===e[r][1].type&&"enter"===e[r][0]){n=e[r][1];break}e[r+1][1].type="data",e[r+3][1].type="gfmFootnoteCallLabelMarker";const i={type:"gfmFootnoteCall",start:Object.assign({},e[r+3][1].start),end:Object.assign({},e[e.length-1][1].end)},o={type:"gfmFootnoteCallMarker",start:Object.assign({},e[r+3][1].end),end:Object.assign({},e[r+3][1].end)};o.end.column++,o.end.offset++,o.end._bufferIndex++;const c={type:"gfmFootnoteCallString",start:Object.assign({},o.end),end:Object.assign({},e[e.length-1][1].start)},u={type:"chunkString",contentType:"string",start:Object.assign({},c.start),end:Object.assign({},c.end)},a=[e[r+1],e[r+2],["enter",i,t],e[r+3],e[r+4],["enter",o,t],["exit",o,t],["enter",c,t],["enter",u,t],["exit",u,t],["exit",c,t],e[e.length-2],e[e.length-1],["exit",i,t]];return e.splice(r,e.length-r+1,...a),e}function ee(e,t,n){const r=this,i=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let o,c=0;return function(t){return e.enter("gfmFootnoteCall"),e.enter("gfmFootnoteCallLabelMarker"),e.consume(t),e.exit("gfmFootnoteCallLabelMarker"),u};function u(t){return 94!==t?n(t):(e.enter("gfmFootnoteCallMarker"),e.consume(t),e.exit("gfmFootnoteCallMarker"),e.enter("gfmFootnoteCallString"),e.enter("chunkString").contentType="string",a)}function a(u){if(c>999||93===u&&!o||null===u||91===u||f(u))return n(u);if(93===u){e.exit("chunkString");const o=e.exit("gfmFootnoteCallString");return i.includes(Z(r.sliceSerialize(o)))?(e.enter("gfmFootnoteCallLabelMarker"),e.consume(u),e.exit("gfmFootnoteCallLabelMarker"),e.exit("gfmFootnoteCall"),t):n(u)}return f(u)||(o=!0),c++,e.consume(u),92===u?s:a}function s(t){return 91===t||92===t||93===t?(e.consume(t),c++,a):a(t)}}function te(e,t,n){const r=this,i=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let o,c,u=0;return function(t){return e.enter("gfmFootnoteDefinition")._container=!0,e.enter("gfmFootnoteDefinitionLabel"),e.enter("gfmFootnoteDefinitionLabelMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionLabelMarker"),a};function a(t){return 94===t?(e.enter("gfmFootnoteDefinitionMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionMarker"),e.enter("gfmFootnoteDefinitionLabelString"),e.enter("chunkString").contentType="string",s):n(t)}function s(t){if(u>999||93===t&&!c||null===t||91===t||f(t))return n(t);if(93===t){e.exit("chunkString");const n=e.exit("gfmFootnoteDefinitionLabelString");return o=Z(r.sliceSerialize(n)),e.enter("gfmFootnoteDefinitionLabelMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionLabelMarker"),e.exit("gfmFootnoteDefinitionLabel"),p}return f(t)||(c=!0),u++,e.consume(t),92===t?l:s}function l(t){return 91===t||92===t||93===t?(e.consume(t),u++,s):s(t)}function p(t){return 58===t?(e.enter("definitionMarker"),e.consume(t),e.exit("definitionMarker"),i.includes(o)||i.push(o),g(e,d,"gfmFootnoteDefinitionWhitespace")):n(t)}function d(e){return t(e)}}function ne(e,t,n){return e.check(W,t,e.attempt(J,t,n))}function re(e){e.exit("gfmFootnoteDefinition")}class ie{constructor(){this.map=[]}add(e,t,n){!function(e,t,n,r){let i=0;if(0!==n||0!==r.length){for(;i<e.map.length;){if(e.map[i][0]===t)return e.map[i][1]+=n,void e.map[i][2].push(...r);i+=1}e.map.push([t,n,r])}}(this,e,t,n)}consume(e){if(this.map.sort((function(e,t){return e[0]-t[0]})),0===this.map.length)return;let t=this.map.length;const n=[];for(;t>0;)t-=1,n.push(e.slice(this.map[t][0]+this.map[t][1]),this.map[t][2]),e.length=this.map[t][0];n.push([...e]),e.length=0;let r=n.pop();for(;r;)e.push(...r),r=n.pop();this.map.length=0}}function oe(e,t){let n=!1;const r=[];for(;t<e.length;){const i=e[t];if(n){if("enter"===i[0])"tableContent"===i[1].type&&r.push("tableDelimiterMarker"===e[t+1][1].type?"left":"none");else if("tableContent"===i[1].type){if("tableDelimiterMarker"===e[t-1][1].type){const e=r.length-1;r[e]="left"===r[e]?"center":"right"}}else if("tableDelimiterRow"===i[1].type)break}else"enter"===i[0]&&"tableDelimiterRow"===i[1].type&&(n=!0);t+=1}return r}function ce(){return{flow:{null:{name:"table",tokenize:ue,resolveAll:ae}}}}function ue(e,t,n){const r=this;let i,o=0,c=0;return function(e){let t=r.events.length-1;for(;t>-1;){const e=r.events[t][1].type;if("lineEnding"!==e&&"linePrefix"!==e)break;t--}const i=t>-1?r.events[t][1].type:null,o="tableHead"===i||"tableRow"===i?q:u;return o===q&&r.parser.lazy[r.now().line]?n(e):o(e)};function u(t){return e.enter("tableHead"),e.enter("tableRow"),function(e){return 124===e||(i=!0,c+=1),a(e)}(t)}function a(t){return null===t?n(t):l(t)?c>1?(c=0,r.interrupt=!0,e.exit("tableRow"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),m):n(t):p(t)?g(e,a,"whitespace")(t):(c+=1,i&&(i=!1,o+=1),124===t?(e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),i=!0,a):(e.enter("data"),s(t)))}function s(t){return null===t||124===t||f(t)?(e.exit("data"),a(t)):(e.consume(t),92===t?d:s)}function d(t){return 92===t||124===t?(e.consume(t),s):s(t)}function m(t){return r.interrupt=!1,r.parser.lazy[r.now().line]?n(t):(e.enter("tableDelimiterRow"),i=!1,p(t)?g(e,h,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):h(t))}function h(t){return 45===t||58===t?x(t):124===t?(i=!0,e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),b):S(t)}function b(t){return p(t)?g(e,x,"whitespace")(t):x(t)}function x(t){return 58===t?(c+=1,i=!0,e.enter("tableDelimiterMarker"),e.consume(t),e.exit("tableDelimiterMarker"),v):45===t?(c+=1,v(t)):null===t||l(t)?w(t):S(t)}function v(t){return 45===t?(e.enter("tableDelimiterFiller"),k(t)):S(t)}function k(t){return 45===t?(e.consume(t),k):58===t?(i=!0,e.exit("tableDelimiterFiller"),e.enter("tableDelimiterMarker"),e.consume(t),e.exit("tableDelimiterMarker"),y):(e.exit("tableDelimiterFiller"),y(t))}function y(t){return p(t)?g(e,w,"whitespace")(t):w(t)}function w(n){return 124===n?h(n):(null===n||l(n))&&i&&o===c?(e.exit("tableDelimiterRow"),e.exit("tableHead"),t(n)):S(n)}function S(e){return n(e)}function q(t){return e.enter("tableRow"),T(t)}function T(n){return 124===n?(e.enter("tableCellDivider"),e.consume(n),e.exit("tableCellDivider"),T):null===n||l(n)?(e.exit("tableRow"),t(n)):p(n)?g(e,T,"whitespace")(n):(e.enter("data"),E(n))}function E(t){return null===t||124===t||f(t)?(e.exit("data"),T(t)):(e.consume(t),92===t?L:E)}function L(t){return 92===t||124===t?(e.consume(t),E):E(t)}}function ae(e,t){let n,r,i,o=-1,c=!0,u=0,a=[0,0,0,0],s=[0,0,0,0],l=!1,f=0;const p=new ie;for(;++o<e.length;){const d=e[o],m=d[1];"enter"===d[0]?"tableHead"===m.type?(l=!1,0!==f&&(le(p,t,f,n,r),r=void 0,f=0),n={type:"table",start:Object.assign({},m.start),end:Object.assign({},m.end)},p.add(o,0,[["enter",n,t]])):"tableRow"===m.type||"tableDelimiterRow"===m.type?(c=!0,i=void 0,a=[0,0,0,0],s=[0,o+1,0,0],l&&(l=!1,r={type:"tableBody",start:Object.assign({},m.start),end:Object.assign({},m.end)},p.add(o,0,[["enter",r,t]])),u="tableDelimiterRow"===m.type?2:r?3:1):!u||"data"!==m.type&&"tableDelimiterMarker"!==m.type&&"tableDelimiterFiller"!==m.type?"tableCellDivider"===m.type&&(c?c=!1:(0!==a[1]&&(s[0]=s[1],i=se(p,t,a,u,void 0,i)),a=s,s=[a[1],o,0,0])):(c=!1,0===s[2]&&(0!==a[1]&&(s[0]=s[1],i=se(p,t,a,u,void 0,i),a=[0,0,0,0]),s[2]=o)):"tableHead"===m.type?(l=!0,f=o):"tableRow"===m.type||"tableDelimiterRow"===m.type?(f=o,0!==a[1]?(s[0]=s[1],i=se(p,t,a,u,o,i)):0!==s[1]&&(i=se(p,t,s,u,o,i)),u=0):!u||"data"!==m.type&&"tableDelimiterMarker"!==m.type&&"tableDelimiterFiller"!==m.type||(s[3]=o)}for(0!==f&&le(p,t,f,n,r),p.consume(t.events),o=-1;++o<t.events.length;){const e=t.events[o];"enter"===e[0]&&"table"===e[1].type&&(e[1]._align=oe(t.events,o))}return e}function se(e,t,n,r,i,o){const c=1===r?"tableHeader":2===r?"tableDelimiter":"tableData";0!==n[0]&&(o.end=Object.assign({},fe(t.events,n[0])),e.add(n[0],0,[["exit",o,t]]));const u=fe(t.events,n[1]);if(o={type:c,start:Object.assign({},u),end:Object.assign({},u)},e.add(n[1],0,[["enter",o,t]]),0!==n[2]){const i=fe(t.events,n[2]),o=fe(t.events,n[3]),c={type:"tableContent",start:Object.assign({},i),end:Object.assign({},o)};if(e.add(n[2],0,[["enter",c,t]]),2!==r){const r=t.events[n[2]],i=t.events[n[3]];if(r[1].end=Object.assign({},i[1].end),r[1].type="chunkText",r[1].contentType="text",n[3]>n[2]+1){const t=n[2]+1,r=n[3]-n[2]-1;e.add(t,r,[])}}e.add(n[3]+1,0,[["exit",c,t]])}return void 0!==i&&(o.end=Object.assign({},fe(t.events,i)),e.add(i,0,[["exit",o,t]]),o=void 0),o}function le(e,t,n,r,i){const o=[],c=fe(t.events,n);i&&(i.end=Object.assign({},c),o.push(["exit",i,t])),r.end=Object.assign({},c),o.push(["exit",r,t]),e.add(n+1,0,o)}function fe(e,t){const n=e[t],r="enter"===n[0]?"start":"end";return n[1][r]}const pe={tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1],o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0;let c=0;return function(t){return e.enter("mathFlow"),e.enter("mathFlowFence"),e.enter("mathFlowFenceSequence"),u(t)};function u(t){return 36===t?(e.consume(t),c++,u):c<2?n(t):(e.exit("mathFlowFenceSequence"),g(e,a,"whitespace")(t))}function a(t){return null===t||l(t)?f(t):(e.enter("mathFlowFenceMeta"),e.enter("chunkString",{contentType:"string"}),s(t))}function s(t){return null===t||l(t)?(e.exit("chunkString"),e.exit("mathFlowFenceMeta"),f(t)):36===t?n(t):(e.consume(t),s)}function f(n){return e.exit("mathFlowFence"),r.interrupt?t(n):e.attempt(de,p,b)(n)}function p(t){return e.attempt({tokenize:x,partial:!0},b,d)(t)}function d(t){return(o?g(e,m,"linePrefix",o+1):m)(t)}function m(t){return null===t?b(t):l(t)?e.attempt(de,p,b)(t):(e.enter("mathFlowValue"),h(t))}function h(t){return null===t||l(t)?(e.exit("mathFlowValue"),m(t)):(e.consume(t),h)}function b(n){return e.exit("mathFlow"),t(n)}function x(e,t,n){let i=0;return g(e,(function(t){return e.enter("mathFlowFence"),e.enter("mathFlowFenceSequence"),o(t)}),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4);function o(t){return 36===t?(i++,e.consume(t),o):i<c?n(t):(e.exit("mathFlowFenceSequence"),g(e,u,"whitespace")(t))}function u(r){return null===r||l(r)?(e.exit("mathFlowFence"),t(r)):n(r)}}},concrete:!0,name:"mathFlow"},de={tokenize:function(e,t,n){const r=this;return function(n){return null===n?t(n):(e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),i)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0};function me(e){let t=(e||{}).singleDollarTextMath;return null==t&&(t=!0),{tokenize:function(e,n,r){let i,o,c=0;return function(t){return e.enter("mathText"),e.enter("mathTextSequence"),u(t)};function u(n){return 36===n?(e.consume(n),c++,u):c<2&&!t?r(n):(e.exit("mathTextSequence"),a(n))}function a(t){return null===t?r(t):36===t?(o=e.enter("mathTextSequence"),i=0,f(t)):32===t?(e.enter("space"),e.consume(t),e.exit("space"),a):l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),a):(e.enter("mathTextData"),s(t))}function s(t){return null===t||32===t||36===t||l(t)?(e.exit("mathTextData"),a(t)):(e.consume(t),s)}function f(t){return 36===t?(e.consume(t),i++,f):i===c?(e.exit("mathTextSequence"),e.exit("mathText"),n(t)):(o.type="mathTextData",s(t))}},resolve:he,previous:ge,name:"mathText"}}function he(e){let t,n,r=e.length-4,i=3;if(!("lineEnding"!==e[i][1].type&&"space"!==e[i][1].type||"lineEnding"!==e[r][1].type&&"space"!==e[r][1].type))for(t=i;++t<r;)if("mathTextData"===e[t][1].type){e[r][1].type="mathTextPadding",e[i][1].type="mathTextPadding",i+=2,r-=2;break}for(t=i-1,r++;++t<=r;)void 0===n?t!==r&&"lineEnding"!==e[t][1].type&&(n=t):t!==r&&"lineEnding"!==e[t][1].type||(e[n][1].type="mathTextData",t!==n+2&&(e[n][1].end=e[t-1][1].end,e.splice(n+2,t-n-2),r-=t-n-2,t=n+2),n=void 0);return e}function ge(e){return 36!==e||"characterEscape"===this.events[this.events.length-1][1].type}function be(e){return{flow:{36:pe},text:{36:me(e)}}}function xe(e,t,n,r){const i=e.length;let o,c=0;if(t=t<0?-t>i?0:i+t:t>i?i:t,n=n>0?n:0,r.length<1e4)o=Array.from(r),o.unshift(t,n),e.splice(...o);else for(n&&e.splice(t,n);c<r.length;)o=r.slice(c,c+1e4),o.unshift(t,0),e.splice(...o),c+=1e4,t+=1e4}function ve(e,t){return e.length>0?(xe(e,e.length,0,t),e):t}const ke={}.hasOwnProperty;function ye(e,t){let n;for(n in t){const r=(ke.call(e,n)?e[n]:void 0)||(e[n]={}),i=t[n];let o;if(i)for(o in i){ke.call(r,o)||(r[o]=[]);const e=i[o];we(r[o],Array.isArray(e)?e:e?[e]:[])}}}function we(e,t){let n=-1;const r=[];for(;++n<t.length;)("after"===t[n].add?e:r).push(t[n]);xe(e,0,0,r)}const Se={tokenize:function(e){const t=e.attempt(this.parser.constructs.contentInitial,(function(n){if(null!==n)return e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),g(e,t,"linePrefix");e.consume(n)}),(function(t){return e.enter("paragraph"),r(t)}));let n;return t;function r(t){const r=e.enter("chunkText",{contentType:"text",previous:n});return n&&(n.next=r),n=r,i(t)}function i(t){return null===t?(e.exit("chunkText"),e.exit("paragraph"),void e.consume(t)):l(t)?(e.consume(t),e.exit("chunkText"),r):(e.consume(t),i)}}},qe={tokenize:function(e){const t=this,n=[];let r,i,o,c=0;return u;function u(r){if(c<n.length){const i=n[c];return t.containerState=i[1],e.attempt(i[0].continuation,a,s)(r)}return s(r)}function a(e){if(c++,t.containerState._closeFlow){t.containerState._closeFlow=void 0,r&&v();const n=t.events.length;let i,o=n;for(;o--;)if("exit"===t.events[o][0]&&"chunkFlow"===t.events[o][1].type){i=t.events[o][1].end;break}x(c);let u=n;for(;u<t.events.length;)t.events[u][1].end=Object.assign({},i),u++;return xe(t.events,o+1,0,t.events.slice(n)),t.events.length=u,s(e)}return u(e)}function s(i){if(c===n.length){if(!r)return d(i);if(r.currentConstruct&&r.currentConstruct.concrete)return h(i);t.interrupt=Boolean(r.currentConstruct&&!r._gfmTableDynamicInterruptHack)}return t.containerState={},e.check(Te,f,p)(i)}function f(e){return r&&v(),x(c),d(e)}function p(e){return t.parser.lazy[t.now().line]=c!==n.length,o=t.now().offset,h(e)}function d(n){return t.containerState={},e.attempt(Te,m,h)(n)}function m(e){return c++,n.push([t.currentConstruct,t.containerState]),d(e)}function h(n){return null===n?(r&&v(),x(0),void e.consume(n)):(r=r||t.parser.flow(t.now()),e.enter("chunkFlow",{contentType:"flow",previous:i,_tokenizer:r}),g(n))}function g(n){return null===n?(b(e.exit("chunkFlow"),!0),x(0),void e.consume(n)):l(n)?(e.consume(n),b(e.exit("chunkFlow")),c=0,t.interrupt=void 0,u):(e.consume(n),g)}function b(e,n){const u=t.sliceStream(e);if(n&&u.push(null),e.previous=i,i&&(i.next=e),i=e,r.defineSkip(e.start),r.write(u),t.parser.lazy[e.start.line]){let e=r.events.length;for(;e--;)if(r.events[e][1].start.offset<o&&(!r.events[e][1].end||r.events[e][1].end.offset>o))return;const n=t.events.length;let i,u,a=n;for(;a--;)if("exit"===t.events[a][0]&&"chunkFlow"===t.events[a][1].type){if(i){u=t.events[a][1].end;break}i=!0}for(x(c),e=n;e<t.events.length;)t.events[e][1].end=Object.assign({},u),e++;xe(t.events,a+1,0,t.events.slice(n)),t.events.length=e}}function x(r){let i=n.length;for(;i-- >r;){const r=n[i];t.containerState=r[1],r[0].exit.call(t,e)}n.length=r}function v(){r.write([null]),i=void 0,r=void 0,t.containerState._closeFlow=void 0}}},Te={tokenize:function(e,t,n){return g(e,e.attempt(this.parser.constructs.document,t,n),"linePrefix",this.parser.constructs.disable.null.includes("codeIndented")?void 0:4)}};class Ee{constructor(e){this.left=e?[...e]:[],this.right=[]}get(e){if(e<0||e>=this.left.length+this.right.length)throw new RangeError("Cannot access index `"+e+"` in a splice buffer of size `"+(this.left.length+this.right.length)+"`");return e<this.left.length?this.left[e]:this.right[this.right.length-e+this.left.length-1]}get length(){return this.left.length+this.right.length}shift(){return this.setCursor(0),this.right.pop()}slice(e,t){const n=null==t?Number.POSITIVE_INFINITY:t;return n<this.left.length?this.left.slice(e,n):e>this.left.length?this.right.slice(this.right.length-n+this.left.length,this.right.length-e+this.left.length).reverse():this.left.slice(e).concat(this.right.slice(this.right.length-n+this.left.length).reverse())}splice(e,t,n){const r=t||0;this.setCursor(Math.trunc(e));const i=this.right.splice(this.right.length-r,Number.POSITIVE_INFINITY);return n&&Le(this.left,n),i.reverse()}pop(){return this.setCursor(Number.POSITIVE_INFINITY),this.left.pop()}push(e){this.setCursor(Number.POSITIVE_INFINITY),this.left.push(e)}pushMany(e){this.setCursor(Number.POSITIVE_INFINITY),Le(this.left,e)}unshift(e){this.setCursor(0),this.right.push(e)}unshiftMany(e){this.setCursor(0),Le(this.right,e.reverse())}setCursor(e){if(!(e===this.left.length||e>this.left.length&&0===this.right.length||e<0&&0===this.left.length))if(e<this.left.length){const t=this.left.splice(e,Number.POSITIVE_INFINITY);Le(this.right,t.reverse())}else{const t=this.right.splice(this.left.length+this.right.length-e,Number.POSITIVE_INFINITY);Le(this.left,t.reverse())}}}function Le(e,t){let n=0;if(t.length<1e4)e.push(...t);else for(;n<t.length;)e.push(...t.slice(n,n+1e4)),n+=1e4}function De(e){const t={};let n,r,i,o,c,u,a,s=-1;const l=new Ee(e);for(;++s<l.length;){for(;s in t;)s=t[s];if(n=l.get(s),s&&"chunkFlow"===n[1].type&&"listItemPrefix"===l.get(s-1)[1].type&&(u=n[1]._tokenizer.events,i=0,i<u.length&&"lineEndingBlank"===u[i][1].type&&(i+=2),i<u.length&&"content"===u[i][1].type))for(;++i<u.length&&"content"!==u[i][1].type;)"chunkText"===u[i][1].type&&(u[i][1]._isInFirstContentOfListItem=!0,i++);if("enter"===n[0])n[1].contentType&&(Object.assign(t,Ae(l,s)),s=t[s],a=!0);else if(n[1]._container){for(i=s,r=void 0;i--&&(o=l.get(i),"lineEnding"===o[1].type||"lineEndingBlank"===o[1].type);)"enter"===o[0]&&(r&&(l.get(r)[1].type="lineEndingBlank"),o[1].type="lineEnding",r=i);r&&(n[1].end=Object.assign({},l.get(r)[1].start),c=l.slice(r,s),c.unshift(n),l.splice(r,s-r+1,c))}}return xe(e,0,Number.POSITIVE_INFINITY,l.slice(0)),!a}function Ae(e,t){const n=e.get(t)[1],r=e.get(t)[2];let i=t-1;const o=[],c=n._tokenizer||r.parser[n.contentType](n.start),u=c.events,a=[],s={};let l,f,p=-1,d=n,m=0,h=0;const g=[h];for(;d;){for(;e.get(++i)[1]!==d;);o.push(i),d._tokenizer||(l=r.sliceStream(d),d.next||l.push(null),f&&c.defineSkip(d.start),d._isInFirstContentOfListItem&&(c._gfmTasklistFirstContentOfListItem=!0),c.write(l),d._isInFirstContentOfListItem&&(c._gfmTasklistFirstContentOfListItem=void 0)),f=d,d=d.next}for(d=n;++p<u.length;)"exit"===u[p][0]&&"enter"===u[p-1][0]&&u[p][1].type===u[p-1][1].type&&u[p][1].start.line!==u[p][1].end.line&&(h=p+1,g.push(h),d._tokenizer=void 0,d.previous=void 0,d=d.next);for(c.events=[],d?(d._tokenizer=void 0,d.previous=void 0):g.pop(),p=g.length;p--;){const t=u.slice(g[p],g[p+1]),n=o.pop();a.push([n,n+t.length-1]),e.splice(n,2,t)}for(a.reverse(),p=-1;++p<a.length;)s[m+a[p][0]]=m+a[p][1],m+=a[p][1]-a[p][0]-1;return s}const Ce={tokenize:function(e,t){let n;return function(t){return e.enter("content"),n=e.enter("chunkContent",{contentType:"content"}),r(t)};function r(t){return null===t?i(t):l(t)?e.check(Ie,o,i)(t):(e.consume(t),r)}function i(n){return e.exit("chunkContent"),e.exit("content"),t(n)}function o(t){return e.consume(t),e.exit("chunkContent"),n.next=e.enter("chunkContent",{contentType:"content",previous:n}),n=n.next,r}},resolve:function(e){return De(e),e}},Ie={tokenize:function(e,t,n){const r=this;return function(t){return e.exit("chunkContent"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),g(e,i,"linePrefix")};function i(i){if(null===i||l(i))return n(i);const o=r.events[r.events.length-1];return!r.parser.constructs.disable.null.includes("codeIndented")&&o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?t(i):e.interrupt(r.parser.constructs.flow,n,t)(i)}},partial:!0},Fe={tokenize:function(e){const t=this,n=e.attempt(W,(function(r){if(null!==r)return e.enter("lineEndingBlank"),e.consume(r),e.exit("lineEndingBlank"),t.currentConstruct=void 0,n;e.consume(r)}),e.attempt(this.parser.constructs.flowInitial,r,g(e,e.attempt(this.parser.constructs.flow,r,e.attempt(Ce,r)),"linePrefix")));return n;function r(r){if(null!==r)return e.enter("lineEnding"),e.consume(r),e.exit("lineEnding"),t.currentConstruct=void 0,n;e.consume(r)}}},ze={resolveAll:Oe()},Ne=Re("string"),Me=Re("text");function Re(e){return{tokenize:function(t){const n=this,r=this.parser.constructs[e],i=t.attempt(r,o,c);return o;function o(e){return a(e)?i(e):c(e)}function c(e){if(null!==e)return t.enter("data"),t.consume(e),u;t.consume(e)}function u(e){return a(e)?(t.exit("data"),i(e)):(t.consume(e),u)}function a(e){if(null===e)return!0;const t=r[e];let i=-1;if(t)for(;++i<t.length;){const e=t[i];if(!e.previous||e.previous.call(n,n.previous))return!0}return!1}},resolveAll:Oe("text"===e?Pe:void 0)}}function Oe(e){return function(t,n){let r,i=-1;for(;++i<=t.length;)void 0===r?t[i]&&"data"===t[i][1].type&&(r=i,i++):t[i]&&"data"===t[i][1].type||(i!==r+2&&(t[r][1].end=t[i-1][1].end,t.splice(r+2,i-r-2),i=r+2),r=void 0);return e?e(t,n):t}}function Pe(e,t){let n=0;for(;++n<=e.length;)if((n===e.length||"lineEnding"===e[n][1].type)&&"data"===e[n-1][1].type){const r=e[n-1][1],i=t.sliceStream(r);let o,c=i.length,u=-1,a=0;for(;c--;){const e=i[c];if("string"==typeof e){for(u=e.length;32===e.charCodeAt(u-1);)a++,u--;if(u)break;u=-1}else if(-2===e)o=!0,a++;else if(-1!==e){c++;break}}if(a){const i={type:n===e.length||o||a<2?"lineSuffix":"hardBreakTrailing",start:{line:r.end.line,column:r.end.column-a,offset:r.end.offset-a,_index:r.start._index+c,_bufferIndex:c?u:r.start._bufferIndex+u},end:Object.assign({},r.end)};r.end=Object.assign({},i.start),r.start.offset===r.end.offset?Object.assign(r,i):(e.splice(n,0,["enter",i,t],["exit",i,t]),n+=2)}n++}return e}function Ve(e,t,n){const r=[];let i=-1;for(;++i<e.length;){const o=e[i].resolveAll;o&&!r.includes(o)&&(t=o(t,n),r.push(o))}return t}function _e(e,t,n){let r=Object.assign(n?Object.assign({},n):{line:1,column:1,offset:0},{_index:0,_bufferIndex:-1});const i={},o=[];let c=[],u=[],a=!0;const s={consume:function(e){l(e)?(r.line++,r.column=1,r.offset+=-3===e?2:1,k()):-1!==e&&(r.column++,r.offset++),r._bufferIndex<0?r._index++:(r._bufferIndex++,r._bufferIndex===c[r._index].length&&(r._bufferIndex=-1,r._index++)),f.previous=e,a=!0},enter:function(e,t){const n=t||{};return n.type=e,n.start=h(),f.events.push(["enter",n,f]),u.push(n),n},exit:function(e){const t=u.pop();return t.end=h(),f.events.push(["exit",t,f]),t},attempt:x((function(e,t){v(e,t.from)})),check:x(b),interrupt:x(b,{interrupt:!0})},f={previous:null,code:null,containerState:{},events:[],parser:e,sliceStream:m,sliceSerialize:function(e,t){return function(e,t){let n=-1;const r=[];let i;for(;++n<e.length;){const o=e[n];let c;if("string"==typeof o)c=o;else switch(o){case-5:c="\r";break;case-4:c="\n";break;case-3:c="\r\n";break;case-2:c=t?" ":"\t";break;case-1:if(!t&&i)continue;c=" ";break;default:c=String.fromCharCode(o)}i=-2===o,r.push(c)}return r.join("")}(m(e),t)},now:h,defineSkip:function(e){i[e.line]=e.column,k()},write:function(e){return c=ve(c,e),function(){let e;for(;r._index<c.length;){const t=c[r._index];if("string"==typeof t)for(e=r._index,r._bufferIndex<0&&(r._bufferIndex=0);r._index===e&&r._bufferIndex<t.length;)g(t.charCodeAt(r._bufferIndex));else g(t)}}(),null!==c[c.length-1]?[]:(v(t,0),f.events=Ve(o,f.events,f),f.events)}};let p,d=t.tokenize.call(f,s);return t.resolveAll&&o.push(t),f;function m(e){return function(e,t){const n=t.start._index,r=t.start._bufferIndex,i=t.end._index,o=t.end._bufferIndex;let c;if(n===i)c=[e[n].slice(r,o)];else{if(c=e.slice(n,i),r>-1){const e=c[0];"string"==typeof e?c[0]=e.slice(r):c.shift()}o>0&&c.push(e[i].slice(0,o))}return c}(c,e)}function h(){const{line:e,column:t,offset:n,_index:i,_bufferIndex:o}=r;return{line:e,column:t,offset:n,_index:i,_bufferIndex:o}}function g(e){a=void 0,p=e,d=d(e)}function b(e,t){t.restore()}function x(e,t){return function(n,i,o){let c,l,p,d;return Array.isArray(n)?g(n):"tokenize"in n?g([n]):(m=n,function(e){const t=null!==e&&m[e],n=null!==e&&m.null;return g([...Array.isArray(t)?t:t?[t]:[],...Array.isArray(n)?n:n?[n]:[]])(e)});var m;function g(e){return c=e,l=0,0===e.length?o:b(e[l])}function b(e){return function(n){return d=function(){const e=h(),t=f.previous,n=f.currentConstruct,i=f.events.length,o=Array.from(u);return{restore:function(){r=e,f.previous=t,f.currentConstruct=n,f.events.length=i,u=o,k()},from:i}}(),p=e,e.partial||(f.currentConstruct=e),e.name&&f.parser.constructs.disable.null.includes(e.name)?v():e.tokenize.call(t?Object.assign(Object.create(f),t):f,s,x,v)(n)}}function x(t){return a=!0,e(p,d),i}function v(e){return a=!0,d.restore(),++l<c.length?b(c[l]):o}}}function v(e,t){e.resolveAll&&!o.includes(e)&&o.push(e),e.resolve&&xe(f.events,t,f.events.length-t,e.resolve(f.events.slice(t),f)),e.resolveTo&&(f.events=e.resolveTo(f.events,f))}function k(){r.line in i&&r.column<2&&(r.column=i[r.line],r.offset+=i[r.line]-1)}}const Be={name:"thematicBreak",tokenize:function(e,t,n){let r,i=0;return function(t){return e.enter("thematicBreak"),function(e){return r=e,o(e)}(t)};function o(o){return o===r?(e.enter("thematicBreakSequence"),c(o)):i>=3&&(null===o||l(o))?(e.exit("thematicBreak"),t(o)):n(o)}function c(t){return t===r?(e.consume(t),i++,c):(e.exit("thematicBreakSequence"),p(t)?g(e,o,"whitespace")(t):o(t))}}},je={name:"list",tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1];let o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0,c=0;return function(t){const i=r.containerState.type||(42===t||43===t||45===t?"listUnordered":"listOrdered");if("listUnordered"===i?!r.containerState.marker||t===r.containerState.marker:u(t)){if(r.containerState.type||(r.containerState.type=i,e.enter(i,{_container:!0})),"listUnordered"===i)return e.enter("listItemPrefix"),42===t||45===t?e.check(Be,n,s)(t):s(t);if(!r.interrupt||49===t)return e.enter("listItemPrefix"),e.enter("listItemValue"),a(t)}return n(t)};function a(t){return u(t)&&++c<10?(e.consume(t),a):(!r.interrupt||c<2)&&(r.containerState.marker?t===r.containerState.marker:41===t||46===t)?(e.exit("listItemValue"),s(t)):n(t)}function s(t){return e.enter("listItemMarker"),e.consume(t),e.exit("listItemMarker"),r.containerState.marker=r.containerState.marker||t,e.check(W,r.interrupt?n:l,e.attempt(He,d,f))}function l(e){return r.containerState.initialBlankLine=!0,o++,d(e)}function f(t){return p(t)?(e.enter("listItemPrefixWhitespace"),e.consume(t),e.exit("listItemPrefixWhitespace"),d):n(t)}function d(n){return r.containerState.size=o+r.sliceSerialize(e.exit("listItemPrefix"),!0).length,t(n)}},continuation:{tokenize:function(e,t,n){const r=this;return r.containerState._closeFlow=void 0,e.check(W,(function(n){return r.containerState.furtherBlankLines=r.containerState.furtherBlankLines||r.containerState.initialBlankLine,g(e,t,"listItemIndent",r.containerState.size+1)(n)}),(function(n){return r.containerState.furtherBlankLines||!p(n)?(r.containerState.furtherBlankLines=void 0,r.containerState.initialBlankLine=void 0,i(n)):(r.containerState.furtherBlankLines=void 0,r.containerState.initialBlankLine=void 0,e.attempt(Ue,t,i)(n))}));function i(i){return r.containerState._closeFlow=!0,r.interrupt=void 0,g(e,e.attempt(je,t,n),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(i)}}},exit:function(e){e.exit(this.containerState.type)}},He={tokenize:function(e,t,n){const r=this;return g(e,(function(e){const i=r.events[r.events.length-1];return!p(e)&&i&&"listItemPrefixWhitespace"===i[1].type?t(e):n(e)}),"listItemPrefixWhitespace",r.parser.constructs.disable.null.includes("codeIndented")?void 0:5)},partial:!0},Ue={tokenize:function(e,t,n){const r=this;return g(e,(function(e){const i=r.events[r.events.length-1];return i&&"listItemIndent"===i[1].type&&i[2].sliceSerialize(i[1],!0).length===r.containerState.size?t(e):n(e)}),"listItemIndent",r.containerState.size+1)},partial:!0},Ge={name:"blockQuote",tokenize:function(e,t,n){const r=this;return function(t){if(62===t){const n=r.containerState;return n.open||(e.enter("blockQuote",{_container:!0}),n.open=!0),e.enter("blockQuotePrefix"),e.enter("blockQuoteMarker"),e.consume(t),e.exit("blockQuoteMarker"),i}return n(t)};function i(n){return p(n)?(e.enter("blockQuotePrefixWhitespace"),e.consume(n),e.exit("blockQuotePrefixWhitespace"),e.exit("blockQuotePrefix"),t):(e.exit("blockQuotePrefix"),t(n))}},continuation:{tokenize:function(e,t,n){const r=this;return function(t){return p(t)?g(e,i,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):i(t)};function i(r){return e.attempt(Ge,t,n)(r)}}},exit:function(e){e.exit("blockQuote")}};function Ye(e,t,n,r,i,o,u,a,s){const p=s||Number.POSITIVE_INFINITY;let d=0;return function(t){return 60===t?(e.enter(r),e.enter(i),e.enter(o),e.consume(t),e.exit(o),m):null===t||32===t||41===t||c(t)?n(t):(e.enter(r),e.enter(u),e.enter(a),e.enter("chunkString",{contentType:"string"}),b(t))};function m(n){return 62===n?(e.enter(o),e.consume(n),e.exit(o),e.exit(i),e.exit(r),t):(e.enter(a),e.enter("chunkString",{contentType:"string"}),h(n))}function h(t){return 62===t?(e.exit("chunkString"),e.exit(a),m(t)):null===t||60===t||l(t)?n(t):(e.consume(t),92===t?g:h)}function g(t){return 60===t||62===t||92===t?(e.consume(t),h):h(t)}function b(i){return d||null!==i&&41!==i&&!f(i)?d<p&&40===i?(e.consume(i),d++,b):41===i?(e.consume(i),d--,b):null===i||32===i||40===i||c(i)?n(i):(e.consume(i),92===i?x:b):(e.exit("chunkString"),e.exit(a),e.exit(u),e.exit(r),t(i))}function x(t){return 40===t||41===t||92===t?(e.consume(t),b):b(t)}}function Qe(e,t,n,r,i,o){const c=this;let u,a=0;return function(t){return e.enter(r),e.enter(i),e.consume(t),e.exit(i),e.enter(o),s};function s(p){return a>999||null===p||91===p||93===p&&!u||94===p&&!a&&"_hiddenFootnoteSupport"in c.parser.constructs?n(p):93===p?(e.exit(o),e.enter(i),e.consume(p),e.exit(i),e.exit(r),t):l(p)?(e.enter("lineEnding"),e.consume(p),e.exit("lineEnding"),s):(e.enter("chunkString",{contentType:"string"}),f(p))}function f(t){return null===t||91===t||93===t||l(t)||a++>999?(e.exit("chunkString"),s(t)):(e.consume(t),u||(u=!p(t)),92===t?d:f)}function d(t){return 91===t||92===t||93===t?(e.consume(t),a++,f):f(t)}}function We(e,t,n,r,i,o){let c;return function(t){return 34===t||39===t||40===t?(e.enter(r),e.enter(i),e.consume(t),e.exit(i),c=40===t?41:t,u):n(t)};function u(n){return n===c?(e.enter(i),e.consume(n),e.exit(i),e.exit(r),t):(e.enter(o),a(n))}function a(t){return t===c?(e.exit(o),u(c)):null===t?n(t):l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),g(e,a,"linePrefix")):(e.enter("chunkString",{contentType:"string"}),s(t))}function s(t){return t===c||null===t||l(t)?(e.exit("chunkString"),a(t)):(e.consume(t),92===t?f:s)}function f(t){return t===c||92===t?(e.consume(t),s):s(t)}}const Ze={name:"definition",tokenize:function(e,t,n){const r=this;let i;return function(t){return e.enter("definition"),function(t){return Qe.call(r,e,o,n,"definitionLabel","definitionLabelMarker","definitionLabelString")(t)}(t)};function o(t){return i=Z(r.sliceSerialize(r.events[r.events.length-1][1]).slice(1,-1)),58===t?(e.enter("definitionMarker"),e.consume(t),e.exit("definitionMarker"),c):n(t)}function c(t){return f(t)?b(e,u)(t):u(t)}function u(t){return Ye(e,a,n,"definitionDestination","definitionDestinationLiteral","definitionDestinationLiteralMarker","definitionDestinationRaw","definitionDestinationString")(t)}function a(t){return e.attempt(Je,s,s)(t)}function s(t){return p(t)?g(e,d,"whitespace")(t):d(t)}function d(o){return null===o||l(o)?(e.exit("definition"),r.parser.defined.push(i),t(o)):n(o)}}},Je={tokenize:function(e,t,n){return function(t){return f(t)?b(e,r)(t):n(t)};function r(t){return We(e,i,n,"definitionTitle","definitionTitleMarker","definitionTitleString")(t)}function i(t){return p(t)?g(e,o,"whitespace")(t):o(t)}function o(e){return null===e||l(e)?t(e):n(e)}},partial:!0},Ke={name:"codeIndented",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("codeIndented"),g(e,i,"linePrefix",5)(t)};function i(e){const t=r.events[r.events.length-1];return t&&"linePrefix"===t[1].type&&t[2].sliceSerialize(t[1],!0).length>=4?o(e):n(e)}function o(t){return null===t?u(t):l(t)?e.attempt(Xe,o,u)(t):(e.enter("codeFlowValue"),c(t))}function c(t){return null===t||l(t)?(e.exit("codeFlowValue"),o(t)):(e.consume(t),c)}function u(n){return e.exit("codeIndented"),t(n)}}},Xe={tokenize:function(e,t,n){const r=this;return i;function i(t){return r.parser.lazy[r.now().line]?n(t):l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i):g(e,o,"linePrefix",5)(t)}function o(e){const o=r.events[r.events.length-1];return o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?t(e):l(e)?i(e):n(e)}},partial:!0},$e={name:"headingAtx",tokenize:function(e,t,n){let r=0;return function(t){return e.enter("atxHeading"),function(t){return e.enter("atxHeadingSequence"),i(t)}(t)};function i(t){return 35===t&&r++<6?(e.consume(t),i):null===t||f(t)?(e.exit("atxHeadingSequence"),o(t)):n(t)}function o(n){return 35===n?(e.enter("atxHeadingSequence"),c(n)):null===n||l(n)?(e.exit("atxHeading"),t(n)):p(n)?g(e,o,"whitespace")(n):(e.enter("atxHeadingText"),u(n))}function c(t){return 35===t?(e.consume(t),c):(e.exit("atxHeadingSequence"),o(t))}function u(t){return null===t||35===t||f(t)?(e.exit("atxHeadingText"),o(t)):(e.consume(t),u)}},resolve:function(e,t){let n,r,i=e.length-2,o=3;return"whitespace"===e[o][1].type&&(o+=2),i-2>o&&"whitespace"===e[i][1].type&&(i-=2),"atxHeadingSequence"===e[i][1].type&&(o===i-1||i-4>o&&"whitespace"===e[i-2][1].type)&&(i-=o+1===i?2:4),i>o&&(n={type:"atxHeadingText",start:e[o][1].start,end:e[i][1].end},r={type:"chunkText",start:e[o][1].start,end:e[i][1].end,contentType:"text"},xe(e,o,i-o+1,[["enter",n,t],["enter",r,t],["exit",r,t],["exit",n,t]])),e}},et={name:"setextUnderline",tokenize:function(e,t,n){const r=this;let i;return function(t){let c,u=r.events.length;for(;u--;)if("lineEnding"!==r.events[u][1].type&&"linePrefix"!==r.events[u][1].type&&"content"!==r.events[u][1].type){c="paragraph"===r.events[u][1].type;break}return r.parser.lazy[r.now().line]||!r.interrupt&&!c?n(t):(e.enter("setextHeadingLine"),i=t,function(t){return e.enter("setextHeadingLineSequence"),o(t)}(t))};function o(t){return t===i?(e.consume(t),o):(e.exit("setextHeadingLineSequence"),p(t)?g(e,c,"lineSuffix")(t):c(t))}function c(r){return null===r||l(r)?(e.exit("setextHeadingLine"),t(r)):n(r)}},resolveTo:function(e,t){let n,r,i,o=e.length;for(;o--;)if("enter"===e[o][0]){if("content"===e[o][1].type){n=o;break}"paragraph"===e[o][1].type&&(r=o)}else"content"===e[o][1].type&&e.splice(o,1),i||"definition"!==e[o][1].type||(i=o);const c={type:"setextHeading",start:Object.assign({},e[r][1].start),end:Object.assign({},e[e.length-1][1].end)};return e[r][1].type="setextHeadingText",i?(e.splice(r,0,["enter",c,t]),e.splice(i+1,0,["exit",e[n][1],t]),e[n][1].end=Object.assign({},e[i][1].end)):e[n][1]=c,e.push(["exit",c,t]),e}},tt=["address","article","aside","base","basefont","blockquote","body","caption","center","col","colgroup","dd","details","dialog","dir","div","dl","dt","fieldset","figcaption","figure","footer","form","frame","frameset","h1","h2","h3","h4","h5","h6","head","header","hr","html","iframe","legend","li","link","main","menu","menuitem","nav","noframes","ol","optgroup","option","p","param","search","section","summary","table","tbody","td","tfoot","th","thead","title","tr","track","ul"],nt=["pre","script","style","textarea"],rt={name:"htmlFlow",tokenize:function(e,t,n){const o=this;let c,u,a,s,d;return function(t){return function(t){return e.enter("htmlFlow"),e.enter("htmlFlowData"),e.consume(t),m}(t)};function m(i){return 33===i?(e.consume(i),h):47===i?(e.consume(i),u=!0,x):63===i?(e.consume(i),c=3,o.interrupt?t:V):r(i)?(e.consume(i),a=String.fromCharCode(i),v):n(i)}function h(i){return 45===i?(e.consume(i),c=2,g):91===i?(e.consume(i),c=5,s=0,b):r(i)?(e.consume(i),c=4,o.interrupt?t:V):n(i)}function g(r){return 45===r?(e.consume(r),o.interrupt?t:V):n(r)}function b(r){return r==="CDATA[".charCodeAt(s++)?(e.consume(r),6===s?o.interrupt?t:I:b):n(r)}function x(t){return r(t)?(e.consume(t),a=String.fromCharCode(t),v):n(t)}function v(r){if(null===r||47===r||62===r||f(r)){const i=47===r,s=a.toLowerCase();return i||u||!nt.includes(s)?tt.includes(a.toLowerCase())?(c=6,i?(e.consume(r),k):o.interrupt?t(r):I(r)):(c=7,o.interrupt&&!o.parser.lazy[o.now().line]?n(r):u?y(r):w(r)):(c=1,o.interrupt?t(r):I(r))}return 45===r||i(r)?(e.consume(r),a+=String.fromCharCode(r),v):n(r)}function k(r){return 62===r?(e.consume(r),o.interrupt?t:I):n(r)}function y(t){return p(t)?(e.consume(t),y):A(t)}function w(t){return 47===t?(e.consume(t),A):58===t||95===t||r(t)?(e.consume(t),S):p(t)?(e.consume(t),w):A(t)}function S(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),S):q(t)}function q(t){return 61===t?(e.consume(t),T):p(t)?(e.consume(t),q):w(t)}function T(t){return null===t||60===t||61===t||62===t||96===t?n(t):34===t||39===t?(e.consume(t),d=t,E):p(t)?(e.consume(t),T):L(t)}function E(t){return t===d?(e.consume(t),d=null,D):null===t||l(t)?n(t):(e.consume(t),E)}function L(t){return null===t||34===t||39===t||47===t||60===t||61===t||62===t||96===t||f(t)?q(t):(e.consume(t),L)}function D(e){return 47===e||62===e||p(e)?w(e):n(e)}function A(t){return 62===t?(e.consume(t),C):n(t)}function C(t){return null===t||l(t)?I(t):p(t)?(e.consume(t),C):n(t)}function I(t){return 45===t&&2===c?(e.consume(t),M):60===t&&1===c?(e.consume(t),R):62===t&&4===c?(e.consume(t),_):63===t&&3===c?(e.consume(t),V):93===t&&5===c?(e.consume(t),P):!l(t)||6!==c&&7!==c?null===t||l(t)?(e.exit("htmlFlowData"),F(t)):(e.consume(t),I):(e.exit("htmlFlowData"),e.check(it,B,F)(t))}function F(t){return e.check(ot,z,B)(t)}function z(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),N}function N(t){return null===t||l(t)?F(t):(e.enter("htmlFlowData"),I(t))}function M(t){return 45===t?(e.consume(t),V):I(t)}function R(t){return 47===t?(e.consume(t),a="",O):I(t)}function O(t){if(62===t){const n=a.toLowerCase();return nt.includes(n)?(e.consume(t),_):I(t)}return r(t)&&a.length<8?(e.consume(t),a+=String.fromCharCode(t),O):I(t)}function P(t){return 93===t?(e.consume(t),V):I(t)}function V(t){return 62===t?(e.consume(t),_):45===t&&2===c?(e.consume(t),V):I(t)}function _(t){return null===t||l(t)?(e.exit("htmlFlowData"),B(t)):(e.consume(t),_)}function B(n){return e.exit("htmlFlow"),t(n)}},resolveTo:function(e){let t=e.length;for(;t--&&("enter"!==e[t][0]||"htmlFlow"!==e[t][1].type););return t>1&&"linePrefix"===e[t-2][1].type&&(e[t][1].start=e[t-2][1].start,e[t+1][1].start=e[t-2][1].start,e.splice(t-2,2)),e},concrete:!0},it={tokenize:function(e,t,n){return function(r){return e.enter("lineEnding"),e.consume(r),e.exit("lineEnding"),e.attempt(W,t,n)}},partial:!0},ot={tokenize:function(e,t,n){const r=this;return function(t){return l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i):n(t)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},ct={tokenize:function(e,t,n){const r=this;return function(t){return null===t?n(t):(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},ut={name:"codeFenced",tokenize:function(e,t,n){const r=this,i={tokenize:function(e,t,n){let i=0;return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),c};function c(t){return e.enter("codeFencedFence"),p(t)?g(e,a,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):a(t)}function a(t){return t===o?(e.enter("codeFencedFenceSequence"),s(t)):n(t)}function s(t){return t===o?(i++,e.consume(t),s):i>=u?(e.exit("codeFencedFenceSequence"),p(t)?g(e,f,"whitespace")(t):f(t)):n(t)}function f(r){return null===r||l(r)?(e.exit("codeFencedFence"),t(r)):n(r)}},partial:!0};let o,c=0,u=0;return function(t){return function(t){const n=r.events[r.events.length-1];return c=n&&"linePrefix"===n[1].type?n[2].sliceSerialize(n[1],!0).length:0,o=t,e.enter("codeFenced"),e.enter("codeFencedFence"),e.enter("codeFencedFenceSequence"),a(t)}(t)};function a(t){return t===o?(u++,e.consume(t),a):u<3?n(t):(e.exit("codeFencedFenceSequence"),p(t)?g(e,s,"whitespace")(t):s(t))}function s(n){return null===n||l(n)?(e.exit("codeFencedFence"),r.interrupt?t(n):e.check(ct,h,y)(n)):(e.enter("codeFencedFenceInfo"),e.enter("chunkString",{contentType:"string"}),f(n))}function f(t){return null===t||l(t)?(e.exit("chunkString"),e.exit("codeFencedFenceInfo"),s(t)):p(t)?(e.exit("chunkString"),e.exit("codeFencedFenceInfo"),g(e,d,"whitespace")(t)):96===t&&t===o?n(t):(e.consume(t),f)}function d(t){return null===t||l(t)?s(t):(e.enter("codeFencedFenceMeta"),e.enter("chunkString",{contentType:"string"}),m(t))}function m(t){return null===t||l(t)?(e.exit("chunkString"),e.exit("codeFencedFenceMeta"),s(t)):96===t&&t===o?n(t):(e.consume(t),m)}function h(t){return e.attempt(i,y,b)(t)}function b(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),x}function x(t){return c>0&&p(t)?g(e,v,"linePrefix",c+1)(t):v(t)}function v(t){return null===t||l(t)?e.check(ct,h,y)(t):(e.enter("codeFlowValue"),k(t))}function k(t){return null===t||l(t)?(e.exit("codeFlowValue"),v(t)):(e.consume(t),k)}function y(n){return e.exit("codeFenced"),t(n)}},concrete:!0},at={AElig:"Æ",AMP:"&",Aacute:"Á",Abreve:"Ă",Acirc:"Â",Acy:"А",Afr:"𝔄",Agrave:"À",Alpha:"Α",Amacr:"Ā",And:"⩓",Aogon:"Ą",Aopf:"𝔸",ApplyFunction:"⁡",Aring:"Å",Ascr:"𝒜",Assign:"≔",Atilde:"Ã",Auml:"Ä",Backslash:"∖",Barv:"⫧",Barwed:"⌆",Bcy:"Б",Because:"∵",Bernoullis:"ℬ",Beta:"Β",Bfr:"𝔅",Bopf:"𝔹",Breve:"˘",Bscr:"ℬ",Bumpeq:"≎",CHcy:"Ч",COPY:"©",Cacute:"Ć",Cap:"⋒",CapitalDifferentialD:"ⅅ",Cayleys:"ℭ",Ccaron:"Č",Ccedil:"Ç",Ccirc:"Ĉ",Cconint:"∰",Cdot:"Ċ",Cedilla:"¸",CenterDot:"·",Cfr:"ℭ",Chi:"Χ",CircleDot:"⊙",CircleMinus:"⊖",CirclePlus:"⊕",CircleTimes:"⊗",ClockwiseContourIntegral:"∲",CloseCurlyDoubleQuote:"”",CloseCurlyQuote:"’",Colon:"∷",Colone:"⩴",Congruent:"≡",Conint:"∯",ContourIntegral:"∮",Copf:"ℂ",Coproduct:"∐",CounterClockwiseContourIntegral:"∳",Cross:"⨯",Cscr:"𝒞",Cup:"⋓",CupCap:"≍",DD:"ⅅ",DDotrahd:"⤑",DJcy:"Ђ",DScy:"Ѕ",DZcy:"Џ",Dagger:"‡",Darr:"↡",Dashv:"⫤",Dcaron:"Ď",Dcy:"Д",Del:"∇",Delta:"Δ",Dfr:"𝔇",DiacriticalAcute:"´",DiacriticalDot:"˙",DiacriticalDoubleAcute:"˝",DiacriticalGrave:"`",DiacriticalTilde:"˜",Diamond:"⋄",DifferentialD:"ⅆ",Dopf:"𝔻",Dot:"¨",DotDot:"⃜",DotEqual:"≐",DoubleContourIntegral:"∯",DoubleDot:"¨",DoubleDownArrow:"⇓",DoubleLeftArrow:"⇐",DoubleLeftRightArrow:"⇔",DoubleLeftTee:"⫤",DoubleLongLeftArrow:"⟸",DoubleLongLeftRightArrow:"⟺",DoubleLongRightArrow:"⟹",DoubleRightArrow:"⇒",DoubleRightTee:"⊨",DoubleUpArrow:"⇑",DoubleUpDownArrow:"⇕",DoubleVerticalBar:"∥",DownArrow:"↓",DownArrowBar:"⤓",DownArrowUpArrow:"⇵",DownBreve:"̑",DownLeftRightVector:"⥐",DownLeftTeeVector:"⥞",DownLeftVector:"↽",DownLeftVectorBar:"⥖",DownRightTeeVector:"⥟",DownRightVector:"⇁",DownRightVectorBar:"⥗",DownTee:"⊤",DownTeeArrow:"↧",Downarrow:"⇓",Dscr:"𝒟",Dstrok:"Đ",ENG:"Ŋ",ETH:"Ð",Eacute:"É",Ecaron:"Ě",Ecirc:"Ê",Ecy:"Э",Edot:"Ė",Efr:"𝔈",Egrave:"È",Element:"∈",Emacr:"Ē",EmptySmallSquare:"◻",EmptyVerySmallSquare:"▫",Eogon:"Ę",Eopf:"𝔼",Epsilon:"Ε",Equal:"⩵",EqualTilde:"≂",Equilibrium:"⇌",Escr:"ℰ",Esim:"⩳",Eta:"Η",Euml:"Ë",Exists:"∃",ExponentialE:"ⅇ",Fcy:"Ф",Ffr:"𝔉",FilledSmallSquare:"◼",FilledVerySmallSquare:"▪",Fopf:"𝔽",ForAll:"∀",Fouriertrf:"ℱ",Fscr:"ℱ",GJcy:"Ѓ",GT:">",Gamma:"Γ",Gammad:"Ϝ",Gbreve:"Ğ",Gcedil:"Ģ",Gcirc:"Ĝ",Gcy:"Г",Gdot:"Ġ",Gfr:"𝔊",Gg:"⋙",Gopf:"𝔾",GreaterEqual:"≥",GreaterEqualLess:"⋛",GreaterFullEqual:"≧",GreaterGreater:"⪢",GreaterLess:"≷",GreaterSlantEqual:"⩾",GreaterTilde:"≳",Gscr:"𝒢",Gt:"≫",HARDcy:"Ъ",Hacek:"ˇ",Hat:"^",Hcirc:"Ĥ",Hfr:"ℌ",HilbertSpace:"ℋ",Hopf:"ℍ",HorizontalLine:"─",Hscr:"ℋ",Hstrok:"Ħ",HumpDownHump:"≎",HumpEqual:"≏",IEcy:"Е",IJlig:"Ĳ",IOcy:"Ё",Iacute:"Í",Icirc:"Î",Icy:"И",Idot:"İ",Ifr:"ℑ",Igrave:"Ì",Im:"ℑ",Imacr:"Ī",ImaginaryI:"ⅈ",Implies:"⇒",Int:"∬",Integral:"∫",Intersection:"⋂",InvisibleComma:"⁣",InvisibleTimes:"⁢",Iogon:"Į",Iopf:"𝕀",Iota:"Ι",Iscr:"ℐ",Itilde:"Ĩ",Iukcy:"І",Iuml:"Ï",Jcirc:"Ĵ",Jcy:"Й",Jfr:"𝔍",Jopf:"𝕁",Jscr:"𝒥",Jsercy:"Ј",Jukcy:"Є",KHcy:"Х",KJcy:"Ќ",Kappa:"Κ",Kcedil:"Ķ",Kcy:"К",Kfr:"𝔎",Kopf:"𝕂",Kscr:"𝒦",LJcy:"Љ",LT:"<",Lacute:"Ĺ",Lambda:"Λ",Lang:"⟪",Laplacetrf:"ℒ",Larr:"↞",Lcaron:"Ľ",Lcedil:"Ļ",Lcy:"Л",LeftAngleBracket:"⟨",LeftArrow:"←",LeftArrowBar:"⇤",LeftArrowRightArrow:"⇆",LeftCeiling:"⌈",LeftDoubleBracket:"⟦",LeftDownTeeVector:"⥡",LeftDownVector:"⇃",LeftDownVectorBar:"⥙",LeftFloor:"⌊",LeftRightArrow:"↔",LeftRightVector:"⥎",LeftTee:"⊣",LeftTeeArrow:"↤",LeftTeeVector:"⥚",LeftTriangle:"⊲",LeftTriangleBar:"⧏",LeftTriangleEqual:"⊴",LeftUpDownVector:"⥑",LeftUpTeeVector:"⥠",LeftUpVector:"↿",LeftUpVectorBar:"⥘",LeftVector:"↼",LeftVectorBar:"⥒",Leftarrow:"⇐",Leftrightarrow:"⇔",LessEqualGreater:"⋚",LessFullEqual:"≦",LessGreater:"≶",LessLess:"⪡",LessSlantEqual:"⩽",LessTilde:"≲",Lfr:"𝔏",Ll:"⋘",Lleftarrow:"⇚",Lmidot:"Ŀ",LongLeftArrow:"⟵",LongLeftRightArrow:"⟷",LongRightArrow:"⟶",Longleftarrow:"⟸",Longleftrightarrow:"⟺",Longrightarrow:"⟹",Lopf:"𝕃",LowerLeftArrow:"↙",LowerRightArrow:"↘",Lscr:"ℒ",Lsh:"↰",Lstrok:"Ł",Lt:"≪",Map:"⤅",Mcy:"М",MediumSpace:" ",Mellintrf:"ℳ",Mfr:"𝔐",MinusPlus:"∓",Mopf:"𝕄",Mscr:"ℳ",Mu:"Μ",NJcy:"Њ",Nacute:"Ń",Ncaron:"Ň",Ncedil:"Ņ",Ncy:"Н",NegativeMediumSpace:"​",NegativeThickSpace:"​",NegativeThinSpace:"​",NegativeVeryThinSpace:"​",NestedGreaterGreater:"≫",NestedLessLess:"≪",NewLine:"\n",Nfr:"𝔑",NoBreak:"⁠",NonBreakingSpace:" ",Nopf:"ℕ",Not:"⫬",NotCongruent:"≢",NotCupCap:"≭",NotDoubleVerticalBar:"∦",NotElement:"∉",NotEqual:"≠",NotEqualTilde:"≂̸",NotExists:"∄",NotGreater:"≯",NotGreaterEqual:"≱",NotGreaterFullEqual:"≧̸",NotGreaterGreater:"≫̸",NotGreaterLess:"≹",NotGreaterSlantEqual:"⩾̸",NotGreaterTilde:"≵",NotHumpDownHump:"≎̸",NotHumpEqual:"≏̸",NotLeftTriangle:"⋪",NotLeftTriangleBar:"⧏̸",NotLeftTriangleEqual:"⋬",NotLess:"≮",NotLessEqual:"≰",NotLessGreater:"≸",NotLessLess:"≪̸",NotLessSlantEqual:"⩽̸",NotLessTilde:"≴",NotNestedGreaterGreater:"⪢̸",NotNestedLessLess:"⪡̸",NotPrecedes:"⊀",NotPrecedesEqual:"⪯̸",NotPrecedesSlantEqual:"⋠",NotReverseElement:"∌",NotRightTriangle:"⋫",NotRightTriangleBar:"⧐̸",NotRightTriangleEqual:"⋭",NotSquareSubset:"⊏̸",NotSquareSubsetEqual:"⋢",NotSquareSuperset:"⊐̸",NotSquareSupersetEqual:"⋣",NotSubset:"⊂⃒",NotSubsetEqual:"⊈",NotSucceeds:"⊁",NotSucceedsEqual:"⪰̸",NotSucceedsSlantEqual:"⋡",NotSucceedsTilde:"≿̸",NotSuperset:"⊃⃒",NotSupersetEqual:"⊉",NotTilde:"≁",NotTildeEqual:"≄",NotTildeFullEqual:"≇",NotTildeTilde:"≉",NotVerticalBar:"∤",Nscr:"𝒩",Ntilde:"Ñ",Nu:"Ν",OElig:"Œ",Oacute:"Ó",Ocirc:"Ô",Ocy:"О",Odblac:"Ő",Ofr:"𝔒",Ograve:"Ò",Omacr:"Ō",Omega:"Ω",Omicron:"Ο",Oopf:"𝕆",OpenCurlyDoubleQuote:"“",OpenCurlyQuote:"‘",Or:"⩔",Oscr:"𝒪",Oslash:"Ø",Otilde:"Õ",Otimes:"⨷",Ouml:"Ö",OverBar:"‾",OverBrace:"⏞",OverBracket:"⎴",OverParenthesis:"⏜",PartialD:"∂",Pcy:"П",Pfr:"𝔓",Phi:"Φ",Pi:"Π",PlusMinus:"±",Poincareplane:"ℌ",Popf:"ℙ",Pr:"⪻",Precedes:"≺",PrecedesEqual:"⪯",PrecedesSlantEqual:"≼",PrecedesTilde:"≾",Prime:"″",Product:"∏",Proportion:"∷",Proportional:"∝",Pscr:"𝒫",Psi:"Ψ",QUOT:'"',Qfr:"𝔔",Qopf:"ℚ",Qscr:"𝒬",RBarr:"⤐",REG:"®",Racute:"Ŕ",Rang:"⟫",Rarr:"↠",Rarrtl:"⤖",Rcaron:"Ř",Rcedil:"Ŗ",Rcy:"Р",Re:"ℜ",ReverseElement:"∋",ReverseEquilibrium:"⇋",ReverseUpEquilibrium:"⥯",Rfr:"ℜ",Rho:"Ρ",RightAngleBracket:"⟩",RightArrow:"→",RightArrowBar:"⇥",RightArrowLeftArrow:"⇄",RightCeiling:"⌉",RightDoubleBracket:"⟧",RightDownTeeVector:"⥝",RightDownVector:"⇂",RightDownVectorBar:"⥕",RightFloor:"⌋",RightTee:"⊢",RightTeeArrow:"↦",RightTeeVector:"⥛",RightTriangle:"⊳",RightTriangleBar:"⧐",RightTriangleEqual:"⊵",RightUpDownVector:"⥏",RightUpTeeVector:"⥜",RightUpVector:"↾",RightUpVectorBar:"⥔",RightVector:"⇀",RightVectorBar:"⥓",Rightarrow:"⇒",Ropf:"ℝ",RoundImplies:"⥰",Rrightarrow:"⇛",Rscr:"ℛ",Rsh:"↱",RuleDelayed:"⧴",SHCHcy:"Щ",SHcy:"Ш",SOFTcy:"Ь",Sacute:"Ś",Sc:"⪼",Scaron:"Š",Scedil:"Ş",Scirc:"Ŝ",Scy:"С",Sfr:"𝔖",ShortDownArrow:"↓",ShortLeftArrow:"←",ShortRightArrow:"→",ShortUpArrow:"↑",Sigma:"Σ",SmallCircle:"∘",Sopf:"𝕊",Sqrt:"√",Square:"□",SquareIntersection:"⊓",SquareSubset:"⊏",SquareSubsetEqual:"⊑",SquareSuperset:"⊐",SquareSupersetEqual:"⊒",SquareUnion:"⊔",Sscr:"𝒮",Star:"⋆",Sub:"⋐",Subset:"⋐",SubsetEqual:"⊆",Succeeds:"≻",SucceedsEqual:"⪰",SucceedsSlantEqual:"≽",SucceedsTilde:"≿",SuchThat:"∋",Sum:"∑",Sup:"⋑",Superset:"⊃",SupersetEqual:"⊇",Supset:"⋑",THORN:"Þ",TRADE:"™",TSHcy:"Ћ",TScy:"Ц",Tab:"\t",Tau:"Τ",Tcaron:"Ť",Tcedil:"Ţ",Tcy:"Т",Tfr:"𝔗",Therefore:"∴",Theta:"Θ",ThickSpace:"  ",ThinSpace:" ",Tilde:"∼",TildeEqual:"≃",TildeFullEqual:"≅",TildeTilde:"≈",Topf:"𝕋",TripleDot:"⃛",Tscr:"𝒯",Tstrok:"Ŧ",Uacute:"Ú",Uarr:"↟",Uarrocir:"⥉",Ubrcy:"Ў",Ubreve:"Ŭ",Ucirc:"Û",Ucy:"У",Udblac:"Ű",Ufr:"𝔘",Ugrave:"Ù",Umacr:"Ū",UnderBar:"_",UnderBrace:"⏟",UnderBracket:"⎵",UnderParenthesis:"⏝",Union:"⋃",UnionPlus:"⊎",Uogon:"Ų",Uopf:"𝕌",UpArrow:"↑",UpArrowBar:"⤒",UpArrowDownArrow:"⇅",UpDownArrow:"↕",UpEquilibrium:"⥮",UpTee:"⊥",UpTeeArrow:"↥",Uparrow:"⇑",Updownarrow:"⇕",UpperLeftArrow:"↖",UpperRightArrow:"↗",Upsi:"ϒ",Upsilon:"Υ",Uring:"Ů",Uscr:"𝒰",Utilde:"Ũ",Uuml:"Ü",VDash:"⊫",Vbar:"⫫",Vcy:"В",Vdash:"⊩",Vdashl:"⫦",Vee:"⋁",Verbar:"‖",Vert:"‖",VerticalBar:"∣",VerticalLine:"|",VerticalSeparator:"❘",VerticalTilde:"≀",VeryThinSpace:" ",Vfr:"𝔙",Vopf:"𝕍",Vscr:"𝒱",Vvdash:"⊪",Wcirc:"Ŵ",Wedge:"⋀",Wfr:"𝔚",Wopf:"𝕎",Wscr:"𝒲",Xfr:"𝔛",Xi:"Ξ",Xopf:"𝕏",Xscr:"𝒳",YAcy:"Я",YIcy:"Ї",YUcy:"Ю",Yacute:"Ý",Ycirc:"Ŷ",Ycy:"Ы",Yfr:"𝔜",Yopf:"𝕐",Yscr:"𝒴",Yuml:"Ÿ",ZHcy:"Ж",Zacute:"Ź",Zcaron:"Ž",Zcy:"З",Zdot:"Ż",ZeroWidthSpace:"​",Zeta:"Ζ",Zfr:"ℨ",Zopf:"ℤ",Zscr:"𝒵",aacute:"á",abreve:"ă",ac:"∾",acE:"∾̳",acd:"∿",acirc:"â",acute:"´",acy:"а",aelig:"æ",af:"⁡",afr:"𝔞",agrave:"à",alefsym:"ℵ",aleph:"ℵ",alpha:"α",amacr:"ā",amalg:"⨿",amp:"&",and:"∧",andand:"⩕",andd:"⩜",andslope:"⩘",andv:"⩚",ang:"∠",ange:"⦤",angle:"∠",angmsd:"∡",angmsdaa:"⦨",angmsdab:"⦩",angmsdac:"⦪",angmsdad:"⦫",angmsdae:"⦬",angmsdaf:"⦭",angmsdag:"⦮",angmsdah:"⦯",angrt:"∟",angrtvb:"⊾",angrtvbd:"⦝",angsph:"∢",angst:"Å",angzarr:"⍼",aogon:"ą",aopf:"𝕒",ap:"≈",apE:"⩰",apacir:"⩯",ape:"≊",apid:"≋",apos:"'",approx:"≈",approxeq:"≊",aring:"å",ascr:"𝒶",ast:"*",asymp:"≈",asympeq:"≍",atilde:"ã",auml:"ä",awconint:"∳",awint:"⨑",bNot:"⫭",backcong:"≌",backepsilon:"϶",backprime:"‵",backsim:"∽",backsimeq:"⋍",barvee:"⊽",barwed:"⌅",barwedge:"⌅",bbrk:"⎵",bbrktbrk:"⎶",bcong:"≌",bcy:"б",bdquo:"„",becaus:"∵",because:"∵",bemptyv:"⦰",bepsi:"϶",bernou:"ℬ",beta:"β",beth:"ℶ",between:"≬",bfr:"𝔟",bigcap:"⋂",bigcirc:"◯",bigcup:"⋃",bigodot:"⨀",bigoplus:"⨁",bigotimes:"⨂",bigsqcup:"⨆",bigstar:"★",bigtriangledown:"▽",bigtriangleup:"△",biguplus:"⨄",bigvee:"⋁",bigwedge:"⋀",bkarow:"⤍",blacklozenge:"⧫",blacksquare:"▪",blacktriangle:"▴",blacktriangledown:"▾",blacktriangleleft:"◂",blacktriangleright:"▸",blank:"␣",blk12:"▒",blk14:"░",blk34:"▓",block:"█",bne:"=⃥",bnequiv:"≡⃥",bnot:"⌐",bopf:"𝕓",bot:"⊥",bottom:"⊥",bowtie:"⋈",boxDL:"╗",boxDR:"╔",boxDl:"╖",boxDr:"╓",boxH:"═",boxHD:"╦",boxHU:"╩",boxHd:"╤",boxHu:"╧",boxUL:"╝",boxUR:"╚",boxUl:"╜",boxUr:"╙",boxV:"║",boxVH:"╬",boxVL:"╣",boxVR:"╠",boxVh:"╫",boxVl:"╢",boxVr:"╟",boxbox:"⧉",boxdL:"╕",boxdR:"╒",boxdl:"┐",boxdr:"┌",boxh:"─",boxhD:"╥",boxhU:"╨",boxhd:"┬",boxhu:"┴",boxminus:"⊟",boxplus:"⊞",boxtimes:"⊠",boxuL:"╛",boxuR:"╘",boxul:"┘",boxur:"└",boxv:"│",boxvH:"╪",boxvL:"╡",boxvR:"╞",boxvh:"┼",boxvl:"┤",boxvr:"├",bprime:"‵",breve:"˘",brvbar:"¦",bscr:"𝒷",bsemi:"⁏",bsim:"∽",bsime:"⋍",bsol:"\\",bsolb:"⧅",bsolhsub:"⟈",bull:"•",bullet:"•",bump:"≎",bumpE:"⪮",bumpe:"≏",bumpeq:"≏",cacute:"ć",cap:"∩",capand:"⩄",capbrcup:"⩉",capcap:"⩋",capcup:"⩇",capdot:"⩀",caps:"∩︀",caret:"⁁",caron:"ˇ",ccaps:"⩍",ccaron:"č",ccedil:"ç",ccirc:"ĉ",ccups:"⩌",ccupssm:"⩐",cdot:"ċ",cedil:"¸",cemptyv:"⦲",cent:"¢",centerdot:"·",cfr:"𝔠",chcy:"ч",check:"✓",checkmark:"✓",chi:"χ",cir:"○",cirE:"⧃",circ:"ˆ",circeq:"≗",circlearrowleft:"↺",circlearrowright:"↻",circledR:"®",circledS:"Ⓢ",circledast:"⊛",circledcirc:"⊚",circleddash:"⊝",cire:"≗",cirfnint:"⨐",cirmid:"⫯",cirscir:"⧂",clubs:"♣",clubsuit:"♣",colon:":",colone:"≔",coloneq:"≔",comma:",",commat:"@",comp:"∁",compfn:"∘",complement:"∁",complexes:"ℂ",cong:"≅",congdot:"⩭",conint:"∮",copf:"𝕔",coprod:"∐",copy:"©",copysr:"℗",crarr:"↵",cross:"✗",cscr:"𝒸",csub:"⫏",csube:"⫑",csup:"⫐",csupe:"⫒",ctdot:"⋯",cudarrl:"⤸",cudarrr:"⤵",cuepr:"⋞",cuesc:"⋟",cularr:"↶",cularrp:"⤽",cup:"∪",cupbrcap:"⩈",cupcap:"⩆",cupcup:"⩊",cupdot:"⊍",cupor:"⩅",cups:"∪︀",curarr:"↷",curarrm:"⤼",curlyeqprec:"⋞",curlyeqsucc:"⋟",curlyvee:"⋎",curlywedge:"⋏",curren:"¤",curvearrowleft:"↶",curvearrowright:"↷",cuvee:"⋎",cuwed:"⋏",cwconint:"∲",cwint:"∱",cylcty:"⌭",dArr:"⇓",dHar:"⥥",dagger:"†",daleth:"ℸ",darr:"↓",dash:"‐",dashv:"⊣",dbkarow:"⤏",dblac:"˝",dcaron:"ď",dcy:"д",dd:"ⅆ",ddagger:"‡",ddarr:"⇊",ddotseq:"⩷",deg:"°",delta:"δ",demptyv:"⦱",dfisht:"⥿",dfr:"𝔡",dharl:"⇃",dharr:"⇂",diam:"⋄",diamond:"⋄",diamondsuit:"♦",diams:"♦",die:"¨",digamma:"ϝ",disin:"⋲",div:"÷",divide:"÷",divideontimes:"⋇",divonx:"⋇",djcy:"ђ",dlcorn:"⌞",dlcrop:"⌍",dollar:"$",dopf:"𝕕",dot:"˙",doteq:"≐",doteqdot:"≑",dotminus:"∸",dotplus:"∔",dotsquare:"⊡",doublebarwedge:"⌆",downarrow:"↓",downdownarrows:"⇊",downharpoonleft:"⇃",downharpoonright:"⇂",drbkarow:"⤐",drcorn:"⌟",drcrop:"⌌",dscr:"𝒹",dscy:"ѕ",dsol:"⧶",dstrok:"đ",dtdot:"⋱",dtri:"▿",dtrif:"▾",duarr:"⇵",duhar:"⥯",dwangle:"⦦",dzcy:"џ",dzigrarr:"⟿",eDDot:"⩷",eDot:"≑",eacute:"é",easter:"⩮",ecaron:"ě",ecir:"≖",ecirc:"ê",ecolon:"≕",ecy:"э",edot:"ė",ee:"ⅇ",efDot:"≒",efr:"𝔢",eg:"⪚",egrave:"è",egs:"⪖",egsdot:"⪘",el:"⪙",elinters:"⏧",ell:"ℓ",els:"⪕",elsdot:"⪗",emacr:"ē",empty:"∅",emptyset:"∅",emptyv:"∅",emsp13:" ",emsp14:" ",emsp:" ",eng:"ŋ",ensp:" ",eogon:"ę",eopf:"𝕖",epar:"⋕",eparsl:"⧣",eplus:"⩱",epsi:"ε",epsilon:"ε",epsiv:"ϵ",eqcirc:"≖",eqcolon:"≕",eqsim:"≂",eqslantgtr:"⪖",eqslantless:"⪕",equals:"=",equest:"≟",equiv:"≡",equivDD:"⩸",eqvparsl:"⧥",erDot:"≓",erarr:"⥱",escr:"ℯ",esdot:"≐",esim:"≂",eta:"η",eth:"ð",euml:"ë",euro:"€",excl:"!",exist:"∃",expectation:"ℰ",exponentiale:"ⅇ",fallingdotseq:"≒",fcy:"ф",female:"♀",ffilig:"ﬃ",fflig:"ﬀ",ffllig:"ﬄ",ffr:"𝔣",filig:"ﬁ",fjlig:"fj",flat:"♭",fllig:"ﬂ",fltns:"▱",fnof:"ƒ",fopf:"𝕗",forall:"∀",fork:"⋔",forkv:"⫙",fpartint:"⨍",frac12:"½",frac13:"⅓",frac14:"¼",frac15:"⅕",frac16:"⅙",frac18:"⅛",frac23:"⅔",frac25:"⅖",frac34:"¾",frac35:"⅗",frac38:"⅜",frac45:"⅘",frac56:"⅚",frac58:"⅝",frac78:"⅞",frasl:"⁄",frown:"⌢",fscr:"𝒻",gE:"≧",gEl:"⪌",gacute:"ǵ",gamma:"γ",gammad:"ϝ",gap:"⪆",gbreve:"ğ",gcirc:"ĝ",gcy:"г",gdot:"ġ",ge:"≥",gel:"⋛",geq:"≥",geqq:"≧",geqslant:"⩾",ges:"⩾",gescc:"⪩",gesdot:"⪀",gesdoto:"⪂",gesdotol:"⪄",gesl:"⋛︀",gesles:"⪔",gfr:"𝔤",gg:"≫",ggg:"⋙",gimel:"ℷ",gjcy:"ѓ",gl:"≷",glE:"⪒",gla:"⪥",glj:"⪤",gnE:"≩",gnap:"⪊",gnapprox:"⪊",gne:"⪈",gneq:"⪈",gneqq:"≩",gnsim:"⋧",gopf:"𝕘",grave:"`",gscr:"ℊ",gsim:"≳",gsime:"⪎",gsiml:"⪐",gt:">",gtcc:"⪧",gtcir:"⩺",gtdot:"⋗",gtlPar:"⦕",gtquest:"⩼",gtrapprox:"⪆",gtrarr:"⥸",gtrdot:"⋗",gtreqless:"⋛",gtreqqless:"⪌",gtrless:"≷",gtrsim:"≳",gvertneqq:"≩︀",gvnE:"≩︀",hArr:"⇔",hairsp:" ",half:"½",hamilt:"ℋ",hardcy:"ъ",harr:"↔",harrcir:"⥈",harrw:"↭",hbar:"ℏ",hcirc:"ĥ",hearts:"♥",heartsuit:"♥",hellip:"…",hercon:"⊹",hfr:"𝔥",hksearow:"⤥",hkswarow:"⤦",hoarr:"⇿",homtht:"∻",hookleftarrow:"↩",hookrightarrow:"↪",hopf:"𝕙",horbar:"―",hscr:"𝒽",hslash:"ℏ",hstrok:"ħ",hybull:"⁃",hyphen:"‐",iacute:"í",ic:"⁣",icirc:"î",icy:"и",iecy:"е",iexcl:"¡",iff:"⇔",ifr:"𝔦",igrave:"ì",ii:"ⅈ",iiiint:"⨌",iiint:"∭",iinfin:"⧜",iiota:"℩",ijlig:"ĳ",imacr:"ī",image:"ℑ",imagline:"ℐ",imagpart:"ℑ",imath:"ı",imof:"⊷",imped:"Ƶ",in:"∈",incare:"℅",infin:"∞",infintie:"⧝",inodot:"ı",int:"∫",intcal:"⊺",integers:"ℤ",intercal:"⊺",intlarhk:"⨗",intprod:"⨼",iocy:"ё",iogon:"į",iopf:"𝕚",iota:"ι",iprod:"⨼",iquest:"¿",iscr:"𝒾",isin:"∈",isinE:"⋹",isindot:"⋵",isins:"⋴",isinsv:"⋳",isinv:"∈",it:"⁢",itilde:"ĩ",iukcy:"і",iuml:"ï",jcirc:"ĵ",jcy:"й",jfr:"𝔧",jmath:"ȷ",jopf:"𝕛",jscr:"𝒿",jsercy:"ј",jukcy:"є",kappa:"κ",kappav:"ϰ",kcedil:"ķ",kcy:"к",kfr:"𝔨",kgreen:"ĸ",khcy:"х",kjcy:"ќ",kopf:"𝕜",kscr:"𝓀",lAarr:"⇚",lArr:"⇐",lAtail:"⤛",lBarr:"⤎",lE:"≦",lEg:"⪋",lHar:"⥢",lacute:"ĺ",laemptyv:"⦴",lagran:"ℒ",lambda:"λ",lang:"⟨",langd:"⦑",langle:"⟨",lap:"⪅",laquo:"«",larr:"←",larrb:"⇤",larrbfs:"⤟",larrfs:"⤝",larrhk:"↩",larrlp:"↫",larrpl:"⤹",larrsim:"⥳",larrtl:"↢",lat:"⪫",latail:"⤙",late:"⪭",lates:"⪭︀",lbarr:"⤌",lbbrk:"❲",lbrace:"{",lbrack:"[",lbrke:"⦋",lbrksld:"⦏",lbrkslu:"⦍",lcaron:"ľ",lcedil:"ļ",lceil:"⌈",lcub:"{",lcy:"л",ldca:"⤶",ldquo:"“",ldquor:"„",ldrdhar:"⥧",ldrushar:"⥋",ldsh:"↲",le:"≤",leftarrow:"←",leftarrowtail:"↢",leftharpoondown:"↽",leftharpoonup:"↼",leftleftarrows:"⇇",leftrightarrow:"↔",leftrightarrows:"⇆",leftrightharpoons:"⇋",leftrightsquigarrow:"↭",leftthreetimes:"⋋",leg:"⋚",leq:"≤",leqq:"≦",leqslant:"⩽",les:"⩽",lescc:"⪨",lesdot:"⩿",lesdoto:"⪁",lesdotor:"⪃",lesg:"⋚︀",lesges:"⪓",lessapprox:"⪅",lessdot:"⋖",lesseqgtr:"⋚",lesseqqgtr:"⪋",lessgtr:"≶",lesssim:"≲",lfisht:"⥼",lfloor:"⌊",lfr:"𝔩",lg:"≶",lgE:"⪑",lhard:"↽",lharu:"↼",lharul:"⥪",lhblk:"▄",ljcy:"љ",ll:"≪",llarr:"⇇",llcorner:"⌞",llhard:"⥫",lltri:"◺",lmidot:"ŀ",lmoust:"⎰",lmoustache:"⎰",lnE:"≨",lnap:"⪉",lnapprox:"⪉",lne:"⪇",lneq:"⪇",lneqq:"≨",lnsim:"⋦",loang:"⟬",loarr:"⇽",lobrk:"⟦",longleftarrow:"⟵",longleftrightarrow:"⟷",longmapsto:"⟼",longrightarrow:"⟶",looparrowleft:"↫",looparrowright:"↬",lopar:"⦅",lopf:"𝕝",loplus:"⨭",lotimes:"⨴",lowast:"∗",lowbar:"_",loz:"◊",lozenge:"◊",lozf:"⧫",lpar:"(",lparlt:"⦓",lrarr:"⇆",lrcorner:"⌟",lrhar:"⇋",lrhard:"⥭",lrm:"‎",lrtri:"⊿",lsaquo:"‹",lscr:"𝓁",lsh:"↰",lsim:"≲",lsime:"⪍",lsimg:"⪏",lsqb:"[",lsquo:"‘",lsquor:"‚",lstrok:"ł",lt:"<",ltcc:"⪦",ltcir:"⩹",ltdot:"⋖",lthree:"⋋",ltimes:"⋉",ltlarr:"⥶",ltquest:"⩻",ltrPar:"⦖",ltri:"◃",ltrie:"⊴",ltrif:"◂",lurdshar:"⥊",luruhar:"⥦",lvertneqq:"≨︀",lvnE:"≨︀",mDDot:"∺",macr:"¯",male:"♂",malt:"✠",maltese:"✠",map:"↦",mapsto:"↦",mapstodown:"↧",mapstoleft:"↤",mapstoup:"↥",marker:"▮",mcomma:"⨩",mcy:"м",mdash:"—",measuredangle:"∡",mfr:"𝔪",mho:"℧",micro:"µ",mid:"∣",midast:"*",midcir:"⫰",middot:"·",minus:"−",minusb:"⊟",minusd:"∸",minusdu:"⨪",mlcp:"⫛",mldr:"…",mnplus:"∓",models:"⊧",mopf:"𝕞",mp:"∓",mscr:"𝓂",mstpos:"∾",mu:"μ",multimap:"⊸",mumap:"⊸",nGg:"⋙̸",nGt:"≫⃒",nGtv:"≫̸",nLeftarrow:"⇍",nLeftrightarrow:"⇎",nLl:"⋘̸",nLt:"≪⃒",nLtv:"≪̸",nRightarrow:"⇏",nVDash:"⊯",nVdash:"⊮",nabla:"∇",nacute:"ń",nang:"∠⃒",nap:"≉",napE:"⩰̸",napid:"≋̸",napos:"ŉ",napprox:"≉",natur:"♮",natural:"♮",naturals:"ℕ",nbsp:" ",nbump:"≎̸",nbumpe:"≏̸",ncap:"⩃",ncaron:"ň",ncedil:"ņ",ncong:"≇",ncongdot:"⩭̸",ncup:"⩂",ncy:"н",ndash:"–",ne:"≠",neArr:"⇗",nearhk:"⤤",nearr:"↗",nearrow:"↗",nedot:"≐̸",nequiv:"≢",nesear:"⤨",nesim:"≂̸",nexist:"∄",nexists:"∄",nfr:"𝔫",ngE:"≧̸",nge:"≱",ngeq:"≱",ngeqq:"≧̸",ngeqslant:"⩾̸",nges:"⩾̸",ngsim:"≵",ngt:"≯",ngtr:"≯",nhArr:"⇎",nharr:"↮",nhpar:"⫲",ni:"∋",nis:"⋼",nisd:"⋺",niv:"∋",njcy:"њ",nlArr:"⇍",nlE:"≦̸",nlarr:"↚",nldr:"‥",nle:"≰",nleftarrow:"↚",nleftrightarrow:"↮",nleq:"≰",nleqq:"≦̸",nleqslant:"⩽̸",nles:"⩽̸",nless:"≮",nlsim:"≴",nlt:"≮",nltri:"⋪",nltrie:"⋬",nmid:"∤",nopf:"𝕟",not:"¬",notin:"∉",notinE:"⋹̸",notindot:"⋵̸",notinva:"∉",notinvb:"⋷",notinvc:"⋶",notni:"∌",notniva:"∌",notnivb:"⋾",notnivc:"⋽",npar:"∦",nparallel:"∦",nparsl:"⫽⃥",npart:"∂̸",npolint:"⨔",npr:"⊀",nprcue:"⋠",npre:"⪯̸",nprec:"⊀",npreceq:"⪯̸",nrArr:"⇏",nrarr:"↛",nrarrc:"⤳̸",nrarrw:"↝̸",nrightarrow:"↛",nrtri:"⋫",nrtrie:"⋭",nsc:"⊁",nsccue:"⋡",nsce:"⪰̸",nscr:"𝓃",nshortmid:"∤",nshortparallel:"∦",nsim:"≁",nsime:"≄",nsimeq:"≄",nsmid:"∤",nspar:"∦",nsqsube:"⋢",nsqsupe:"⋣",nsub:"⊄",nsubE:"⫅̸",nsube:"⊈",nsubset:"⊂⃒",nsubseteq:"⊈",nsubseteqq:"⫅̸",nsucc:"⊁",nsucceq:"⪰̸",nsup:"⊅",nsupE:"⫆̸",nsupe:"⊉",nsupset:"⊃⃒",nsupseteq:"⊉",nsupseteqq:"⫆̸",ntgl:"≹",ntilde:"ñ",ntlg:"≸",ntriangleleft:"⋪",ntrianglelefteq:"⋬",ntriangleright:"⋫",ntrianglerighteq:"⋭",nu:"ν",num:"#",numero:"№",numsp:" ",nvDash:"⊭",nvHarr:"⤄",nvap:"≍⃒",nvdash:"⊬",nvge:"≥⃒",nvgt:">⃒",nvinfin:"⧞",nvlArr:"⤂",nvle:"≤⃒",nvlt:"<⃒",nvltrie:"⊴⃒",nvrArr:"⤃",nvrtrie:"⊵⃒",nvsim:"∼⃒",nwArr:"⇖",nwarhk:"⤣",nwarr:"↖",nwarrow:"↖",nwnear:"⤧",oS:"Ⓢ",oacute:"ó",oast:"⊛",ocir:"⊚",ocirc:"ô",ocy:"о",odash:"⊝",odblac:"ő",odiv:"⨸",odot:"⊙",odsold:"⦼",oelig:"œ",ofcir:"⦿",ofr:"𝔬",ogon:"˛",ograve:"ò",ogt:"⧁",ohbar:"⦵",ohm:"Ω",oint:"∮",olarr:"↺",olcir:"⦾",olcross:"⦻",oline:"‾",olt:"⧀",omacr:"ō",omega:"ω",omicron:"ο",omid:"⦶",ominus:"⊖",oopf:"𝕠",opar:"⦷",operp:"⦹",oplus:"⊕",or:"∨",orarr:"↻",ord:"⩝",order:"ℴ",orderof:"ℴ",ordf:"ª",ordm:"º",origof:"⊶",oror:"⩖",orslope:"⩗",orv:"⩛",oscr:"ℴ",oslash:"ø",osol:"⊘",otilde:"õ",otimes:"⊗",otimesas:"⨶",ouml:"ö",ovbar:"⌽",par:"∥",para:"¶",parallel:"∥",parsim:"⫳",parsl:"⫽",part:"∂",pcy:"п",percnt:"%",period:".",permil:"‰",perp:"⊥",pertenk:"‱",pfr:"𝔭",phi:"φ",phiv:"ϕ",phmmat:"ℳ",phone:"☎",pi:"π",pitchfork:"⋔",piv:"ϖ",planck:"ℏ",planckh:"ℎ",plankv:"ℏ",plus:"+",plusacir:"⨣",plusb:"⊞",pluscir:"⨢",plusdo:"∔",plusdu:"⨥",pluse:"⩲",plusmn:"±",plussim:"⨦",plustwo:"⨧",pm:"±",pointint:"⨕",popf:"𝕡",pound:"£",pr:"≺",prE:"⪳",prap:"⪷",prcue:"≼",pre:"⪯",prec:"≺",precapprox:"⪷",preccurlyeq:"≼",preceq:"⪯",precnapprox:"⪹",precneqq:"⪵",precnsim:"⋨",precsim:"≾",prime:"′",primes:"ℙ",prnE:"⪵",prnap:"⪹",prnsim:"⋨",prod:"∏",profalar:"⌮",profline:"⌒",profsurf:"⌓",prop:"∝",propto:"∝",prsim:"≾",prurel:"⊰",pscr:"𝓅",psi:"ψ",puncsp:" ",qfr:"𝔮",qint:"⨌",qopf:"𝕢",qprime:"⁗",qscr:"𝓆",quaternions:"ℍ",quatint:"⨖",quest:"?",questeq:"≟",quot:'"',rAarr:"⇛",rArr:"⇒",rAtail:"⤜",rBarr:"⤏",rHar:"⥤",race:"∽̱",racute:"ŕ",radic:"√",raemptyv:"⦳",rang:"⟩",rangd:"⦒",range:"⦥",rangle:"⟩",raquo:"»",rarr:"→",rarrap:"⥵",rarrb:"⇥",rarrbfs:"⤠",rarrc:"⤳",rarrfs:"⤞",rarrhk:"↪",rarrlp:"↬",rarrpl:"⥅",rarrsim:"⥴",rarrtl:"↣",rarrw:"↝",ratail:"⤚",ratio:"∶",rationals:"ℚ",rbarr:"⤍",rbbrk:"❳",rbrace:"}",rbrack:"]",rbrke:"⦌",rbrksld:"⦎",rbrkslu:"⦐",rcaron:"ř",rcedil:"ŗ",rceil:"⌉",rcub:"}",rcy:"р",rdca:"⤷",rdldhar:"⥩",rdquo:"”",rdquor:"”",rdsh:"↳",real:"ℜ",realine:"ℛ",realpart:"ℜ",reals:"ℝ",rect:"▭",reg:"®",rfisht:"⥽",rfloor:"⌋",rfr:"𝔯",rhard:"⇁",rharu:"⇀",rharul:"⥬",rho:"ρ",rhov:"ϱ",rightarrow:"→",rightarrowtail:"↣",rightharpoondown:"⇁",rightharpoonup:"⇀",rightleftarrows:"⇄",rightleftharpoons:"⇌",rightrightarrows:"⇉",rightsquigarrow:"↝",rightthreetimes:"⋌",ring:"˚",risingdotseq:"≓",rlarr:"⇄",rlhar:"⇌",rlm:"‏",rmoust:"⎱",rmoustache:"⎱",rnmid:"⫮",roang:"⟭",roarr:"⇾",robrk:"⟧",ropar:"⦆",ropf:"𝕣",roplus:"⨮",rotimes:"⨵",rpar:")",rpargt:"⦔",rppolint:"⨒",rrarr:"⇉",rsaquo:"›",rscr:"𝓇",rsh:"↱",rsqb:"]",rsquo:"’",rsquor:"’",rthree:"⋌",rtimes:"⋊",rtri:"▹",rtrie:"⊵",rtrif:"▸",rtriltri:"⧎",ruluhar:"⥨",rx:"℞",sacute:"ś",sbquo:"‚",sc:"≻",scE:"⪴",scap:"⪸",scaron:"š",sccue:"≽",sce:"⪰",scedil:"ş",scirc:"ŝ",scnE:"⪶",scnap:"⪺",scnsim:"⋩",scpolint:"⨓",scsim:"≿",scy:"с",sdot:"⋅",sdotb:"⊡",sdote:"⩦",seArr:"⇘",searhk:"⤥",searr:"↘",searrow:"↘",sect:"§",semi:";",seswar:"⤩",setminus:"∖",setmn:"∖",sext:"✶",sfr:"𝔰",sfrown:"⌢",sharp:"♯",shchcy:"щ",shcy:"ш",shortmid:"∣",shortparallel:"∥",shy:"­",sigma:"σ",sigmaf:"ς",sigmav:"ς",sim:"∼",simdot:"⩪",sime:"≃",simeq:"≃",simg:"⪞",simgE:"⪠",siml:"⪝",simlE:"⪟",simne:"≆",simplus:"⨤",simrarr:"⥲",slarr:"←",smallsetminus:"∖",smashp:"⨳",smeparsl:"⧤",smid:"∣",smile:"⌣",smt:"⪪",smte:"⪬",smtes:"⪬︀",softcy:"ь",sol:"/",solb:"⧄",solbar:"⌿",sopf:"𝕤",spades:"♠",spadesuit:"♠",spar:"∥",sqcap:"⊓",sqcaps:"⊓︀",sqcup:"⊔",sqcups:"⊔︀",sqsub:"⊏",sqsube:"⊑",sqsubset:"⊏",sqsubseteq:"⊑",sqsup:"⊐",sqsupe:"⊒",sqsupset:"⊐",sqsupseteq:"⊒",squ:"□",square:"□",squarf:"▪",squf:"▪",srarr:"→",sscr:"𝓈",ssetmn:"∖",ssmile:"⌣",sstarf:"⋆",star:"☆",starf:"★",straightepsilon:"ϵ",straightphi:"ϕ",strns:"¯",sub:"⊂",subE:"⫅",subdot:"⪽",sube:"⊆",subedot:"⫃",submult:"⫁",subnE:"⫋",subne:"⊊",subplus:"⪿",subrarr:"⥹",subset:"⊂",subseteq:"⊆",subseteqq:"⫅",subsetneq:"⊊",subsetneqq:"⫋",subsim:"⫇",subsub:"⫕",subsup:"⫓",succ:"≻",succapprox:"⪸",succcurlyeq:"≽",succeq:"⪰",succnapprox:"⪺",succneqq:"⪶",succnsim:"⋩",succsim:"≿",sum:"∑",sung:"♪",sup1:"¹",sup2:"²",sup3:"³",sup:"⊃",supE:"⫆",supdot:"⪾",supdsub:"⫘",supe:"⊇",supedot:"⫄",suphsol:"⟉",suphsub:"⫗",suplarr:"⥻",supmult:"⫂",supnE:"⫌",supne:"⊋",supplus:"⫀",supset:"⊃",supseteq:"⊇",supseteqq:"⫆",supsetneq:"⊋",supsetneqq:"⫌",supsim:"⫈",supsub:"⫔",supsup:"⫖",swArr:"⇙",swarhk:"⤦",swarr:"↙",swarrow:"↙",swnwar:"⤪",szlig:"ß",target:"⌖",tau:"τ",tbrk:"⎴",tcaron:"ť",tcedil:"ţ",tcy:"т",tdot:"⃛",telrec:"⌕",tfr:"𝔱",there4:"∴",therefore:"∴",theta:"θ",thetasym:"ϑ",thetav:"ϑ",thickapprox:"≈",thicksim:"∼",thinsp:" ",thkap:"≈",thksim:"∼",thorn:"þ",tilde:"˜",times:"×",timesb:"⊠",timesbar:"⨱",timesd:"⨰",tint:"∭",toea:"⤨",top:"⊤",topbot:"⌶",topcir:"⫱",topf:"𝕥",topfork:"⫚",tosa:"⤩",tprime:"‴",trade:"™",triangle:"▵",triangledown:"▿",triangleleft:"◃",trianglelefteq:"⊴",triangleq:"≜",triangleright:"▹",trianglerighteq:"⊵",tridot:"◬",trie:"≜",triminus:"⨺",triplus:"⨹",trisb:"⧍",tritime:"⨻",trpezium:"⏢",tscr:"𝓉",tscy:"ц",tshcy:"ћ",tstrok:"ŧ",twixt:"≬",twoheadleftarrow:"↞",twoheadrightarrow:"↠",uArr:"⇑",uHar:"⥣",uacute:"ú",uarr:"↑",ubrcy:"ў",ubreve:"ŭ",ucirc:"û",ucy:"у",udarr:"⇅",udblac:"ű",udhar:"⥮",ufisht:"⥾",ufr:"𝔲",ugrave:"ù",uharl:"↿",uharr:"↾",uhblk:"▀",ulcorn:"⌜",ulcorner:"⌜",ulcrop:"⌏",ultri:"◸",umacr:"ū",uml:"¨",uogon:"ų",uopf:"𝕦",uparrow:"↑",updownarrow:"↕",upharpoonleft:"↿",upharpoonright:"↾",uplus:"⊎",upsi:"υ",upsih:"ϒ",upsilon:"υ",upuparrows:"⇈",urcorn:"⌝",urcorner:"⌝",urcrop:"⌎",uring:"ů",urtri:"◹",uscr:"𝓊",utdot:"⋰",utilde:"ũ",utri:"▵",utrif:"▴",uuarr:"⇈",uuml:"ü",uwangle:"⦧",vArr:"⇕",vBar:"⫨",vBarv:"⫩",vDash:"⊨",vangrt:"⦜",varepsilon:"ϵ",varkappa:"ϰ",varnothing:"∅",varphi:"ϕ",varpi:"ϖ",varpropto:"∝",varr:"↕",varrho:"ϱ",varsigma:"ς",varsubsetneq:"⊊︀",varsubsetneqq:"⫋︀",varsupsetneq:"⊋︀",varsupsetneqq:"⫌︀",vartheta:"ϑ",vartriangleleft:"⊲",vartriangleright:"⊳",vcy:"в",vdash:"⊢",vee:"∨",veebar:"⊻",veeeq:"≚",vellip:"⋮",verbar:"|",vert:"|",vfr:"𝔳",vltri:"⊲",vnsub:"⊂⃒",vnsup:"⊃⃒",vopf:"𝕧",vprop:"∝",vrtri:"⊳",vscr:"𝓋",vsubnE:"⫋︀",vsubne:"⊊︀",vsupnE:"⫌︀",vsupne:"⊋︀",vzigzag:"⦚",wcirc:"ŵ",wedbar:"⩟",wedge:"∧",wedgeq:"≙",weierp:"℘",wfr:"𝔴",wopf:"𝕨",wp:"℘",wr:"≀",wreath:"≀",wscr:"𝓌",xcap:"⋂",xcirc:"◯",xcup:"⋃",xdtri:"▽",xfr:"𝔵",xhArr:"⟺",xharr:"⟷",xi:"ξ",xlArr:"⟸",xlarr:"⟵",xmap:"⟼",xnis:"⋻",xodot:"⨀",xopf:"𝕩",xoplus:"⨁",xotime:"⨂",xrArr:"⟹",xrarr:"⟶",xscr:"𝓍",xsqcup:"⨆",xuplus:"⨄",xutri:"△",xvee:"⋁",xwedge:"⋀",yacute:"ý",yacy:"я",ycirc:"ŷ",ycy:"ы",yen:"¥",yfr:"𝔶",yicy:"ї",yopf:"𝕪",yscr:"𝓎",yucy:"ю",yuml:"ÿ",zacute:"ź",zcaron:"ž",zcy:"з",zdot:"ż",zeetrf:"ℨ",zeta:"ζ",zfr:"𝔷",zhcy:"ж",zigrarr:"⇝",zopf:"𝕫",zscr:"𝓏",zwj:"‍",zwnj:"‌"},st={}.hasOwnProperty,lt={name:"characterReference",tokenize:function(e,t,n){const r=this;let o,c,s=0;return function(t){return e.enter("characterReference"),e.enter("characterReferenceMarker"),e.consume(t),e.exit("characterReferenceMarker"),l};function l(t){return 35===t?(e.enter("characterReferenceMarkerNumeric"),e.consume(t),e.exit("characterReferenceMarkerNumeric"),f):(e.enter("characterReferenceValue"),o=31,c=i,p(t))}function f(t){return 88===t||120===t?(e.enter("characterReferenceMarkerHexadecimal"),e.consume(t),e.exit("characterReferenceMarkerHexadecimal"),e.enter("characterReferenceValue"),o=6,c=a,p):(e.enter("characterReferenceValue"),o=7,c=u,p(t))}function p(u){if(59===u&&s){const o=e.exit("characterReferenceValue");return c!==i||function(e){return!!st.call(at,e)&&at[e]}(r.sliceSerialize(o))?(e.enter("characterReferenceMarker"),e.consume(u),e.exit("characterReferenceMarker"),e.exit("characterReference"),t):n(u)}return c(u)&&s++<o?(e.consume(u),p):n(u)}}},ft={name:"characterEscape",tokenize:function(e,t,n){return function(t){return e.enter("characterEscape"),e.enter("escapeMarker"),e.consume(t),e.exit("escapeMarker"),r};function r(r){return s(r)?(e.enter("characterEscapeValue"),e.consume(r),e.exit("characterEscapeValue"),e.exit("characterEscape"),t):n(r)}}},pt={name:"lineEnding",tokenize:function(e,t){return function(n){return e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),g(e,t,"linePrefix")}}},dt={name:"labelEnd",tokenize:function(e,t,n){const r=this;let i,o,c=r.events.length;for(;c--;)if(("labelImage"===r.events[c][1].type||"labelLink"===r.events[c][1].type)&&!r.events[c][1]._balanced){i=r.events[c][1];break}return function(t){return i?i._inactive?l(t):(o=r.parser.defined.includes(Z(r.sliceSerialize({start:i.end,end:r.now()}))),e.enter("labelEnd"),e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelEnd"),u):n(t)};function u(t){return 40===t?e.attempt(mt,s,o?s:l)(t):91===t?e.attempt(ht,s,o?a:l)(t):o?s(t):l(t)}function a(t){return e.attempt(gt,s,l)(t)}function s(e){return t(e)}function l(e){return i._balanced=!0,n(e)}},resolveTo:function(e,t){let n,r,i,o,c=e.length,u=0;for(;c--;)if(n=e[c][1],r){if("link"===n.type||"labelLink"===n.type&&n._inactive)break;"enter"===e[c][0]&&"labelLink"===n.type&&(n._inactive=!0)}else if(i){if("enter"===e[c][0]&&("labelImage"===n.type||"labelLink"===n.type)&&!n._balanced&&(r=c,"labelLink"!==n.type)){u=2;break}}else"labelEnd"===n.type&&(i=c);const a={type:"labelLink"===e[r][1].type?"link":"image",start:Object.assign({},e[r][1].start),end:Object.assign({},e[e.length-1][1].end)},s={type:"label",start:Object.assign({},e[r][1].start),end:Object.assign({},e[i][1].end)},l={type:"labelText",start:Object.assign({},e[r+u+2][1].end),end:Object.assign({},e[i-2][1].start)};return o=[["enter",a,t],["enter",s,t]],o=ve(o,e.slice(r+1,r+u+3)),o=ve(o,[["enter",l,t]]),o=ve(o,Ve(t.parser.constructs.insideSpan.null,e.slice(r+u+4,i-3),t)),o=ve(o,[["exit",l,t],e[i-2],e[i-1],["exit",s,t]]),o=ve(o,e.slice(i+1)),o=ve(o,[["exit",a,t]]),xe(e,r,e.length,o),e},resolveAll:function(e){let t=-1;for(;++t<e.length;){const n=e[t][1];"labelImage"!==n.type&&"labelLink"!==n.type&&"labelEnd"!==n.type||(e.splice(t+1,"labelImage"===n.type?4:2),n.type="data",t++)}return e}},mt={tokenize:function(e,t,n){return function(t){return e.enter("resource"),e.enter("resourceMarker"),e.consume(t),e.exit("resourceMarker"),r};function r(t){return f(t)?b(e,i)(t):i(t)}function i(t){return 41===t?s(t):Ye(e,o,c,"resourceDestination","resourceDestinationLiteral","resourceDestinationLiteralMarker","resourceDestinationRaw","resourceDestinationString",32)(t)}function o(t){return f(t)?b(e,u)(t):s(t)}function c(e){return n(e)}function u(t){return 34===t||39===t||40===t?We(e,a,n,"resourceTitle","resourceTitleMarker","resourceTitleString")(t):s(t)}function a(t){return f(t)?b(e,s)(t):s(t)}function s(r){return 41===r?(e.enter("resourceMarker"),e.consume(r),e.exit("resourceMarker"),e.exit("resource"),t):n(r)}}},ht={tokenize:function(e,t,n){const r=this;return function(t){return Qe.call(r,e,i,o,"reference","referenceMarker","referenceString")(t)};function i(e){return r.parser.defined.includes(Z(r.sliceSerialize(r.events[r.events.length-1][1]).slice(1,-1)))?t(e):n(e)}function o(e){return n(e)}}},gt={tokenize:function(e,t,n){return function(t){return e.enter("reference"),e.enter("referenceMarker"),e.consume(t),e.exit("referenceMarker"),r};function r(r){return 93===r?(e.enter("referenceMarker"),e.consume(r),e.exit("referenceMarker"),e.exit("reference"),t):n(r)}}},bt={name:"labelStartImage",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("labelImage"),e.enter("labelImageMarker"),e.consume(t),e.exit("labelImageMarker"),i};function i(t){return 91===t?(e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelImage"),o):n(t)}function o(e){return 94===e&&"_hiddenFootnoteSupport"in r.parser.constructs?n(e):t(e)}},resolveAll:dt.resolveAll};function xt(e){return null===e||f(e)||m(e)?1:d(e)?2:void 0}const vt={name:"attention",tokenize:function(e,t){const n=this.parser.constructs.attentionMarkers.null,r=this.previous,i=xt(r);let o;return function(t){return o=t,e.enter("attentionSequence"),c(t)};function c(u){if(u===o)return e.consume(u),c;const a=e.exit("attentionSequence"),s=xt(u),l=!s||2===s&&i||n.includes(u),f=!i||2===i&&s||n.includes(r);return a._open=Boolean(42===o?l:l&&(i||!f)),a._close=Boolean(42===o?f:f&&(s||!l)),t(u)}},resolveAll:function(e,t){let n,r,i,o,c,u,a,s,l=-1;for(;++l<e.length;)if("enter"===e[l][0]&&"attentionSequence"===e[l][1].type&&e[l][1]._close)for(n=l;n--;)if("exit"===e[n][0]&&"attentionSequence"===e[n][1].type&&e[n][1]._open&&t.sliceSerialize(e[n][1]).charCodeAt(0)===t.sliceSerialize(e[l][1]).charCodeAt(0)){if((e[n][1]._close||e[l][1]._open)&&(e[l][1].end.offset-e[l][1].start.offset)%3&&!((e[n][1].end.offset-e[n][1].start.offset+e[l][1].end.offset-e[l][1].start.offset)%3))continue;u=e[n][1].end.offset-e[n][1].start.offset>1&&e[l][1].end.offset-e[l][1].start.offset>1?2:1;const f=Object.assign({},e[n][1].end),p=Object.assign({},e[l][1].start);kt(f,-u),kt(p,u),o={type:u>1?"strongSequence":"emphasisSequence",start:f,end:Object.assign({},e[n][1].end)},c={type:u>1?"strongSequence":"emphasisSequence",start:Object.assign({},e[l][1].start),end:p},i={type:u>1?"strongText":"emphasisText",start:Object.assign({},e[n][1].end),end:Object.assign({},e[l][1].start)},r={type:u>1?"strong":"emphasis",start:Object.assign({},o.start),end:Object.assign({},c.end)},e[n][1].end=Object.assign({},o.start),e[l][1].start=Object.assign({},c.end),a=[],e[n][1].end.offset-e[n][1].start.offset&&(a=ve(a,[["enter",e[n][1],t],["exit",e[n][1],t]])),a=ve(a,[["enter",r,t],["enter",o,t],["exit",o,t],["enter",i,t]]),a=ve(a,Ve(t.parser.constructs.insideSpan.null,e.slice(n+1,l),t)),a=ve(a,[["exit",i,t],["enter",c,t],["exit",c,t],["exit",r,t]]),e[l][1].end.offset-e[l][1].start.offset?(s=2,a=ve(a,[["enter",e[l][1],t],["exit",e[l][1],t]])):s=0,xe(e,n-1,l-n+3,a),l=n+a.length-s-2;break}for(l=-1;++l<e.length;)"attentionSequence"===e[l][1].type&&(e[l][1].type="data");return e}};function kt(e,t){e.column+=t,e.offset+=t,e._bufferIndex+=t}const yt={name:"autolink",tokenize:function(e,t,n){let u=0;return function(t){return e.enter("autolink"),e.enter("autolinkMarker"),e.consume(t),e.exit("autolinkMarker"),e.enter("autolinkProtocol"),a};function a(t){return r(t)?(e.consume(t),s):64===t?n(t):p(t)}function s(e){return 43===e||45===e||46===e||i(e)?(u=1,l(e)):p(e)}function l(t){return 58===t?(e.consume(t),u=0,f):(43===t||45===t||46===t||i(t))&&u++<32?(e.consume(t),l):(u=0,p(t))}function f(r){return 62===r?(e.exit("autolinkProtocol"),e.enter("autolinkMarker"),e.consume(r),e.exit("autolinkMarker"),e.exit("autolink"),t):null===r||32===r||60===r||c(r)?n(r):(e.consume(r),f)}function p(t){return 64===t?(e.consume(t),d):o(t)?(e.consume(t),p):n(t)}function d(e){return i(e)?m(e):n(e)}function m(n){return 46===n?(e.consume(n),u=0,d):62===n?(e.exit("autolinkProtocol").type="autolinkEmail",e.enter("autolinkMarker"),e.consume(n),e.exit("autolinkMarker"),e.exit("autolink"),t):h(n)}function h(t){if((45===t||i(t))&&u++<63){const n=45===t?h:m;return e.consume(t),n}return n(t)}}},wt={name:"htmlText",tokenize:function(e,t,n){const o=this;let c,u,a;return function(t){return e.enter("htmlText"),e.enter("htmlTextData"),e.consume(t),s};function s(t){return 33===t?(e.consume(t),d):47===t?(e.consume(t),E):63===t?(e.consume(t),q):r(t)?(e.consume(t),A):n(t)}function d(t){return 45===t?(e.consume(t),m):91===t?(e.consume(t),u=0,v):r(t)?(e.consume(t),S):n(t)}function m(t){return 45===t?(e.consume(t),x):n(t)}function h(t){return null===t?n(t):45===t?(e.consume(t),b):l(t)?(a=h,P(t)):(e.consume(t),h)}function b(t){return 45===t?(e.consume(t),x):h(t)}function x(e){return 62===e?O(e):45===e?b(e):h(e)}function v(t){return t==="CDATA[".charCodeAt(u++)?(e.consume(t),6===u?k:v):n(t)}function k(t){return null===t?n(t):93===t?(e.consume(t),y):l(t)?(a=k,P(t)):(e.consume(t),k)}function y(t){return 93===t?(e.consume(t),w):k(t)}function w(t){return 62===t?O(t):93===t?(e.consume(t),w):k(t)}function S(t){return null===t||62===t?O(t):l(t)?(a=S,P(t)):(e.consume(t),S)}function q(t){return null===t?n(t):63===t?(e.consume(t),T):l(t)?(a=q,P(t)):(e.consume(t),q)}function T(e){return 62===e?O(e):q(e)}function E(t){return r(t)?(e.consume(t),L):n(t)}function L(t){return 45===t||i(t)?(e.consume(t),L):D(t)}function D(t){return l(t)?(a=D,P(t)):p(t)?(e.consume(t),D):O(t)}function A(t){return 45===t||i(t)?(e.consume(t),A):47===t||62===t||f(t)?C(t):n(t)}function C(t){return 47===t?(e.consume(t),O):58===t||95===t||r(t)?(e.consume(t),I):l(t)?(a=C,P(t)):p(t)?(e.consume(t),C):O(t)}function I(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),I):F(t)}function F(t){return 61===t?(e.consume(t),z):l(t)?(a=F,P(t)):p(t)?(e.consume(t),F):C(t)}function z(t){return null===t||60===t||61===t||62===t||96===t?n(t):34===t||39===t?(e.consume(t),c=t,N):l(t)?(a=z,P(t)):p(t)?(e.consume(t),z):(e.consume(t),M)}function N(t){return t===c?(e.consume(t),c=void 0,R):null===t?n(t):l(t)?(a=N,P(t)):(e.consume(t),N)}function M(t){return null===t||34===t||39===t||60===t||61===t||96===t?n(t):47===t||62===t||f(t)?C(t):(e.consume(t),M)}function R(e){return 47===e||62===e||f(e)?C(e):n(e)}function O(r){return 62===r?(e.consume(r),e.exit("htmlTextData"),e.exit("htmlText"),t):n(r)}function P(t){return e.exit("htmlTextData"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),V}function V(t){return p(t)?g(e,_,"linePrefix",o.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):_(t)}function _(t){return e.enter("htmlTextData"),a(t)}}},St={name:"labelStartLink",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("labelLink"),e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelLink"),i};function i(e){return 94===e&&"_hiddenFootnoteSupport"in r.parser.constructs?n(e):t(e)}},resolveAll:dt.resolveAll},qt={name:"hardBreakEscape",tokenize:function(e,t,n){return function(t){return e.enter("hardBreakEscape"),e.consume(t),r};function r(r){return l(r)?(e.exit("hardBreakEscape"),t(r)):n(r)}}},Tt={name:"codeText",tokenize:function(e,t,n){let r,i,o=0;return function(t){return e.enter("codeText"),e.enter("codeTextSequence"),c(t)};function c(t){return 96===t?(e.consume(t),o++,c):(e.exit("codeTextSequence"),u(t))}function u(t){return null===t?n(t):32===t?(e.enter("space"),e.consume(t),e.exit("space"),u):96===t?(i=e.enter("codeTextSequence"),r=0,s(t)):l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),u):(e.enter("codeTextData"),a(t))}function a(t){return null===t||32===t||96===t||l(t)?(e.exit("codeTextData"),u(t)):(e.consume(t),a)}function s(n){return 96===n?(e.consume(n),r++,s):r===o?(e.exit("codeTextSequence"),e.exit("codeText"),t(n)):(i.type="codeTextData",a(n))}},resolve:function(e){let t,n,r=e.length-4,i=3;if(!("lineEnding"!==e[i][1].type&&"space"!==e[i][1].type||"lineEnding"!==e[r][1].type&&"space"!==e[r][1].type))for(t=i;++t<r;)if("codeTextData"===e[t][1].type){e[i][1].type="codeTextPadding",e[r][1].type="codeTextPadding",i+=2,r-=2;break}for(t=i-1,r++;++t<=r;)void 0===n?t!==r&&"lineEnding"!==e[t][1].type&&(n=t):t!==r&&"lineEnding"!==e[t][1].type||(e[n][1].type="codeTextData",t!==n+2&&(e[n][1].end=e[t-1][1].end,e.splice(n+2,t-n-2),r-=t-n-2,t=n+2),n=void 0);return e},previous:function(e){return 96!==e||"characterEscape"===this.events[this.events.length-1][1].type}},Et={42:je,43:je,45:je,48:je,49:je,50:je,51:je,52:je,53:je,54:je,55:je,56:je,57:je,62:Ge},Lt={91:Ze},Dt={[-2]:Ke,[-1]:Ke,32:Ke},At={35:$e,42:Be,45:[et,Be],60:rt,61:et,95:Be,96:ut,126:ut},Ct={38:lt,92:ft},It={[-5]:pt,[-4]:pt,[-3]:pt,33:bt,38:lt,42:vt,60:[yt,wt],91:St,92:[qt,ft],93:dt,95:vt,96:Tt},Ft={null:[vt,ze]},zt={null:[42,95]},Nt={null:[]};function Mt(e){const t={defined:[],lazy:{},constructs:function(e){const t={};let n=-1;for(;++n<e.length;)ye(t,e[n]);return t}([n,...(e||{}).extensions||[]]),content:r(Se),document:r(qe),flow:r(Fe),string:r(Ne),text:r(Me)};return t;function r(e){return function(n){return _e(t,e,n)}}}function Rt(e){for(;!De(e););return e}const Ot=/[\0\t\n\r]/g;function Pt(){let e,t=1,n="",r=!0;return function(i,o,c){const u=[];let a,s,l,f,p;for(i=n+("string"==typeof i?i.toString():new TextDecoder(o||void 0).decode(i)),l=0,n="",r&&(65279===i.charCodeAt(0)&&l++,r=void 0);l<i.length;){if(Ot.lastIndex=l,a=Ot.exec(i),f=a&&void 0!==a.index?a.index:i.length,p=i.charCodeAt(f),!a){n=i.slice(l);break}if(10===p&&l===f&&e)u.push(-3),e=void 0;else switch(e&&(u.push(-5),e=void 0),l<f&&(u.push(i.slice(l,f)),t+=f-l),p){case 0:u.push(65533),t++;break;case 9:for(s=4*Math.ceil(t/4),u.push(-2);t++<s;)u.push(-1);break;case 10:u.push(-4),t=1;break;default:e=!0,t=1}l=f+1}return c&&(e&&u.push(-5),n&&u.push(n),u.push(null)),u}}var Vt=exports;for(var _t in t)Vt[_t]=t[_t];t.__esModule&&Object.defineProperty(Vt,"__esModule",{value:!0})})();
 
 /***/ }),
 
-/***/ 3302:
+/***/ 1670:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -57370,30 +57164,19 @@ module.exports = rules;
 
 
 
-// @ts-ignore
-const {
-  directive, gfmAutolinkLiteral, gfmFootnote, gfmTable, math,
-  parse, postprocess, preprocess
-  // @ts-ignore
-} = __nccwpck_require__(9520);
-const { newLineRe } = __nccwpck_require__(7389);
+const { flatTokensSymbol, htmlFlowSymbol } = __nccwpck_require__(7389);
 
-const flatTokensSymbol = Symbol("flat-tokens");
-const reparseSymbol = Symbol("reparse");
-
-/** @typedef {import("markdownlint-micromark").Event} Event */
-/** @typedef {import("markdownlint-micromark").ParseOptions} ParseOptions */
 /** @typedef {import("markdownlint-micromark").TokenType} TokenType */
 /** @typedef {import("../lib/markdownlint.js").MicromarkToken} Token */
 
 /**
- * Determines if a Micromark token is within an htmlFlow.
+ * Determines if a Micromark token is within an htmlFlow type.
  *
  * @param {Token} token Micromark token.
- * @returns {boolean} True iff the token is within an htmlFlow.
+ * @returns {boolean} True iff the token is within an htmlFlow type.
  */
 function inHtmlFlow(token) {
-  return token[reparseSymbol];
+  return Boolean(token[htmlFlowSymbol]);
 }
 
 /**
@@ -57423,180 +57206,6 @@ function isHtmlFlowComment(token) {
     );
   }
   return false;
-}
-
-/**
- * Parses a Markdown document and returns Micromark events.
- *
- * @param {string} markdown Markdown document.
- * @param {ParseOptions} [micromarkOptions] Options for micromark.
- * @param {boolean} [referencesDefined] Treat references as defined.
- * @returns {Event[]} Micromark events.
- */
-function getMicromarkEvents(
-  markdown,
-  micromarkOptions = {},
-  referencesDefined = true
-) {
-
-  // Customize options object to add useful extensions
-  micromarkOptions.extensions = micromarkOptions.extensions || [];
-  micromarkOptions.extensions.push(
-    directive(),
-    gfmAutolinkLiteral(),
-    gfmFootnote(),
-    gfmTable(),
-    math()
-  );
-
-  // Use micromark to parse document into Events
-  const encoding = undefined;
-  const eol = true;
-  const parseContext = parse(micromarkOptions);
-  if (referencesDefined) {
-    // Customize ParseContext to treat all references as defined
-    parseContext.defined.includes = (searchElement) => searchElement.length > 0;
-  }
-  const chunks = preprocess()(markdown, encoding, eol);
-  const events = postprocess(parseContext.document().write(chunks));
-  return events;
-}
-
-/**
- * Parses a Markdown document and returns (frozen) tokens.
- *
- * @param {string} markdown Markdown document.
- * @param {ParseOptions} micromarkOptions Options for micromark.
- * @param {boolean} referencesDefined Treat references as defined.
- * @param {number} lineDelta Offset to apply to start/end line.
- * @param {Token} [ancestor] Parent of top-most tokens.
- * @returns {Token[]} Micromark tokens (frozen).
- */
-function micromarkParseWithOffset(
-  markdown,
-  micromarkOptions,
-  referencesDefined,
-  lineDelta,
-  ancestor
-) {
-  // Use micromark to parse document into Events
-  const events = getMicromarkEvents(
-    markdown, micromarkOptions, referencesDefined
-  );
-
-  // Create Token objects
-  const document = [];
-  let flatTokens = [];
-  /** @type {Token} */
-  const root = {
-    "type": "data",
-    "startLine": -1,
-    "startColumn": -1,
-    "endLine": -1,
-    "endColumn": -1,
-    "text": "ROOT",
-    "children": document,
-    "parent": null
-  };
-  const history = [ root ];
-  let current = root;
-  // eslint-disable-next-line jsdoc/valid-types
-  /** @type ParseOptions | null */
-  let reparseOptions = null;
-  let lines = null;
-  let skipHtmlFlowChildren = false;
-  for (const event of events) {
-    const [ kind, token, context ] = event;
-    const { type, start, end } = token;
-    const { "column": startColumn, "line": startLine } = start;
-    const { "column": endColumn, "line": endLine } = end;
-    const text = context.sliceSerialize(token);
-    if ((kind === "enter") && !skipHtmlFlowChildren) {
-      const previous = current;
-      history.push(previous);
-      current = {
-        type,
-        "startLine": startLine + lineDelta,
-        startColumn,
-        "endLine": endLine + lineDelta,
-        endColumn,
-        text,
-        "children": [],
-        "parent": ((previous === root) ? (ancestor || null) : previous)
-      };
-      if (ancestor) {
-        Object.defineProperty(current, reparseSymbol, { "value": true });
-      }
-      previous.children.push(current);
-      flatTokens.push(current);
-      if ((current.type === "htmlFlow") && !isHtmlFlowComment(current)) {
-        skipHtmlFlowChildren = true;
-        if (!reparseOptions || !lines) {
-          reparseOptions = {
-            ...micromarkOptions,
-            "extensions": [
-              {
-                "disable": {
-                  "null": [ "codeIndented", "htmlFlow" ]
-                }
-              }
-            ]
-          };
-          lines = markdown.split(newLineRe);
-        }
-        const reparseMarkdown = lines
-          .slice(current.startLine - 1, current.endLine)
-          .join("\n");
-        const tokens = micromarkParseWithOffset(
-          reparseMarkdown,
-          reparseOptions,
-          referencesDefined,
-          current.startLine - 1,
-          current
-        );
-        current.children = tokens;
-        // Avoid stack overflow of Array.push(...spread)
-        // eslint-disable-next-line unicorn/prefer-spread
-        flatTokens = flatTokens.concat(tokens[flatTokensSymbol]);
-      }
-    } else if (kind === "exit") {
-      if (type === "htmlFlow") {
-        skipHtmlFlowChildren = false;
-      }
-      if (!skipHtmlFlowChildren) {
-        Object.freeze(current.children);
-        Object.freeze(current);
-        // @ts-ignore
-        current = history.pop();
-      }
-    }
-  }
-
-  // Return document
-  Object.defineProperty(document, flatTokensSymbol, { "value": flatTokens });
-  Object.freeze(document);
-  return document;
-}
-
-/**
- * Parses a Markdown document and returns (frozen) tokens.
- *
- * @param {string} markdown Markdown document.
- * @param {ParseOptions} [micromarkOptions] Options for micromark.
- * @param {boolean} [referencesDefined] Treat references as defined.
- * @returns {Token[]} Micromark tokens (frozen).
- */
-function micromarkParse(
-  markdown,
-  micromarkOptions = {},
-  referencesDefined = true
-) {
-  return micromarkParseWithOffset(
-    markdown,
-    micromarkOptions,
-    referencesDefined,
-    0
-  );
 }
 
 /**
@@ -57677,8 +57286,7 @@ function filterByPredicate(tokens, allowed, transformChildren) {
  * @returns {Token[]} Filtered tokens.
  */
 function filterByTypes(tokens, types, htmlFlow) {
-  const predicate = (token) =>
-    (htmlFlow || !inHtmlFlow(token)) && types.includes(token.type);
+  const predicate = (token) => types.includes(token.type) && (htmlFlow || !inHtmlFlow(token));
   const flatTokens = tokens[flatTokensSymbol];
   if (flatTokens) {
     return flatTokens.filter(predicate);
@@ -57687,43 +57295,38 @@ function filterByTypes(tokens, types, htmlFlow) {
 }
 
 /**
+ * Gets the blockquote prefix text (if any) for the specified line number.
+ *
+ * @param {Token[]} tokens Micromark tokens.
+ * @param {number} lineNumber Line number to examine.
+ * @param {number} [count] Number of times to repeat.
+ * @returns {string} Blockquote prefix text.
+ */
+function getBlockQuotePrefixText(tokens, lineNumber, count = 1) {
+  return filterByTypes(tokens, [ "blockQuotePrefix", "linePrefix" ])
+    .filter((prefix) => prefix.startLine === lineNumber)
+    .map((prefix) => prefix.text)
+    .join("")
+    .trimEnd()
+    // eslint-disable-next-line unicorn/prefer-spread
+    .concat("\n")
+    .repeat(count);
+};
+
+/**
  * Gets a list of nested Micromark token descendants by type path.
  *
  * @param {Token|Token[]} parent Micromark token parent or parents.
- * @param {TokenType[]} typePath Micromark token type path.
+ * @param {(TokenType|TokenType[])[]} typePath Micromark token type path.
  * @returns {Token[]} Micromark token descendants.
  */
 function getDescendantsByType(parent, typePath) {
   let tokens = Array.isArray(parent) ? parent : [ parent ];
   for (const type of typePath) {
-    tokens = tokens.flatMap((t) => t.children).filter((t) => t.type === type);
+    const predicate = (token) => Array.isArray(type) ? type.includes(token.type) : (type === token.type);
+    tokens = tokens.flatMap((t) => t.children.filter(predicate));
   }
   return tokens;
-}
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @typedef {readonly string[]} ReadonlyStringArray */
-
-/**
- * Gets the line/column/length exclusions for a Micromark token.
- *
- * @param {ReadonlyStringArray} lines File/string lines.
- * @param {Token} token Micromark token.
- * @returns {number[][]} Exclusions (line number, start column, length).
- */
-function getExclusionsForToken(lines, token) {
-  const exclusions = [];
-  const { endColumn, endLine, startColumn, startLine } = token;
-  for (let lineNumber = startLine; lineNumber <= endLine; lineNumber++) {
-    const start = (lineNumber === startLine) ? startColumn : 1;
-    const end = (lineNumber === endLine) ? endColumn : lines[lineNumber - 1].length;
-    exclusions.push([
-      lineNumber,
-      start,
-      end - start + 1
-    ]);
-  }
-  return exclusions;
 }
 
 /**
@@ -57733,12 +57336,12 @@ function getExclusionsForToken(lines, token) {
  * @returns {number} Heading level.
  */
 function getHeadingLevel(heading) {
-  const headingSequence = filterByTypes(
-    heading.children,
-    [ "atxHeadingSequence", "setextHeadingLineSequence" ]
-  );
   let level = 1;
-  const { text } = headingSequence[0];
+  const headingSequence = heading.children.find(
+    (child) => [ "atxHeadingSequence", "setextHeadingLine" ].includes(child.type)
+  );
+  // @ts-ignore
+  const { text } = headingSequence;
   if (text[0] === "#") {
     level = Math.min(text.length, 6);
   } else if (text[0] === "-") {
@@ -57757,9 +57360,8 @@ function getHeadingStyle(heading) {
   if (heading.type === "setextHeading") {
     return "setext";
   }
-  const atxHeadingSequenceLength = filterByTypes(
-    heading.children,
-    [ "atxHeadingSequence" ]
+  const atxHeadingSequenceLength = heading.children.filter(
+    (child) => child.type === "atxHeadingSequence"
   ).length;
   if (atxHeadingSequenceLength === 1) {
     return "atx";
@@ -57774,10 +57376,7 @@ function getHeadingStyle(heading) {
  * @returns {string} Heading text.
  */
 function getHeadingText(heading) {
-  const headingTexts = filterByTypes(
-    heading.children,
-    [ "atxHeadingText", "setextHeadingText" ]
-  );
+  const headingTexts = getDescendantsByType(heading, [ [ "atxHeadingText", "setextHeadingText" ] ]);
   return headingTexts[0]?.text.replace(/[\r\n]+/g, " ") || "";
 }
 
@@ -57818,61 +57417,13 @@ function getHtmlTagInfo(token) {
  * @param {TokenType[]} types Types to allow.
  * @returns {Token | null} Parent token.
  */
-function getTokenParentOfType(token, types) {
+function getParentOfType(token, types) {
   /** @type {Token | null} */
   let current = token;
   while ((current = current.parent) && !types.includes(current.type)) {
     // Empty
   }
   return current;
-}
-
-/**
- * Get the text of the first match from a list of Micromark tokens by type.
- *
- * @param {Token[]} tokens Micromark tokens.
- * @param {TokenType} type Type to match.
- * @returns {string | null} Text of token.
- */
-function getTokenTextByType(tokens, type) {
-  const filtered = tokens.filter((token) => token.type === type);
-  return (filtered.length > 0) ? filtered[0].text : null;
-}
-
-/**
- * Determines a list of Micromark tokens matches and returns a subset.
- *
- * @param {Token[]} tokens Micromark tokens.
- * @param {TokenType[]} matchTypes Types to match.
- * @param {TokenType[]} [resultTypes] Types to return.
- * @returns {Token[] | null} Matching tokens.
- */
-function matchAndGetTokensByType(tokens, matchTypes, resultTypes) {
-  if (tokens.length !== matchTypes.length) {
-    return null;
-  }
-  resultTypes = resultTypes || matchTypes;
-  const result = [];
-  // eslint-disable-next-line unicorn/no-for-loop
-  for (let i = 0; i < matchTypes.length; i++) {
-    if (tokens[i].type !== matchTypes[i]) {
-      return null;
-    } else if (resultTypes.includes(matchTypes[i])) {
-      result.push(tokens[i]);
-    }
-  }
-  return result;
-}
-
-/**
- * Returns the specified token iff it is of the desired type.
- *
- * @param {Token} token Micromark token candidate.
- * @param {TokenType} type Desired type.
- * @returns {Token | null} Token instance.
- */
-function tokenIfType(token, type) {
-  return (token && (token.type === type)) ? token : null;
 }
 
 /**
@@ -57891,24 +57442,520 @@ const nonContentTokens = new Set([
 ]);
 
 module.exports = {
-  "parse": micromarkParse,
   addRangeToSet,
   filterByPredicate,
   filterByTypes,
+  getBlockQuotePrefixText,
   getDescendantsByType,
-  getExclusionsForToken,
   getHeadingLevel,
   getHeadingStyle,
   getHeadingText,
   getHtmlTagInfo,
-  getMicromarkEvents,
-  getTokenParentOfType,
-  getTokenTextByType,
+  getParentOfType,
   inHtmlFlow,
   isHtmlFlowComment,
-  matchAndGetTokensByType,
-  nonContentTokens,
-  tokenIfType
+  nonContentTokens
+};
+
+
+/***/ }),
+
+/***/ 7132:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+// @ts-check
+
+
+
+const micromark = __nccwpck_require__(9520);
+const { isHtmlFlowComment } = __nccwpck_require__(1670);
+const { flatTokensSymbol, htmlFlowSymbol, newLineRe } = __nccwpck_require__(7389);
+
+/** @typedef {import("markdownlint-micromark").Construct} Construct */
+/** @typedef {import("markdownlint-micromark").Event} Event */
+/** @typedef {import("markdownlint-micromark").ParseOptions} MicromarkParseOptions */
+/** @typedef {import("markdownlint-micromark").State} State */
+/** @typedef {import("markdownlint-micromark").Token} Token */
+/** @typedef {import("markdownlint-micromark").Tokenizer} Tokenizer */
+/** @typedef {import("../lib/markdownlint.js").MicromarkToken} MicromarkToken */
+
+/**
+ * Parse options.
+ *
+ * @typedef {Object} ParseOptions
+ * @property {boolean} [freezeTokens] Whether to freeze output Tokens.
+ */
+
+/**
+ * Parses a Markdown document and returns Micromark events.
+ *
+ * @param {string} markdown Markdown document.
+ * @param {MicromarkParseOptions} [micromarkParseOptions] Options for micromark.
+ * @returns {Event[]} Micromark events.
+ */
+function getEvents(
+  markdown,
+  micromarkParseOptions = {}
+) {
+  // Customize extensions list to add useful extensions
+  const extensions = [
+    micromark.directive(),
+    micromark.gfmAutolinkLiteral(),
+    micromark.gfmFootnote(),
+    micromark.gfmTable(),
+    micromark.math(),
+    ...(micromarkParseOptions.extensions || [])
+  ];
+
+  // // Shim labelEnd to identify undefined link labels
+  /** @type {Event[][]} */
+  const artificialEventLists = [];
+  /** @type {Construct} */
+  const labelEnd =
+    // @ts-ignore
+    micromark.labelEnd;
+  const tokenizeOriginal = labelEnd.tokenize;
+
+  /** @type {Tokenizer} */
+  function tokenizeShim(effects, okOriginal, nokOriginal) {
+    // eslint-disable-next-line consistent-this, unicorn/no-this-assignment, no-invalid-this
+    const tokenizeContext = this;
+    const events = tokenizeContext.events;
+
+    /** @type {State} */
+    const nokShim = (code) => {
+      // Find start of label (image or link)
+      let indexStart = events.length;
+      while (--indexStart >= 0) {
+        const event = events[indexStart];
+        const [ kind, token ] = event;
+        if (kind === "enter") {
+          const { type } = token;
+          if ((type === "labelImage") || (type === "labelLink")) {
+            // Found it
+            break;
+          }
+        }
+      }
+
+      // If found...
+      if (indexStart >= 0) {
+        // Create artificial enter/exit events and replicate all data/lineEnding events within
+        const eventStart = events[indexStart];
+        const [ , eventStartToken ] = eventStart;
+        const eventEnd = events[events.length - 1];
+        const [ , eventEndToken ] = eventEnd;
+        /** @type {Token} */
+        const undefinedReferenceType = {
+          "type": "undefinedReferenceShortcut",
+          "start": eventStartToken.start,
+          "end": eventEndToken.end
+        };
+        /** @type {Token} */
+        const undefinedReference = {
+          "type": "undefinedReference",
+          "start": eventStartToken.start,
+          "end": eventEndToken.end
+        };
+        const eventsToReplicate = events
+          .slice(indexStart)
+          .filter((event) => {
+            const [ , eventToken ] = event;
+            const { type } = eventToken;
+            return (type === "data") || (type === "lineEnding");
+          });
+
+        // Determine the type of the undefined reference
+        const previousUndefinedEvent = (artificialEventLists.length > 0) && artificialEventLists[artificialEventLists.length - 1][0];
+        const previousUndefinedToken = previousUndefinedEvent && previousUndefinedEvent[1];
+        if (
+          previousUndefinedToken &&
+          (previousUndefinedToken.end.line === undefinedReferenceType.start.line) &&
+          (previousUndefinedToken.end.column === undefinedReferenceType.start.column)
+        ) {
+          // Previous undefined reference event is immediately before this one
+          if (eventsToReplicate.length === 0) {
+            // The pair represent a collapsed reference (ex: [...][])
+            previousUndefinedToken.type = "undefinedReferenceCollapsed";
+            previousUndefinedToken.end = eventEndToken.end;
+          } else {
+            // The pair represent a full reference (ex: [...][...])
+            undefinedReferenceType.type = "undefinedReferenceFull";
+            undefinedReferenceType.start = previousUndefinedToken.start;
+            artificialEventLists.pop();
+          }
+        }
+
+        // Create artificial event list and replicate content
+        const text = eventsToReplicate
+          .filter((event) => event[0] === "enter")
+          .map((event) => tokenizeContext.sliceSerialize(event[1]))
+          .join("")
+          .trim();
+        if ((text.length > 0) && !text.includes("]")) {
+          /** @type {Event[]} */
+          const artificialEvents = [];
+          artificialEvents.push(
+            [ "enter", undefinedReferenceType, tokenizeContext ],
+            [ "enter", undefinedReference, tokenizeContext ]
+          );
+          for (const event of eventsToReplicate) {
+            const [ kind, token ] = event;
+            // Copy token because the current object will get modified by the parser
+            artificialEvents.push([ kind, { ...token }, tokenizeContext ]);
+          }
+          artificialEvents.push(
+            [ "exit", undefinedReference, tokenizeContext ],
+            [ "exit", undefinedReferenceType, tokenizeContext ]
+          );
+          artificialEventLists.push(artificialEvents);
+        }
+      }
+
+      // Continue with original behavior
+      return nokOriginal(code);
+    };
+
+    // Shim nok handler of labelEnd's tokenize
+    return tokenizeOriginal.call(tokenizeContext, effects, okOriginal, nokShim);
+  }
+
+  try {
+    // Shim labelEnd behavior to detect undefined references
+    labelEnd.tokenize = tokenizeShim;
+
+    // Use micromark to parse document into Events
+    const encoding = undefined;
+    const eol = true;
+    const parseContext = micromark.parse({ ...micromarkParseOptions, extensions });
+    const chunks = micromark.preprocess()(markdown, encoding, eol);
+    const events = micromark.postprocess(parseContext.document().write(chunks));
+
+    // Append artificial events and return all events
+    // eslint-disable-next-line unicorn/prefer-spread
+    return events.concat(...artificialEventLists);
+  } finally {
+    // Restore shimmed labelEnd behavior
+    labelEnd.tokenize = tokenizeOriginal;
+  }
+}
+
+/**
+ * Parses a Markdown document and returns micromark tokens (internal).
+ *
+ * @param {string} markdown Markdown document.
+ * @param {ParseOptions} [parseOptions] Options.
+ * @param {MicromarkParseOptions} [micromarkParseOptions] Options for micromark.
+ * @param {number} [lineDelta] Offset for start/end line.
+ * @param {MicromarkToken} [ancestor] Parent of top-most tokens.
+ * @returns {MicromarkToken[]} Micromark tokens.
+ */
+function parseInternal(
+  markdown,
+  parseOptions = {},
+  micromarkParseOptions = {},
+  lineDelta = 0,
+  ancestor = undefined
+) {
+  // Get options
+  const freezeTokens = Boolean(parseOptions.freezeTokens);
+
+  // Use micromark to parse document into Events
+  const events = getEvents(markdown, micromarkParseOptions);
+
+  // Create Token objects
+  const document = [];
+  let flatTokens = [];
+  /** @type {MicromarkToken} */
+  const root = {
+    "type": "data",
+    "startLine": -1,
+    "startColumn": -1,
+    "endLine": -1,
+    "endColumn": -1,
+    "text": "ROOT",
+    "children": document,
+    "parent": null
+  };
+  const history = [ root ];
+  let current = root;
+  // eslint-disable-next-line jsdoc/valid-types
+  /** @type MicromarkParseOptions | null */
+  let reparseOptions = null;
+  let lines = null;
+  let skipHtmlFlowChildren = false;
+  for (const event of events) {
+    const [ kind, token, context ] = event;
+    const { type, start, end } = token;
+    const { "column": startColumn, "line": startLine } = start;
+    const { "column": endColumn, "line": endLine } = end;
+    const text = context.sliceSerialize(token);
+    if ((kind === "enter") && !skipHtmlFlowChildren) {
+      const previous = current;
+      history.push(previous);
+      current = {
+        type,
+        "startLine": startLine + lineDelta,
+        startColumn,
+        "endLine": endLine + lineDelta,
+        endColumn,
+        text,
+        "children": [],
+        "parent": ((previous === root) ? (ancestor || null) : previous)
+      };
+      if (ancestor) {
+        Object.defineProperty(current, htmlFlowSymbol, { "value": true });
+      }
+      previous.children.push(current);
+      flatTokens.push(current);
+      if ((current.type === "htmlFlow") && !isHtmlFlowComment(current)) {
+        skipHtmlFlowChildren = true;
+        if (!reparseOptions || !lines) {
+          reparseOptions = {
+            ...micromarkParseOptions,
+            "extensions": [
+              {
+                "disable": {
+                  "null": [ "codeIndented", "htmlFlow" ]
+                }
+              }
+            ]
+          };
+          lines = markdown.split(newLineRe);
+        }
+        const reparseMarkdown = lines
+          .slice(current.startLine - 1, current.endLine)
+          .join("\n");
+        const tokens = parseInternal(
+          reparseMarkdown,
+          parseOptions,
+          reparseOptions,
+          current.startLine - 1,
+          current
+        );
+        current.children = tokens;
+        // Avoid stack overflow of Array.push(...spread)
+        // eslint-disable-next-line unicorn/prefer-spread
+        flatTokens = flatTokens.concat(tokens[flatTokensSymbol]);
+      }
+    } else if (kind === "exit") {
+      if (type === "htmlFlow") {
+        skipHtmlFlowChildren = false;
+      }
+      if (!skipHtmlFlowChildren) {
+        if (freezeTokens) {
+          Object.freeze(current.children);
+          Object.freeze(current);
+        }
+        // @ts-ignore
+        current = history.pop();
+      }
+    }
+  }
+
+  // Return document
+  Object.defineProperty(document, flatTokensSymbol, { "value": flatTokens });
+  if (freezeTokens) {
+    Object.freeze(document);
+  }
+  return document;
+}
+
+/**
+ * Parses a Markdown document and returns micromark tokens.
+ *
+ * @param {string} markdown Markdown document.
+ * @param {ParseOptions} [parseOptions] Options.
+ * @returns {MicromarkToken[]} Micromark tokens.
+ */
+function parse(markdown, parseOptions) {
+  return parseInternal(markdown, parseOptions);
+}
+
+module.exports = {
+  getEvents,
+  parse
+};
+
+
+/***/ }),
+
+/***/ 9917:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+// @ts-check
+
+
+
+const { newLineRe } = __nccwpck_require__(8307);
+
+/**
+ * @callback InlineCodeSpanCallback
+ * @param {string} code Code content.
+ * @param {number} lineIndex Line index (0-based).
+ * @param {number} columnIndex Column index (0-based).
+ * @param {number} ticks Count of backticks.
+ * @returns {void}
+ */
+
+/**
+ * Calls the provided function for each inline code span's content.
+ *
+ * @param {string} input Markdown content.
+ * @param {InlineCodeSpanCallback} handler Callback function taking (code,
+ * lineIndex, columnIndex, ticks).
+ * @returns {void}
+ */
+function forEachInlineCodeSpan(input, handler) {
+  const backtickRe = /`+/g;
+  let match = null;
+  const backticksLengthAndIndex = [];
+  while ((match = backtickRe.exec(input)) !== null) {
+    backticksLengthAndIndex.push([ match[0].length, match.index ]);
+  }
+  const newLinesIndex = [];
+  while ((match = newLineRe.exec(input)) !== null) {
+    newLinesIndex.push(match.index);
+  }
+  let lineIndex = 0;
+  let lineStartIndex = 0;
+  let k = 0;
+  for (let i = 0; i < backticksLengthAndIndex.length - 1; i++) {
+    const [ startLength, startIndex ] = backticksLengthAndIndex[i];
+    if ((startIndex === 0) || (input[startIndex - 1] !== "\\")) {
+      for (let j = i + 1; j < backticksLengthAndIndex.length; j++) {
+        const [ endLength, endIndex ] = backticksLengthAndIndex[j];
+        if (startLength === endLength) {
+          for (; k < newLinesIndex.length; k++) {
+            const newLineIndex = newLinesIndex[k];
+            if (startIndex < newLineIndex) {
+              break;
+            }
+            lineIndex++;
+            lineStartIndex = newLineIndex + 1;
+          }
+          const columnIndex = startIndex - lineStartIndex + startLength;
+          handler(
+            input.slice(startIndex + startLength, endIndex),
+            lineIndex,
+            columnIndex,
+            startLength
+          );
+          i = j;
+          break;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Freeze all freeze-able members of a token and its children.
+ *
+ * @param {import("./markdownlint").MarkdownItToken} token A markdown-it token.
+ * @returns {void}
+ */
+function freezeToken(token) {
+  if (token.attrs) {
+    for (const attr of token.attrs) {
+      Object.freeze(attr);
+    }
+    Object.freeze(token.attrs);
+  }
+  if (token.children) {
+    for (const child of token.children) {
+      freezeToken(child);
+    }
+    Object.freeze(token.children);
+  }
+  if (token.map) {
+    Object.freeze(token.map);
+  }
+  Object.freeze(token);
+}
+
+/**
+ * Annotate tokens with line/lineNumber and freeze them.
+ *
+ * @param {Object[]} tokens Array of markdown-it tokens.
+ * @param {string[]} lines Lines of Markdown content.
+ * @returns {void}
+ */
+function annotateAndFreezeTokens(tokens, lines) {
+  let trMap = null;
+  // eslint-disable-next-line jsdoc/valid-types
+  /** @type import("./markdownlint").MarkdownItToken[] */
+  // @ts-ignore
+  const markdownItTokens = tokens;
+  for (const token of markdownItTokens) {
+    // Provide missing maps for table content
+    if (token.type === "tr_open") {
+      trMap = token.map;
+    } else if (token.type === "tr_close") {
+      trMap = null;
+    }
+    if (!token.map && trMap) {
+      token.map = [ ...trMap ];
+    }
+    // Update token metadata
+    if (token.map) {
+      token.line = lines[token.map[0]];
+      token.lineNumber = token.map[0] + 1;
+      // Trim bottom of token to exclude whitespace lines
+      while (token.map[1] && !((lines[token.map[1] - 1] || "").trim())) {
+        token.map[1]--;
+      }
+    }
+    // Annotate children with lineNumber
+    if (token.children) {
+      const codeSpanExtraLines = [];
+      if (token.children.some((child) => child.type === "code_inline")) {
+        forEachInlineCodeSpan(token.content, (code) => {
+          codeSpanExtraLines.push(code.split(newLineRe).length - 1);
+        });
+      }
+      let lineNumber = token.lineNumber;
+      for (const child of token.children) {
+        child.lineNumber = lineNumber;
+        child.line = lines[lineNumber - 1];
+        if ((child.type === "softbreak") || (child.type === "hardbreak")) {
+          lineNumber++;
+        } else if (child.type === "code_inline") {
+          lineNumber += codeSpanExtraLines.shift();
+        }
+      }
+    }
+    freezeToken(token);
+  }
+  Object.freeze(tokens);
+}
+
+/**
+ * Gets an array of markdown-it tokens for the input.
+ *
+ * @param {import("./markdownlint").Plugin[]} markdownItPlugins Additional plugins.
+ * @param {string} content Markdown content.
+ * @param {string[]} lines Lines of Markdown content.
+ * @returns {import("../lib/markdownlint").MarkdownItToken} Array of markdown-it tokens.
+ */
+function getMarkdownItTokens(markdownItPlugins, content, lines) {
+  const markdownit = __nccwpck_require__(5182);
+  const md = markdownit({ "html": true });
+  for (const plugin of markdownItPlugins) {
+    // @ts-ignore
+    md.use(...plugin);
+  }
+  const tokens = md.parse(content, {});
+  annotateAndFreezeTokens(tokens, lines);
+  // @ts-ignore
+  return tokens;
+};
+
+module.exports = {
+  forEachInlineCodeSpan,
+  getMarkdownItTokens
 };
 
 
