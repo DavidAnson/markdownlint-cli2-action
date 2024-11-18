@@ -18,9 +18,6 @@ export default [
   }),
   eslintPluginUnicorn.configs["flat/all"],
   {
-    "languageOptions": {
-      "sourceType": "commonjs"
-    },
     "linterOptions": {
       "reportUnusedDisableDirectives": true
     },
@@ -39,14 +36,6 @@ export default [
       "unicorn/no-array-callback-reference": "off",
       "unicorn/prefer-module": "off",
       "unicorn/prefer-top-level-await": "off"
-    }
-  },
-  {
-    "files": [
-      "eslint.config.mjs"
-    ],
-    "languageOptions": {
-      "sourceType": "module"
     }
   }
 ];

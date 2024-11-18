@@ -1,9 +1,7 @@
 // @ts-check
 
-"use strict";
-
-const core = require("@actions/core");
-const { "main": markdownlintCli2 } = require("markdownlint-cli2");
+import * as core from "@actions/core";
+import { main as markdownlintCli2 } from "markdownlint-cli2";
 
 const logMessage = core.info;
 const outputFormatter = (options) => {
