@@ -33,6 +33,6 @@
     "@vercel/ncc": "0.38.3",
     "eslint": "9.14.0",
     "eslint-plugin-n": "17.13.2",
-    "eslint-plugin-unicorn": "56.0.0"
+    "eslint-plugin-unicorn": "56.0.1"
   }
 }
