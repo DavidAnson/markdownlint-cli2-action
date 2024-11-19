@@ -1,0 +1,46 @@
+# Default state for all rules
+default: false
+
+# Headings
+MD001: true # MD001/heading-increment: Heading levels should only increment by one level at a time https://github.com/DavidAnson/markdownlint/blob/v0.32.1/doc/md001.md
+MD018: true # MD018/no-missing-space-atx: No space after hash on atx style heading https://github.com/DavidAnson/markdownlint/blob/main/doc/md018.md
+MD019: true # MD019/no-multiple-space-atx: Multiple spaces after hash on atx style heading https://github.com/DavidAnson/markdownlint/blob/main/doc/md019.md
+MD020: true # MD020/no-missing-space-closed-atx: No space inside hashes on closed atx style heading https://github.com/DavidAnson/markdownlint/blob/main/doc/md020.md
+MD021: true # MD021/no-multiple-space-closed-atx: Multiple spaces inside hashes on closed atx style heading https://github.com/DavidAnson/markdownlint/blob/main/doc/md021.md
+MD022: true # MD022/blanks-around-headings: Headings should be surrounded by blank lines https://github.com/DavidAnson/markdownlint/blob/main/doc/md022.md
+MD023: true # MD023/heading-start-left: Headings must start at the beginning of the line https://github.com/DavidAnson/markdownlint/blob/main/doc/md023.md
+MD026: true # MD026/no-trailing-punctuation: Trailing punctuation in heading https://github.com/DavidAnson/markdownlint/blob/main/doc/md026.md
+MD041: true # MD041/first-line-h1/first-line-heading: First line in a file should be a top-level heading https://github.com/DavidAnson/markdownlint/blob/main/doc/md041.md
+
+# Lists
+MD004: true # MD004/ul-style: Unordered list style https://github.com/DavidAnson/markdownlint/blob/main/doc/md004.md
+MD005: true # MD005/list-indent: Inconsistent indentation for list items at the same level https://github.com/DavidAnson/markdownlint/blob/main/doc/md005.md
+MD029: true # MD029/ol-prefix: Ordered list item prefix https://github.com/DavidAnson/markdownlint/blob/main/doc/md029.md
+MD032: true # MD032/blanks-around-lists: Lists should be surrounded by blank lines https://github.com/DavidAnson/markdownlint/blob/main/doc/md032.md
+
+# Blockquotes and Callouts
+MD027: true # MD027/no-multiple-space-blockquote: Multiple spaces after blockquote symbol https://github.com/DavidAnson/markdownlint/blob/main/doc/md027.md
+MD028: true # MD028/no-blanks-blockquote: Blank line inside blockquote https://github.com/DavidAnson/markdownlint/blob/main/doc/md028.md
+
+# Links
+MD011: true # MD011/no-reversed-links: Reversed link syntax https://github.com/DavidAnson/markdownlint/blob/main/doc/md011.md
+MD039: true # MD039/no-space-in-links: Spaces inside link text https://github.com/DavidAnson/markdownlint/blob/main/doc/md039.md
+MD042: true # MD042/no-empty-links: No empty links https://github.com/DavidAnson/markdownlint/blob/main/doc/md042.md
+MD051: true # MD051/link-fragments: Link fragments should be valid https://github.com/DavidAnson/markdownlint/blob/main/doc/md051.md
+MD054: true # MD054/link-image-style: Link and image style https://github.com/DavidAnson/markdownlint/blob/main/doc/md054.md
+
+# Code blocks and inline code
+MD031: true # MD031/blanks-around-fences: Fenced code blocks should be surrounded by blank lines https://github.com/DavidAnson/markdownlint/blob/main/doc/md031.md
+MD038: true # MD038/no-space-in-code: Spaces inside code span elements https://github.com/DavidAnson/markdownlint/blob/main/doc/md038.md
+MD040: true # MD040/fenced-code-language: Fenced code blocks should have a language specified https://github.com/DavidAnson/markdownlint/blob/main/doc/md040.md
+MD048: true # MD048/code-fence-style: Code fence style https://github.com/DavidAnson/markdownlint/blob/main/doc/md048.md
+
+# HTML Tags
+MD033: # MD033/no-inline-html: Inline HTML https://github.com/DavidAnson/markdownlint/blob/main/doc/md033.md
+  allowed_elements: ["br"] # Allowed elements (string[], default [])
+
+# Horizontal rules
+MD035: true # MD035/hr-style: Horizontal rule style https://github.com/DavidAnson/markdownlint/blob/main/doc/md035.md
+
+# Table
+MD055: true # MD055/table-pipe-style: Table pipe style https://github.com/DavidAnson/markdownlint/blob/main/doc/md055.md
