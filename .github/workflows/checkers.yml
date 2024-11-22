@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: JustinBeckwith/linkinator-action@v1.10.4
+    - uses: JustinBeckwith/linkinator-action@v1.11.0
       with:
         paths: '*.md'
         timeout: 60000
