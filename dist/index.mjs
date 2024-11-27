@@ -46693,58 +46693,6 @@ var external_node_os_namespaceObject_0 = /*#__PURE__*/__nccwpck_require__.t(exte
 const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 ;// CONCATENATED MODULE: external "node:url"
 const external_node_url_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:url");
-// EXTERNAL MODULE: external "path"
-var external_path_ = __nccwpck_require__(6928);
-;// CONCATENATED MODULE: external "process"
-const external_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("process");
-;// CONCATENATED MODULE: external "module"
-const external_module_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("module");
-// EXTERNAL MODULE: external "url"
-var external_url_ = __nccwpck_require__(7016);
-;// CONCATENATED MODULE: ./node_modules/es-main/main.js
-
-
-
-
-
-/**
- * Strip the extension from a filename if it has one.
- * @param {string} name A filename.
- * @return {string} The filename without a path.
- */
-function stripExt(name) {
-  const extension = external_path_.extname(name);
-  if (!extension) {
-    return name;
-  }
-
-  return name.slice(0, -extension.length);
-}
-
-/**
- * Check if a module was run directly with node as opposed to being
- * imported from another module.
- * @param {ImportMeta} meta The `import.meta` object.
- * @return {boolean} The module was run directly with node.
- */
-function esMain(meta) {
-  if (!meta || !external_process_namespaceObject.argv[1]) {
-    return false;
-  }
-
-  const require = (0,external_module_namespaceObject.createRequire)(meta.url);
-  const scriptPath = require.resolve(external_process_namespaceObject.argv[1]);
-
-  const modulePath = (0,external_url_.fileURLToPath)(meta.url);
-
-  const extension = external_path_.extname(scriptPath);
-  if (extension) {
-    return modulePath === scriptPath;
-  }
-
-  return stripExt(modulePath) === scriptPath;
-}
-
 ;// CONCATENATED MODULE: external "node:process"
 const external_node_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:process");
 // EXTERNAL MODULE: external "node:events"
@@ -71323,7 +71271,6 @@ const parsers = [
 /* harmony default export */ const parsers_parsers = (parsers);
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/markdownlint-cli2.mjs
-
 // @ts-ignore
 
 // Requires
@@ -71333,7 +71280,6 @@ const markdownlint_cli2_dynamicRequire = (0,external_node_module_namespaceObject
 
 
 const pathPosix = external_node_path_namespaceObject.posix;
-
 
 
 
@@ -72401,28 +72347,6 @@ const markdownlint_cli2_main = async (params) => {
   // Return result
   return errorsPresent ? 1 : 0;
 };
-
-// Exports
-
-
-// Run if invoked as a CLI
-if (esMain(import.meta)) {
-  const params = {
-    "argv": process.argv.slice(2),
-    "logMessage": console.log,
-    "logError": console.error,
-    "allowStdin": true
-  };
-  markdownlint_cli2_main(params).
-    then((exitCode) => {
-      process.exitCode = exitCode;
-    }).
-    // eslint-disable-next-line unicorn/prefer-top-level-await
-    catch((error) => {
-      console.error(error);
-      process.exitCode = 2;
-    });
-}
 
 ;// CONCATENATED MODULE: ./markdownlint-cli2-action.mjs
 // @ts-check
