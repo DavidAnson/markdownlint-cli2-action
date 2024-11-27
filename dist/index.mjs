@@ -17143,569 +17143,6 @@ module.exports = outputFormatter;
 
 /***/ }),
 
-/***/ 8307:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const micromark = __nccwpck_require__(1670);
-
-const { newLineRe, nextLinesRe } = __nccwpck_require__(7389);
-
-module.exports.newLineRe = newLineRe;
-module.exports.nextLinesRe = nextLinesRe;
-
-/** @typedef {import("../lib/markdownlint.js").RuleOnError} RuleOnError */
-/** @typedef {import("../lib/markdownlint.js").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
-
-// Regular expression for matching common front matter (YAML and TOML)
-module.exports.frontMatterRe =
-  /((^---[^\S\r\n\u2028\u2029]*$[\s\S]+?^---\s*)|(^\+\+\+[^\S\r\n\u2028\u2029]*$[\s\S]+?^(\+\+\+|\.\.\.)\s*)|(^\{[^\S\r\n\u2028\u2029]*$[\s\S]+?^\}\s*))(\r\n|\r|\n|$)/m;
-
-// Regular expression for matching the start of inline disable/enable comments
-const inlineCommentStartRe =
-  /(<!--\s*markdownlint-(disable|enable|capture|restore|disable-file|enable-file|disable-line|disable-next-line|configure-file))(?:\s|-->)/gi;
-module.exports.inlineCommentStartRe = inlineCommentStartRe;
-
-// Regular expression for identifying an HTML entity at the end of a line
-module.exports.endOfLineHtmlEntityRe =
-  /&(?:#\d+|#[xX][\da-fA-F]+|[a-zA-Z]{2,31}|blk\d{2}|emsp1[34]|frac\d{2}|sup\d|there4);$/;
-
-// Regular expression for identifying a GitHub emoji code at the end of a line
-module.exports.endOfLineGemojiCodeRe =
-  /:(?:[abmovx]|[-+]1|100|1234|(?:1st|2nd|3rd)_place_medal|8ball|clock\d{1,4}|e-mail|non-potable_water|o2|t-rex|u5272|u5408|u55b6|u6307|u6708|u6709|u6e80|u7121|u7533|u7981|u7a7a|[a-z]{2,15}2?|[a-z]{1,14}(?:_[a-z\d]{1,16})+):$/;
-
-// All punctuation characters (normal and full-width)
-const allPunctuation = ".,;:!?。，；：！？";
-module.exports.allPunctuation = allPunctuation;
-
-// All punctuation characters without question mark (normal and full-width)
-module.exports.allPunctuationNoQuestion = allPunctuation.replace(/[?？]/gu, "");
-
-/**
- * Returns true iff the input is a Number.
- *
- * @param {Object} obj Object of unknown type.
- * @returns {boolean} True iff obj is a Number.
- */
-function isNumber(obj) {
-  return typeof obj === "number";
-}
-module.exports.isNumber = isNumber;
-
-/**
- * Returns true iff the input is a String.
- *
- * @param {Object} obj Object of unknown type.
- * @returns {boolean} True iff obj is a String.
- */
-function isString(obj) {
-  return typeof obj === "string";
-}
-module.exports.isString = isString;
-
-/**
- * Returns true iff the input String is empty.
- *
- * @param {string} str String of unknown length.
- * @returns {boolean} True iff the input String is empty.
- */
-function isEmptyString(str) {
-  return str.length === 0;
-}
-module.exports.isEmptyString = isEmptyString;
-
-/**
- * Returns true iff the input is an Object.
- *
- * @param {Object} obj Object of unknown type.
- * @returns {boolean} True iff obj is an Object.
- */
-function isObject(obj) {
-  return !!obj && (typeof obj === "object") && !Array.isArray(obj);
-}
-module.exports.isObject = isObject;
-
-/**
- * Returns true iff the input is a URL.
- *
- * @param {Object} obj Object of unknown type.
- * @returns {boolean} True iff obj is a URL.
- */
-function isUrl(obj) {
-  return !!obj && (Object.getPrototypeOf(obj) === URL.prototype);
-}
-module.exports.isUrl = isUrl;
-
-/**
- * Clones the input if it is an Array.
- *
- * @param {Object} arr Object of unknown type.
- * @returns {Object} Clone of obj iff obj is an Array.
- */
-function cloneIfArray(arr) {
-  return Array.isArray(arr) ? [ ...arr ] : arr;
-}
-module.exports.cloneIfArray = cloneIfArray;
-
-/**
- * Clones the input if it is a URL.
- *
- * @param {Object} url Object of unknown type.
- * @returns {Object} Clone of obj iff obj is a URL.
- */
-function cloneIfUrl(url) {
-  return isUrl(url) ? new URL(url) : url;
-}
-module.exports.cloneIfUrl = cloneIfUrl;
-
-/**
- * Gets a Regular Expression for matching the specified HTML attribute.
- *
- * @param {string} name HTML attribute name.
- * @returns {RegExp} Regular Expression for matching.
- */
-module.exports.getHtmlAttributeRe = function getHtmlAttributeRe(name) {
-  return new RegExp(`\\s${name}\\s*=\\s*['"]?([^'"\\s>]*)`, "iu");
-};
-
-/**
- * Returns true iff the input line is blank (contains nothing, whitespace, or
- * comments (unclosed start/end comments allowed)).
- *
- * @param {string} line Input line.
- * @returns {boolean} True iff line is blank.
- */
-function isBlankLine(line) {
-  const startComment = "<!--";
-  const endComment = "-->";
-  const removeComments = (s) => {
-    while (true) {
-      const start = s.indexOf(startComment);
-      const end = s.indexOf(endComment);
-      if ((end !== -1) && ((start === -1) || (end < start))) {
-        // Unmatched end comment is first
-        s = s.slice(end + endComment.length);
-      } else if ((start !== -1) && (end !== -1)) {
-        // Start comment is before end comment
-        s = s.slice(0, start) + s.slice(end + endComment.length);
-      } else if ((start !== -1) && (end === -1)) {
-        // Unmatched start comment is last
-        s = s.slice(0, start);
-      } else {
-        // No more comments to remove
-        return s;
-      }
-    }
-  };
-  return (
-    !line ||
-    !line.trim() ||
-    !removeComments(line).replace(/>/g, "").trim()
-  );
-}
-module.exports.isBlankLine = isBlankLine;
-
-// Replaces the content of properly-formatted CommonMark comments with "."
-// This preserves the line/column information for the rest of the document
-// https://spec.commonmark.org/0.29/#html-blocks
-// https://spec.commonmark.org/0.29/#html-comment
-const htmlCommentBegin = "<!--";
-const htmlCommentEnd = "-->";
-const safeCommentCharacter = ".";
-const startsWithPipeRe = /^ *\|/;
-const notCrLfRe = /[^\r\n]/g;
-const notSpaceCrLfRe = /[^ \r\n]/g;
-const trailingSpaceRe = / +[\r\n]/g;
-const replaceTrailingSpace = (s) => s.replace(notCrLfRe, safeCommentCharacter);
-module.exports.clearHtmlCommentText = function clearHtmlCommentText(text) {
-  let i = 0;
-  while ((i = text.indexOf(htmlCommentBegin, i)) !== -1) {
-    const j = text.indexOf(htmlCommentEnd, i + 2);
-    if (j === -1) {
-      // Un-terminated comments are treated as text
-      break;
-    }
-    // If the comment has content...
-    if (j > i + htmlCommentBegin.length) {
-      const content = text.slice(i + htmlCommentBegin.length, j);
-      const lastLf = text.lastIndexOf("\n", i) + 1;
-      const preText = text.slice(lastLf, i);
-      const isBlock = preText.trim().length === 0;
-      const couldBeTable = startsWithPipeRe.test(preText);
-      const spansTableCells = couldBeTable && content.includes("\n");
-      const isValid =
-        isBlock ||
-        !(
-          spansTableCells ||
-          content.startsWith(">") ||
-          content.startsWith("->") ||
-          content.endsWith("-") ||
-          content.includes("--")
-        );
-      // If a valid block/inline comment...
-      if (isValid) {
-        const clearedContent = content
-          .replace(notSpaceCrLfRe, safeCommentCharacter)
-          .replace(trailingSpaceRe, replaceTrailingSpace);
-        text =
-          text.slice(0, i + htmlCommentBegin.length) +
-          clearedContent +
-          text.slice(j);
-      }
-    }
-    i = j + htmlCommentEnd.length;
-  }
-  return text;
-};
-
-// Escapes a string for use in a RegExp
-module.exports.escapeForRegExp = function escapeForRegExp(str) {
-  return str.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
-};
-
-/**
- * Adds ellipsis to the left/right/middle of the specified text.
- *
- * @param {string} text Text to ellipsify.
- * @param {boolean} [start] True iff the start of the text is important.
- * @param {boolean} [end] True iff the end of the text is important.
- * @returns {string} Ellipsified text.
- */
-function ellipsify(text, start, end) {
-  if (text.length <= 30) {
-    // Nothing to do
-  } else if (start && end) {
-    text = text.slice(0, 15) + "..." + text.slice(-15);
-  } else if (end) {
-    text = "..." + text.slice(-30);
-  } else {
-    text = text.slice(0, 30) + "...";
-  }
-  return text;
-}
-module.exports.ellipsify = ellipsify;
-
-/**
- * Adds a generic error object via the onError callback.
- *
- * @param {RuleOnError} onError RuleOnError instance.
- * @param {number} lineNumber Line number.
- * @param {string} [detail] Error details.
- * @param {string} [context] Error context.
- * @param {number[]} [range] Column and length of error.
- * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
- * @returns {void}
- */
-function addError(onError, lineNumber, detail, context, range, fixInfo) {
-  onError({
-    lineNumber,
-    detail,
-    context,
-    range,
-    fixInfo
-  });
-}
-module.exports.addError = addError;
-
-/**
- * Adds an error object with details conditionally via the onError callback.
- *
- * @param {RuleOnError} onError RuleOnError instance.
- * @param {number} lineNumber Line number.
- * @param {Object} expected Expected value.
- * @param {Object} actual Actual value.
- * @param {string} [detail] Error details.
- * @param {string} [context] Error context.
- * @param {number[]} [range] Column and length of error.
- * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
- * @returns {void}
- */
-function addErrorDetailIf(
-  onError, lineNumber, expected, actual, detail, context, range, fixInfo) {
-  if (expected !== actual) {
-    addError(
-      onError,
-      lineNumber,
-      "Expected: " + expected + "; Actual: " + actual +
-        (detail ? "; " + detail : ""),
-      context,
-      range,
-      fixInfo);
-  }
-}
-module.exports.addErrorDetailIf = addErrorDetailIf;
-
-/**
- * Adds an error object with context via the onError callback.
- *
- * @param {RuleOnError} onError RuleOnError instance.
- * @param {number} lineNumber Line number.
- * @param {string} context Error context.
- * @param {boolean} [start] True iff the start of the text is important.
- * @param {boolean} [end] True iff the end of the text is important.
- * @param {number[]} [range] Column and length of error.
- * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
- * @returns {void}
- */
-function addErrorContext(
-  onError, lineNumber, context, start, end, range, fixInfo) {
-  context = ellipsify(context, start, end);
-  addError(onError, lineNumber, undefined, context, range, fixInfo);
-}
-module.exports.addErrorContext = addErrorContext;
-
-/**
- * Defines a range within a file (start line/column to end line/column, subset of MicromarkToken).
- *
- * @typedef {Object} FileRange
- * @property {number} startLine Start line (1-based).
- * @property {number} startColumn Start column (1-based).
- * @property {number} endLine End line (1-based).
- * @property {number} endColumn End column (1-based).
- */
-
-/**
- * Returns whether line/column A is less than or equal to line/column B.
- *
- * @param {number} lineA Line A.
- * @param {number} columnA Column A.
- * @param {number} lineB Line B.
- * @param {number} columnB Column B.
- * @returns {boolean} True iff A is less than or equal to B.
- */
-const positionLessThanOrEqual = (lineA, columnA, lineB, columnB) => (
-  (lineA < lineB) ||
-  ((lineA === lineB) && (columnA <= columnB))
-);
-
-/**
- * Returns whether two ranges (or MicromarkTokens) overlap anywhere.
- *
- * @param {FileRange|import("../lib/markdownlint.js").MicromarkToken} rangeA Range A.
- * @param {FileRange|import("../lib/markdownlint.js").MicromarkToken} rangeB Range B.
- * @returns {boolean} True iff the two ranges overlap.
- */
-module.exports.hasOverlap = function hasOverlap(rangeA, rangeB) {
-  const lte = positionLessThanOrEqual(rangeA.startLine, rangeA.startColumn, rangeB.startLine, rangeB.startColumn);
-  const first = lte ? rangeA : rangeB;
-  const second = lte ? rangeB : rangeA;
-  return positionLessThanOrEqual(second.startLine, second.startColumn, first.endLine, first.endColumn);
-};
-
-// Determines if the front matter includes a title
-module.exports.frontMatterHasTitle =
-  function frontMatterHasTitle(frontMatterLines, frontMatterTitlePattern) {
-    const ignoreFrontMatter =
-      (frontMatterTitlePattern !== undefined) && !frontMatterTitlePattern;
-    const frontMatterTitleRe =
-      new RegExp(
-        String(frontMatterTitlePattern || "^\\s*\"?title\"?\\s*[:=]"),
-        "i"
-      );
-    return !ignoreFrontMatter &&
-      frontMatterLines.some((line) => frontMatterTitleRe.test(line));
-  };
-
-/**
- * Returns an object with information about reference links and images.
- *
- * @param {import("../helpers/micromark-helpers.cjs").Token[]} tokens Micromark tokens.
- * @returns {Object} Reference link/image data.
- */
-function getReferenceLinkImageData(tokens) {
-  const normalizeReference = (s) => s.toLowerCase().trim().replace(/\s+/g, " ");
-  const references = new Map();
-  const shortcuts = new Map();
-  const addReferenceToDictionary = (token, label, isShortcut) => {
-    const referenceDatum = [
-      token.startLine - 1,
-      token.startColumn - 1,
-      token.text.length
-    ];
-    const reference = normalizeReference(label);
-    const dictionary = isShortcut ? shortcuts : references;
-    const referenceData = dictionary.get(reference) || [];
-    referenceData.push(referenceDatum);
-    dictionary.set(reference, referenceData);
-  };
-  const definitions = new Map();
-  const definitionLineIndices = [];
-  const duplicateDefinitions = [];
-  const filteredTokens =
-    micromark.filterByTypes(
-      tokens,
-      [
-        // definitionLineIndices
-        "definition", "gfmFootnoteDefinition",
-        // definitions and definitionLineIndices
-        "definitionLabelString", "gfmFootnoteDefinitionLabelString",
-        // references and shortcuts
-        "gfmFootnoteCall", "image", "link",
-        // undefined link labels
-        "undefinedReferenceCollapsed", "undefinedReferenceFull", "undefinedReferenceShortcut"
-      ]
-    );
-  for (const token of filteredTokens) {
-    let labelPrefix = "";
-    // eslint-disable-next-line default-case
-    switch (token.type) {
-      case "definition":
-      case "gfmFootnoteDefinition":
-        // definitionLineIndices
-        for (let i = token.startLine; i <= token.endLine; i++) {
-          definitionLineIndices.push(i - 1);
-        }
-        break;
-      case "gfmFootnoteDefinitionLabelString":
-        labelPrefix = "^";
-      case "definitionLabelString": // eslint-disable-line no-fallthrough
-        {
-          // definitions and definitionLineIndices
-          const reference = normalizeReference(`${labelPrefix}${token.text}`);
-          if (definitions.has(reference)) {
-            duplicateDefinitions.push([ reference, token.startLine - 1 ]);
-          } else {
-            const parent =
-              micromark.getParentOfType(token, [ "definition" ]);
-            const destinationString = parent &&
-              micromark.getDescendantsByType(parent, [ "definitionDestination", "definitionDestinationRaw", "definitionDestinationString" ])[0]?.text;
-            definitions.set(
-              reference,
-              [ token.startLine - 1, destinationString ]
-            );
-          }
-        }
-        break;
-      case "gfmFootnoteCall":
-      case "image":
-      case "link":
-        {
-          // Identify if shortcut or full/collapsed
-          let isShortcut = (token.children.length === 1);
-          const isFullOrCollapsed = (token.children.length === 2) && !token.children.some((t) => t.type === "resource");
-          const [ labelText ] = micromark.getDescendantsByType(token, [ "label", "labelText" ]);
-          const [ referenceString ] = micromark.getDescendantsByType(token, [ "reference", "referenceString" ]);
-          let label = labelText?.text;
-          // Identify if footnote
-          if (!isShortcut && !isFullOrCollapsed) {
-            const [ footnoteCallMarker, footnoteCallString ] = token.children.filter(
-              (t) => [ "gfmFootnoteCallMarker", "gfmFootnoteCallString" ].includes(t.type)
-            );
-            if (footnoteCallMarker && footnoteCallString) {
-              label = `${footnoteCallMarker.text}${footnoteCallString.text}`;
-              isShortcut = true;
-            }
-          }
-          // Track link (handle shortcuts separately due to ambiguity in "text [text] text")
-          if (isShortcut || isFullOrCollapsed) {
-            addReferenceToDictionary(token, referenceString?.text || label, isShortcut);
-          }
-        }
-        break;
-      case "undefinedReferenceCollapsed":
-      case "undefinedReferenceFull":
-      case "undefinedReferenceShortcut":
-        {
-          const undefinedReference = micromark.getDescendantsByType(token, [ "undefinedReference" ])[0];
-          const label = undefinedReference.children.map((t) => t.text).join("");
-          const isShortcut = (token.type === "undefinedReferenceShortcut");
-          addReferenceToDictionary(token, label, isShortcut);
-        }
-        break;
-    }
-  }
-  return {
-    references,
-    shortcuts,
-    definitions,
-    duplicateDefinitions,
-    definitionLineIndices
-  };
-}
-module.exports.getReferenceLinkImageData = getReferenceLinkImageData;
-
-/**
- * Gets the most common line ending, falling back to the platform default.
- *
- * @param {string} input Markdown content to analyze.
- * @param {Object} [os] Node.js "os" module.
- * @returns {string} Preferred line ending.
- */
-function getPreferredLineEnding(input, os) {
-  let cr = 0;
-  let lf = 0;
-  let crlf = 0;
-  const endings = input.match(newLineRe) || [];
-  for (const ending of endings) {
-    // eslint-disable-next-line default-case
-    switch (ending) {
-      case "\r":
-        cr++;
-        break;
-      case "\n":
-        lf++;
-        break;
-      case "\r\n":
-        crlf++;
-        break;
-    }
-  }
-  let preferredLineEnding = null;
-  if (!cr && !lf && !crlf) {
-    preferredLineEnding = (os && os.EOL) || "\n";
-  } else if ((lf >= crlf) && (lf >= cr)) {
-    preferredLineEnding = "\n";
-  } else if (crlf >= cr) {
-    preferredLineEnding = "\r\n";
-  } else {
-    preferredLineEnding = "\r";
-  }
-  return preferredLineEnding;
-}
-module.exports.getPreferredLineEnding = getPreferredLineEnding;
-
-/**
- * Expands a path with a tilde to an absolute path.
- *
- * @param {string} file Path that may begin with a tilde.
- * @param {Object} os Node.js "os" module.
- * @returns {string} Absolute path (or original path).
- */
-function expandTildePath(file, os) {
-  const homedir = os && os.homedir && os.homedir();
-  return homedir ? file.replace(/^~($|\/|\\)/, `${homedir}$1`) : file;
-}
-module.exports.expandTildePath = expandTildePath;
-
-
-/***/ }),
-
-/***/ 7389:
-/***/ ((module) => {
-
-// @ts-check
-
-
-
-// Symbol for identifing the flat tokens array from micromark parse
-module.exports.flatTokensSymbol = Symbol("flat-tokens");
-
-// Symbol for identifying the htmlFlow token from micromark parse
-module.exports.htmlFlowSymbol = Symbol("html-flow");
-
-// Regular expression for matching common newline characters
-// See NEWLINES_RE in markdown-it/lib/rules_core/normalize.js
-module.exports.newLineRe = /\r\n?|\n/g;
-
-// Regular expression for matching next lines
-module.exports.nextLinesRe = /[\r\n][\s\S]*$/;
-
-
-/***/ }),
-
 /***/ 7337:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -44342,27 +43779,6 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:events"
 
 /***/ }),
 
-/***/ 3024:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
-
-/***/ }),
-
-/***/ 8161:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
-
-/***/ }),
-
-/***/ 6760:
-/***/ ((module) => {
-
-module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
-
-/***/ }),
-
 /***/ 7075:
 /***/ ((module) => {
 
@@ -46095,15 +45511,16897 @@ module.exports = parseParams
 
 /***/ }),
 
-/***/ 5791:
+/***/ 3810:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // @ts-check
 
 
 
-const helpers = __nccwpck_require__(8307);
-const { filterByTypes } = __nccwpck_require__(1670);
+const micromark = __nccwpck_require__(1670);
+
+const { newLineRe, nextLinesRe } = __nccwpck_require__(3408);
+
+module.exports.newLineRe = newLineRe;
+module.exports.nextLinesRe = nextLinesRe;
+
+// @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
+/** @typedef {import("../lib/markdownlint.mjs").RuleOnError} RuleOnError */
+// @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
+/** @typedef {import("../lib/markdownlint.mjs").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
+// @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
+/** @typedef {import("../lib/markdownlint.mjs").MicromarkToken} MicromarkToken */
+
+// Regular expression for matching common front matter (YAML and TOML)
+module.exports.frontMatterRe =
+  /((^---[^\S\r\n\u2028\u2029]*$[\s\S]+?^---\s*)|(^\+\+\+[^\S\r\n\u2028\u2029]*$[\s\S]+?^(\+\+\+|\.\.\.)\s*)|(^\{[^\S\r\n\u2028\u2029]*$[\s\S]+?^\}\s*))(\r\n|\r|\n|$)/m;
+
+// Regular expression for matching the start of inline disable/enable comments
+const inlineCommentStartRe =
+  /(<!--\s*markdownlint-(disable|enable|capture|restore|disable-file|enable-file|disable-line|disable-next-line|configure-file))(?:\s|-->)/gi;
+module.exports.inlineCommentStartRe = inlineCommentStartRe;
+
+// Regular expression for identifying an HTML entity at the end of a line
+module.exports.endOfLineHtmlEntityRe =
+  /&(?:#\d+|#[xX][\da-fA-F]+|[a-zA-Z]{2,31}|blk\d{2}|emsp1[34]|frac\d{2}|sup\d|there4);$/;
+
+// Regular expression for identifying a GitHub emoji code at the end of a line
+module.exports.endOfLineGemojiCodeRe =
+  /:(?:[abmovx]|[-+]1|100|1234|(?:1st|2nd|3rd)_place_medal|8ball|clock\d{1,4}|e-mail|non-potable_water|o2|t-rex|u5272|u5408|u55b6|u6307|u6708|u6709|u6e80|u7121|u7533|u7981|u7a7a|[a-z]{2,15}2?|[a-z]{1,14}(?:_[a-z\d]{1,16})+):$/;
+
+// All punctuation characters (normal and full-width)
+const allPunctuation = ".,;:!?。，；：！？";
+module.exports.allPunctuation = allPunctuation;
+
+// All punctuation characters without question mark (normal and full-width)
+module.exports.allPunctuationNoQuestion = allPunctuation.replace(/[?？]/gu, "");
+
+/**
+ * Returns true iff the input is a Number.
+ *
+ * @param {Object} obj Object of unknown type.
+ * @returns {boolean} True iff obj is a Number.
+ */
+function isNumber(obj) {
+  return typeof obj === "number";
+}
+module.exports.isNumber = isNumber;
+
+/**
+ * Returns true iff the input is a String.
+ *
+ * @param {Object} obj Object of unknown type.
+ * @returns {boolean} True iff obj is a String.
+ */
+function isString(obj) {
+  return typeof obj === "string";
+}
+module.exports.isString = isString;
+
+/**
+ * Returns true iff the input String is empty.
+ *
+ * @param {string} str String of unknown length.
+ * @returns {boolean} True iff the input String is empty.
+ */
+function isEmptyString(str) {
+  return str.length === 0;
+}
+module.exports.isEmptyString = isEmptyString;
+
+/**
+ * Returns true iff the input is an Object.
+ *
+ * @param {Object} obj Object of unknown type.
+ * @returns {boolean} True iff obj is an Object.
+ */
+function isObject(obj) {
+  return !!obj && (typeof obj === "object") && !Array.isArray(obj);
+}
+module.exports.isObject = isObject;
+
+/**
+ * Returns true iff the input is a URL.
+ *
+ * @param {Object} obj Object of unknown type.
+ * @returns {boolean} True iff obj is a URL.
+ */
+function isUrl(obj) {
+  return !!obj && (Object.getPrototypeOf(obj) === URL.prototype);
+}
+module.exports.isUrl = isUrl;
+
+/**
+ * Clones the input if it is an Array.
+ *
+ * @param {Object} arr Object of unknown type.
+ * @returns {Object} Clone of obj iff obj is an Array.
+ */
+function cloneIfArray(arr) {
+  return Array.isArray(arr) ? [ ...arr ] : arr;
+}
+module.exports.cloneIfArray = cloneIfArray;
+
+/**
+ * Clones the input if it is a URL.
+ *
+ * @param {Object} url Object of unknown type.
+ * @returns {Object} Clone of obj iff obj is a URL.
+ */
+function cloneIfUrl(url) {
+  return isUrl(url) ? new URL(url) : url;
+}
+module.exports.cloneIfUrl = cloneIfUrl;
+
+/**
+ * Gets a Regular Expression for matching the specified HTML attribute.
+ *
+ * @param {string} name HTML attribute name.
+ * @returns {RegExp} Regular Expression for matching.
+ */
+module.exports.getHtmlAttributeRe = function getHtmlAttributeRe(name) {
+  return new RegExp(`\\s${name}\\s*=\\s*['"]?([^'"\\s>]*)`, "iu");
+};
+
+/**
+ * Returns true iff the input line is blank (contains nothing, whitespace, or
+ * comments (unclosed start/end comments allowed)).
+ *
+ * @param {string} line Input line.
+ * @returns {boolean} True iff line is blank.
+ */
+function isBlankLine(line) {
+  const startComment = "<!--";
+  const endComment = "-->";
+  const removeComments = (s) => {
+    while (true) {
+      const start = s.indexOf(startComment);
+      const end = s.indexOf(endComment);
+      if ((end !== -1) && ((start === -1) || (end < start))) {
+        // Unmatched end comment is first
+        s = s.slice(end + endComment.length);
+      } else if ((start !== -1) && (end !== -1)) {
+        // Start comment is before end comment
+        s = s.slice(0, start) + s.slice(end + endComment.length);
+      } else if ((start !== -1) && (end === -1)) {
+        // Unmatched start comment is last
+        s = s.slice(0, start);
+      } else {
+        // No more comments to remove
+        return s;
+      }
+    }
+  };
+  return (
+    !line ||
+    !line.trim() ||
+    !removeComments(line).replace(/>/g, "").trim()
+  );
+}
+module.exports.isBlankLine = isBlankLine;
+
+// Replaces the content of properly-formatted CommonMark comments with "."
+// This preserves the line/column information for the rest of the document
+// https://spec.commonmark.org/0.29/#html-blocks
+// https://spec.commonmark.org/0.29/#html-comment
+const htmlCommentBegin = "<!--";
+const htmlCommentEnd = "-->";
+const safeCommentCharacter = ".";
+const startsWithPipeRe = /^ *\|/;
+const notCrLfRe = /[^\r\n]/g;
+const notSpaceCrLfRe = /[^ \r\n]/g;
+const trailingSpaceRe = / +[\r\n]/g;
+const replaceTrailingSpace = (s) => s.replace(notCrLfRe, safeCommentCharacter);
+module.exports.clearHtmlCommentText = function clearHtmlCommentText(text) {
+  let i = 0;
+  while ((i = text.indexOf(htmlCommentBegin, i)) !== -1) {
+    const j = text.indexOf(htmlCommentEnd, i + 2);
+    if (j === -1) {
+      // Un-terminated comments are treated as text
+      break;
+    }
+    // If the comment has content...
+    if (j > i + htmlCommentBegin.length) {
+      const content = text.slice(i + htmlCommentBegin.length, j);
+      const lastLf = text.lastIndexOf("\n", i) + 1;
+      const preText = text.slice(lastLf, i);
+      const isBlock = preText.trim().length === 0;
+      const couldBeTable = startsWithPipeRe.test(preText);
+      const spansTableCells = couldBeTable && content.includes("\n");
+      const isValid =
+        isBlock ||
+        !(
+          spansTableCells ||
+          content.startsWith(">") ||
+          content.startsWith("->") ||
+          content.endsWith("-") ||
+          content.includes("--")
+        );
+      // If a valid block/inline comment...
+      if (isValid) {
+        const clearedContent = content
+          .replace(notSpaceCrLfRe, safeCommentCharacter)
+          .replace(trailingSpaceRe, replaceTrailingSpace);
+        text =
+          text.slice(0, i + htmlCommentBegin.length) +
+          clearedContent +
+          text.slice(j);
+      }
+    }
+    i = j + htmlCommentEnd.length;
+  }
+  return text;
+};
+
+// Escapes a string for use in a RegExp
+module.exports.escapeForRegExp = function escapeForRegExp(str) {
+  return str.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+};
+
+/**
+ * Adds ellipsis to the left/right/middle of the specified text.
+ *
+ * @param {string} text Text to ellipsify.
+ * @param {boolean} [start] True iff the start of the text is important.
+ * @param {boolean} [end] True iff the end of the text is important.
+ * @returns {string} Ellipsified text.
+ */
+function ellipsify(text, start, end) {
+  if (text.length <= 30) {
+    // Nothing to do
+  } else if (start && end) {
+    text = text.slice(0, 15) + "..." + text.slice(-15);
+  } else if (end) {
+    text = "..." + text.slice(-30);
+  } else {
+    text = text.slice(0, 30) + "...";
+  }
+  return text;
+}
+module.exports.ellipsify = ellipsify;
+
+/**
+ * Adds a generic error object via the onError callback.
+ *
+ * @param {RuleOnError} onError RuleOnError instance.
+ * @param {number} lineNumber Line number.
+ * @param {string} [detail] Error details.
+ * @param {string} [context] Error context.
+ * @param {number[]} [range] Column and length of error.
+ * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
+ * @returns {void}
+ */
+function addError(onError, lineNumber, detail, context, range, fixInfo) {
+  onError({
+    lineNumber,
+    detail,
+    context,
+    range,
+    fixInfo
+  });
+}
+module.exports.addError = addError;
+
+/**
+ * Adds an error object with details conditionally via the onError callback.
+ *
+ * @param {RuleOnError} onError RuleOnError instance.
+ * @param {number} lineNumber Line number.
+ * @param {Object} expected Expected value.
+ * @param {Object} actual Actual value.
+ * @param {string} [detail] Error details.
+ * @param {string} [context] Error context.
+ * @param {number[]} [range] Column and length of error.
+ * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
+ * @returns {void}
+ */
+function addErrorDetailIf(
+  onError, lineNumber, expected, actual, detail, context, range, fixInfo) {
+  if (expected !== actual) {
+    addError(
+      onError,
+      lineNumber,
+      "Expected: " + expected + "; Actual: " + actual +
+        (detail ? "; " + detail : ""),
+      context,
+      range,
+      fixInfo);
+  }
+}
+module.exports.addErrorDetailIf = addErrorDetailIf;
+
+/**
+ * Adds an error object with context via the onError callback.
+ *
+ * @param {RuleOnError} onError RuleOnError instance.
+ * @param {number} lineNumber Line number.
+ * @param {string} context Error context.
+ * @param {boolean} [start] True iff the start of the text is important.
+ * @param {boolean} [end] True iff the end of the text is important.
+ * @param {number[]} [range] Column and length of error.
+ * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
+ * @returns {void}
+ */
+function addErrorContext(
+  onError, lineNumber, context, start, end, range, fixInfo) {
+  context = ellipsify(context, start, end);
+  addError(onError, lineNumber, undefined, context, range, fixInfo);
+}
+module.exports.addErrorContext = addErrorContext;
+
+/**
+ * Defines a range within a file (start line/column to end line/column, subset of MicromarkToken).
+ *
+ * @typedef {Object} FileRange
+ * @property {number} startLine Start line (1-based).
+ * @property {number} startColumn Start column (1-based).
+ * @property {number} endLine End line (1-based).
+ * @property {number} endColumn End column (1-based).
+ */
+
+/**
+ * Returns whether line/column A is less than or equal to line/column B.
+ *
+ * @param {number} lineA Line A.
+ * @param {number} columnA Column A.
+ * @param {number} lineB Line B.
+ * @param {number} columnB Column B.
+ * @returns {boolean} True iff A is less than or equal to B.
+ */
+const positionLessThanOrEqual = (lineA, columnA, lineB, columnB) => (
+  (lineA < lineB) ||
+  ((lineA === lineB) && (columnA <= columnB))
+);
+
+/**
+ * Returns whether two ranges (or MicromarkTokens) overlap anywhere.
+ *
+ * @param {FileRange|MicromarkToken} rangeA Range A.
+ * @param {FileRange|MicromarkToken} rangeB Range B.
+ * @returns {boolean} True iff the two ranges overlap.
+ */
+module.exports.hasOverlap = function hasOverlap(rangeA, rangeB) {
+  const lte = positionLessThanOrEqual(rangeA.startLine, rangeA.startColumn, rangeB.startLine, rangeB.startColumn);
+  const first = lte ? rangeA : rangeB;
+  const second = lte ? rangeB : rangeA;
+  return positionLessThanOrEqual(second.startLine, second.startColumn, first.endLine, first.endColumn);
+};
+
+// Determines if the front matter includes a title
+module.exports.frontMatterHasTitle =
+  function frontMatterHasTitle(frontMatterLines, frontMatterTitlePattern) {
+    const ignoreFrontMatter =
+      (frontMatterTitlePattern !== undefined) && !frontMatterTitlePattern;
+    const frontMatterTitleRe =
+      new RegExp(
+        String(frontMatterTitlePattern || "^\\s*\"?title\"?\\s*[:=]"),
+        "i"
+      );
+    return !ignoreFrontMatter &&
+      frontMatterLines.some((line) => frontMatterTitleRe.test(line));
+  };
+
+/**
+ * Returns an object with information about reference links and images.
+ *
+ * @param {import("../helpers/micromark-helpers.cjs").Token[]} tokens Micromark tokens.
+ * @returns {Object} Reference link/image data.
+ */
+function getReferenceLinkImageData(tokens) {
+  const normalizeReference = (s) => s.toLowerCase().trim().replace(/\s+/g, " ");
+  const references = new Map();
+  const shortcuts = new Map();
+  const addReferenceToDictionary = (token, label, isShortcut) => {
+    const referenceDatum = [
+      token.startLine - 1,
+      token.startColumn - 1,
+      token.text.length
+    ];
+    const reference = normalizeReference(label);
+    const dictionary = isShortcut ? shortcuts : references;
+    const referenceData = dictionary.get(reference) || [];
+    referenceData.push(referenceDatum);
+    dictionary.set(reference, referenceData);
+  };
+  const definitions = new Map();
+  const definitionLineIndices = [];
+  const duplicateDefinitions = [];
+  const filteredTokens =
+    micromark.filterByTypes(
+      tokens,
+      [
+        // definitionLineIndices
+        "definition", "gfmFootnoteDefinition",
+        // definitions and definitionLineIndices
+        "definitionLabelString", "gfmFootnoteDefinitionLabelString",
+        // references and shortcuts
+        "gfmFootnoteCall", "image", "link",
+        // undefined link labels
+        "undefinedReferenceCollapsed", "undefinedReferenceFull", "undefinedReferenceShortcut"
+      ]
+    );
+  for (const token of filteredTokens) {
+    let labelPrefix = "";
+    // eslint-disable-next-line default-case
+    switch (token.type) {
+      case "definition":
+      case "gfmFootnoteDefinition":
+        // definitionLineIndices
+        for (let i = token.startLine; i <= token.endLine; i++) {
+          definitionLineIndices.push(i - 1);
+        }
+        break;
+      case "gfmFootnoteDefinitionLabelString":
+        labelPrefix = "^";
+      case "definitionLabelString": // eslint-disable-line no-fallthrough
+        {
+          // definitions and definitionLineIndices
+          const reference = normalizeReference(`${labelPrefix}${token.text}`);
+          if (definitions.has(reference)) {
+            duplicateDefinitions.push([ reference, token.startLine - 1 ]);
+          } else {
+            const parent =
+              micromark.getParentOfType(token, [ "definition" ]);
+            const destinationString = parent &&
+              micromark.getDescendantsByType(parent, [ "definitionDestination", "definitionDestinationRaw", "definitionDestinationString" ])[0]?.text;
+            definitions.set(
+              reference,
+              [ token.startLine - 1, destinationString ]
+            );
+          }
+        }
+        break;
+      case "gfmFootnoteCall":
+      case "image":
+      case "link":
+        {
+          // Identify if shortcut or full/collapsed
+          let isShortcut = (token.children.length === 1);
+          const isFullOrCollapsed = (token.children.length === 2) && !token.children.some((t) => t.type === "resource");
+          const [ labelText ] = micromark.getDescendantsByType(token, [ "label", "labelText" ]);
+          const [ referenceString ] = micromark.getDescendantsByType(token, [ "reference", "referenceString" ]);
+          let label = labelText?.text;
+          // Identify if footnote
+          if (!isShortcut && !isFullOrCollapsed) {
+            const [ footnoteCallMarker, footnoteCallString ] = token.children.filter(
+              (t) => [ "gfmFootnoteCallMarker", "gfmFootnoteCallString" ].includes(t.type)
+            );
+            if (footnoteCallMarker && footnoteCallString) {
+              label = `${footnoteCallMarker.text}${footnoteCallString.text}`;
+              isShortcut = true;
+            }
+          }
+          // Track link (handle shortcuts separately due to ambiguity in "text [text] text")
+          if (isShortcut || isFullOrCollapsed) {
+            addReferenceToDictionary(token, referenceString?.text || label, isShortcut);
+          }
+        }
+        break;
+      case "undefinedReferenceCollapsed":
+      case "undefinedReferenceFull":
+      case "undefinedReferenceShortcut":
+        {
+          const undefinedReference = micromark.getDescendantsByType(token, [ "undefinedReference" ])[0];
+          const label = undefinedReference.children.map((t) => t.text).join("");
+          const isShortcut = (token.type === "undefinedReferenceShortcut");
+          addReferenceToDictionary(token, label, isShortcut);
+        }
+        break;
+    }
+  }
+  return {
+    references,
+    shortcuts,
+    definitions,
+    duplicateDefinitions,
+    definitionLineIndices
+  };
+}
+module.exports.getReferenceLinkImageData = getReferenceLinkImageData;
+
+/**
+ * Gets the most common line ending, falling back to the platform default.
+ *
+ * @param {string} input Markdown content to analyze.
+ * @param {Object} [os] Node.js "os" module.
+ * @returns {string} Preferred line ending.
+ */
+function getPreferredLineEnding(input, os) {
+  let cr = 0;
+  let lf = 0;
+  let crlf = 0;
+  const endings = input.match(newLineRe) || [];
+  for (const ending of endings) {
+    // eslint-disable-next-line default-case
+    switch (ending) {
+      case "\r":
+        cr++;
+        break;
+      case "\n":
+        lf++;
+        break;
+      case "\r\n":
+        crlf++;
+        break;
+    }
+  }
+  let preferredLineEnding = null;
+  if (!cr && !lf && !crlf) {
+    preferredLineEnding = (os && os.EOL) || "\n";
+  } else if ((lf >= crlf) && (lf >= cr)) {
+    preferredLineEnding = "\n";
+  } else if (crlf >= cr) {
+    preferredLineEnding = "\r\n";
+  } else {
+    preferredLineEnding = "\r";
+  }
+  return preferredLineEnding;
+}
+module.exports.getPreferredLineEnding = getPreferredLineEnding;
+
+/**
+ * Expands a path with a tilde to an absolute path.
+ *
+ * @param {string} file Path that may begin with a tilde.
+ * @param {Object} os Node.js "os" module.
+ * @returns {string} Absolute path (or original path).
+ */
+function expandTildePath(file, os) {
+  const homedir = os && os.homedir && os.homedir();
+  return homedir ? file.replace(/^~($|\/|\\)/, `${homedir}$1`) : file;
+}
+module.exports.expandTildePath = expandTildePath;
+
+
+/***/ }),
+
+/***/ 1670:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+// @ts-check
+
+
+
+const { flatTokensSymbol, htmlFlowSymbol } = __nccwpck_require__(3408);
+
+// @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
+/** @typedef {import("micromark-util-types").TokenType} TokenType */
+// @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
+/** @typedef {import("../lib/markdownlint.mjs").MicromarkToken} Token */
+
+/**
+ * Determines if a Micromark token is within an htmlFlow type.
+ *
+ * @param {Token} token Micromark token.
+ * @returns {boolean} True iff the token is within an htmlFlow type.
+ */
+function inHtmlFlow(token) {
+  return Boolean(token[htmlFlowSymbol]);
+}
+
+/**
+ * Returns whether a token is an htmlFlow type containing an HTML comment.
+ *
+ * @param {Token} token Micromark token.
+ * @returns {boolean} True iff token is htmlFlow containing a comment.
+ */
+function isHtmlFlowComment(token) {
+  const { text, type } = token;
+  if (
+    (type === "htmlFlow") &&
+    text.startsWith("<!--") &&
+    text.endsWith("-->")
+  ) {
+    const comment = text.slice(4, -3);
+    return (
+      !comment.startsWith(">") &&
+      !comment.startsWith("->") &&
+      !comment.endsWith("-")
+      // The following condition from the CommonMark specification is commented
+      // to avoid parsing HTML comments that include "--" because that is NOT a
+      // condition of the HTML specification.
+      // https://spec.commonmark.org/0.30/#raw-html
+      // https://html.spec.whatwg.org/multipage/syntax.html#comments
+      // && !comment.includes("--")
+    );
+  }
+  return false;
+}
+
+/**
+ * Adds a range of numbers to a set.
+ *
+ * @param {Set<number>} set Set of numbers.
+ * @param {number} start Starting number.
+ * @param {number} end Ending number.
+ * @returns {void}
+ */
+function addRangeToSet(set, start, end) {
+  for (let i = start; i <= end; i++) {
+    set.add(i);
+  }
+}
+
+/**
+ * @callback AllowedPredicate
+ * @param {Token} token Micromark token.
+ * @returns {boolean} True iff allowed.
+ */
+
+/**
+ * @callback TransformPredicate
+ * @param {Token} token Micromark token.
+ * @returns {Token[]} Child tokens.
+ */
+
+/**
+ * Filter a list of Micromark tokens by predicate.
+ *
+ * @param {Token[]} tokens Micromark tokens.
+ * @param {AllowedPredicate} [allowed] Allowed token predicate.
+ * @param {TransformPredicate} [transformChildren] Transform predicate.
+ * @returns {Token[]} Filtered tokens.
+ */
+function filterByPredicate(tokens, allowed, transformChildren) {
+  allowed = allowed || (() => true);
+  const result = [];
+  const queue = [
+    {
+      "array": tokens,
+      "index": 0
+    }
+  ];
+  while (queue.length > 0) {
+    const current = queue[queue.length - 1];
+    const { array, index } = current;
+    if (index < array.length) {
+      const token = array[current.index++];
+      if (allowed(token)) {
+        result.push(token);
+      }
+      const { children } = token;
+      if (children.length > 0) {
+        const transformed =
+          transformChildren ? transformChildren(token) : children;
+        queue.push(
+          {
+            "array": transformed,
+            "index": 0
+          }
+        );
+      }
+    } else {
+      queue.pop();
+    }
+  }
+  return result;
+}
+
+/**
+ * Filter a list of Micromark tokens by type.
+ *
+ * @param {Token[]} tokens Micromark tokens.
+ * @param {TokenType[]} types Types to allow.
+ * @param {boolean} [htmlFlow] Whether to include htmlFlow content.
+ * @returns {Token[]} Filtered tokens.
+ */
+function filterByTypes(tokens, types, htmlFlow) {
+  const predicate = (token) => types.includes(token.type) && (htmlFlow || !inHtmlFlow(token));
+  const flatTokens = tokens[flatTokensSymbol];
+  if (flatTokens) {
+    return flatTokens.filter(predicate);
+  }
+  return filterByPredicate(tokens, predicate);
+}
+
+/**
+ * Gets the blockquote prefix text (if any) for the specified line number.
+ *
+ * @param {Token[]} tokens Micromark tokens.
+ * @param {number} lineNumber Line number to examine.
+ * @param {number} [count] Number of times to repeat.
+ * @returns {string} Blockquote prefix text.
+ */
+function getBlockQuotePrefixText(tokens, lineNumber, count = 1) {
+  return filterByTypes(tokens, [ "blockQuotePrefix", "linePrefix" ])
+    .filter((prefix) => prefix.startLine === lineNumber)
+    .map((prefix) => prefix.text)
+    .join("")
+    .trimEnd()
+    // eslint-disable-next-line unicorn/prefer-spread
+    .concat("\n")
+    .repeat(count);
+};
+
+/**
+ * Gets a list of nested Micromark token descendants by type path.
+ *
+ * @param {Token|Token[]} parent Micromark token parent or parents.
+ * @param {(TokenType|TokenType[])[]} typePath Micromark token type path.
+ * @returns {Token[]} Micromark token descendants.
+ */
+function getDescendantsByType(parent, typePath) {
+  let tokens = Array.isArray(parent) ? parent : [ parent ];
+  for (const type of typePath) {
+    const predicate = (token) => Array.isArray(type) ? type.includes(token.type) : (type === token.type);
+    tokens = tokens.flatMap((t) => t.children.filter(predicate));
+  }
+  return tokens;
+}
+
+/**
+ * Gets the heading level of a Micromark heading tokan.
+ *
+ * @param {Token} heading Micromark heading token.
+ * @returns {number} Heading level.
+ */
+function getHeadingLevel(heading) {
+  let level = 1;
+  const headingSequence = heading.children.find(
+    (child) => [ "atxHeadingSequence", "setextHeadingLine" ].includes(child.type)
+  );
+  // @ts-ignore
+  const { text } = headingSequence;
+  if (text[0] === "#") {
+    level = Math.min(text.length, 6);
+  } else if (text[0] === "-") {
+    level = 2;
+  }
+  return level;
+}
+
+/**
+ * Gets the heading style of a Micromark heading tokan.
+ *
+ * @param {Token} heading Micromark heading token.
+ * @returns {"atx" | "atx_closed" | "setext"} Heading style.
+ */
+function getHeadingStyle(heading) {
+  if (heading.type === "setextHeading") {
+    return "setext";
+  }
+  const atxHeadingSequenceLength = heading.children.filter(
+    (child) => child.type === "atxHeadingSequence"
+  ).length;
+  if (atxHeadingSequenceLength === 1) {
+    return "atx";
+  }
+  return "atx_closed";
+}
+
+/**
+ * Gets the heading text of a Micromark heading token.
+ *
+ * @param {Token} heading Micromark heading token.
+ * @returns {string} Heading text.
+ */
+function getHeadingText(heading) {
+  const headingTexts = getDescendantsByType(heading, [ [ "atxHeadingText", "setextHeadingText" ] ]);
+  return headingTexts[0]?.text.replace(/[\r\n]+/g, " ") || "";
+}
+
+/**
+ * HTML tag information.
+ *
+ * @typedef {Object} HtmlTagInfo
+ * @property {boolean} close True iff close tag.
+ * @property {string} name Tag name.
+ */
+
+/**
+ * Gets information about the tag in an HTML token.
+ *
+ * @param {Token} token Micromark token.
+ * @returns {HtmlTagInfo | null} HTML tag information.
+ */
+function getHtmlTagInfo(token) {
+  const htmlTagNameRe = /^<([^!>][^/\s>]*)/;
+  if (token.type === "htmlText") {
+    const match = htmlTagNameRe.exec(token.text);
+    if (match) {
+      const name = match[1];
+      const close = name.startsWith("/");
+      return {
+        close,
+        "name": close ? name.slice(1) : name
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Gets the nearest parent of the specified type for a Micromark token.
+ *
+ * @param {Token} token Micromark token.
+ * @param {TokenType[]} types Types to allow.
+ * @returns {Token | null} Parent token.
+ */
+function getParentOfType(token, types) {
+  /** @type {Token | null} */
+  let current = token;
+  while ((current = current.parent) && !types.includes(current.type)) {
+    // Empty
+  }
+  return current;
+}
+
+/**
+ * Set containing token types that do not contain content.
+ *
+ * @type {Set<TokenType>}
+ */
+const nonContentTokens = new Set([
+  "blockQuoteMarker",
+  "blockQuotePrefix",
+  "blockQuotePrefixWhitespace",
+  "lineEnding",
+  "lineEndingBlank",
+  "linePrefix",
+  "listItemIndent"
+]);
+
+module.exports = {
+  addRangeToSet,
+  filterByPredicate,
+  filterByTypes,
+  getBlockQuotePrefixText,
+  getDescendantsByType,
+  getHeadingLevel,
+  getHeadingStyle,
+  getHeadingText,
+  getHtmlTagInfo,
+  getParentOfType,
+  inHtmlFlow,
+  isHtmlFlowComment,
+  nonContentTokens
+};
+
+
+/***/ }),
+
+/***/ 3408:
+/***/ ((module) => {
+
+// @ts-check
+
+
+
+// Symbol for identifing the flat tokens array from micromark parse
+module.exports.flatTokensSymbol = Symbol("flat-tokens");
+
+// Symbol for identifying the htmlFlow token from micromark parse
+module.exports.htmlFlowSymbol = Symbol("html-flow");
+
+// Regular expression for matching common newline characters
+// See NEWLINES_RE in markdown-it/lib/rules_core/normalize.js
+module.exports.newLineRe = /\r\n?|\n/g;
+
+// Regular expression for matching next lines
+module.exports.nextLinesRe = /[\r\n][\s\S]*$/;
+
+
+/***/ }),
+
+/***/ 9917:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+// @ts-check
+
+
+
+const { newLineRe } = __nccwpck_require__(3810);
+
+// @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
+/** @typedef {import("./markdownlint.mjs").MarkdownItToken} MarkdownItToken */
+// @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
+/** @typedef {import("./markdownlint.mjs").Plugin} Plugin */
+
+/**
+ * @callback InlineCodeSpanCallback
+ * @param {string} code Code content.
+ * @param {number} lineIndex Line index (0-based).
+ * @param {number} columnIndex Column index (0-based).
+ * @param {number} ticks Count of backticks.
+ * @returns {void}
+ */
+
+/**
+ * Calls the provided function for each inline code span's content.
+ *
+ * @param {string} input Markdown content.
+ * @param {InlineCodeSpanCallback} handler Callback function taking (code,
+ * lineIndex, columnIndex, ticks).
+ * @returns {void}
+ */
+function forEachInlineCodeSpan(input, handler) {
+  const backtickRe = /`+/g;
+  let match = null;
+  const backticksLengthAndIndex = [];
+  while ((match = backtickRe.exec(input)) !== null) {
+    backticksLengthAndIndex.push([ match[0].length, match.index ]);
+  }
+  const newLinesIndex = [];
+  while ((match = newLineRe.exec(input)) !== null) {
+    newLinesIndex.push(match.index);
+  }
+  let lineIndex = 0;
+  let lineStartIndex = 0;
+  let k = 0;
+  for (let i = 0; i < backticksLengthAndIndex.length - 1; i++) {
+    const [ startLength, startIndex ] = backticksLengthAndIndex[i];
+    if ((startIndex === 0) || (input[startIndex - 1] !== "\\")) {
+      for (let j = i + 1; j < backticksLengthAndIndex.length; j++) {
+        const [ endLength, endIndex ] = backticksLengthAndIndex[j];
+        if (startLength === endLength) {
+          for (; k < newLinesIndex.length; k++) {
+            const newLineIndex = newLinesIndex[k];
+            if (startIndex < newLineIndex) {
+              break;
+            }
+            lineIndex++;
+            lineStartIndex = newLineIndex + 1;
+          }
+          const columnIndex = startIndex - lineStartIndex + startLength;
+          handler(
+            input.slice(startIndex + startLength, endIndex),
+            lineIndex,
+            columnIndex,
+            startLength
+          );
+          i = j;
+          break;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Freeze all freeze-able members of a token and its children.
+ *
+ * @param {MarkdownItToken} token A markdown-it token.
+ * @returns {void}
+ */
+function freezeToken(token) {
+  if (token.attrs) {
+    for (const attr of token.attrs) {
+      Object.freeze(attr);
+    }
+    Object.freeze(token.attrs);
+  }
+  if (token.children) {
+    for (const child of token.children) {
+      freezeToken(child);
+    }
+    Object.freeze(token.children);
+  }
+  if (token.map) {
+    Object.freeze(token.map);
+  }
+  Object.freeze(token);
+}
+
+/**
+ * Annotate tokens with line/lineNumber and freeze them.
+ *
+ * @param {Object[]} tokens Array of markdown-it tokens.
+ * @param {string[]} lines Lines of Markdown content.
+ * @returns {void}
+ */
+function annotateAndFreezeTokens(tokens, lines) {
+  let trMap = null;
+  /** @type {MarkdownItToken[]} */
+  // @ts-ignore
+  const markdownItTokens = tokens;
+  for (const token of markdownItTokens) {
+    // Provide missing maps for table content
+    if (token.type === "tr_open") {
+      trMap = token.map;
+    } else if (token.type === "tr_close") {
+      trMap = null;
+    }
+    if (!token.map && trMap) {
+      token.map = [ ...trMap ];
+    }
+    // Update token metadata
+    if (token.map) {
+      token.line = lines[token.map[0]];
+      token.lineNumber = token.map[0] + 1;
+      // Trim bottom of token to exclude whitespace lines
+      while (token.map[1] && !((lines[token.map[1] - 1] || "").trim())) {
+        token.map[1]--;
+      }
+    }
+    // Annotate children with lineNumber
+    if (token.children) {
+      const codeSpanExtraLines = [];
+      if (token.children.some((child) => child.type === "code_inline")) {
+        forEachInlineCodeSpan(token.content, (code) => {
+          codeSpanExtraLines.push(code.split(newLineRe).length - 1);
+        });
+      }
+      let lineNumber = token.lineNumber;
+      for (const child of token.children) {
+        child.lineNumber = lineNumber;
+        child.line = lines[lineNumber - 1];
+        if ((child.type === "softbreak") || (child.type === "hardbreak")) {
+          lineNumber++;
+        } else if (child.type === "code_inline") {
+          lineNumber += codeSpanExtraLines.shift();
+        }
+      }
+    }
+    freezeToken(token);
+  }
+  Object.freeze(tokens);
+}
+
+/**
+ * Gets an array of markdown-it tokens for the input.
+ *
+ * @param {Plugin[]} markdownItPlugins Additional plugins.
+ * @param {string} content Markdown content.
+ * @param {string[]} lines Lines of Markdown content.
+ * @returns {MarkdownItToken} Array of markdown-it tokens.
+ */
+function getMarkdownItTokens(markdownItPlugins, content, lines) {
+  const markdownit = __nccwpck_require__(5182);
+  const md = markdownit({ "html": true });
+  for (const plugin of markdownItPlugins) {
+    // @ts-ignore
+    md.use(...plugin);
+  }
+  const tokens = md.parse(content, {});
+  annotateAndFreezeTokens(tokens, lines);
+  // @ts-ignore
+  return tokens;
+};
+
+module.exports = {
+  forEachInlineCodeSpan,
+  getMarkdownItTokens
+};
+
+
+/***/ })
+
+/******/ });
+/************************************************************************/
+/******/ // The module cache
+/******/ var __webpack_module_cache__ = {};
+/******/ 
+/******/ // The require function
+/******/ function __nccwpck_require__(moduleId) {
+/******/ 	// Check if module is in cache
+/******/ 	var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 	if (cachedModule !== undefined) {
+/******/ 		return cachedModule.exports;
+/******/ 	}
+/******/ 	// Create a new module (and put it into the cache)
+/******/ 	var module = __webpack_module_cache__[moduleId] = {
+/******/ 		// no module.id needed
+/******/ 		// no module.loaded needed
+/******/ 		exports: {}
+/******/ 	};
+/******/ 
+/******/ 	// Execute the module function
+/******/ 	var threw = true;
+/******/ 	try {
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __nccwpck_require__);
+/******/ 		threw = false;
+/******/ 	} finally {
+/******/ 		if(threw) delete __webpack_module_cache__[moduleId];
+/******/ 	}
+/******/ 
+/******/ 	// Return the exports of the module
+/******/ 	return module.exports;
+/******/ }
+/******/ 
+/************************************************************************/
+/******/ /* webpack/runtime/create fake namespace object */
+/******/ (() => {
+/******/ 	var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
+/******/ 	var leafPrototypes;
+/******/ 	// create a fake namespace object
+/******/ 	// mode & 1: value is a module id, require it
+/******/ 	// mode & 2: merge all properties of value into the ns
+/******/ 	// mode & 4: return value when already ns object
+/******/ 	// mode & 16: return value when it's Promise-like
+/******/ 	// mode & 8|1: behave like require
+/******/ 	__nccwpck_require__.t = function(value, mode) {
+/******/ 		if(mode & 1) value = this(value);
+/******/ 		if(mode & 8) return value;
+/******/ 		if(typeof value === 'object' && value) {
+/******/ 			if((mode & 4) && value.__esModule) return value;
+/******/ 			if((mode & 16) && typeof value.then === 'function') return value;
+/******/ 		}
+/******/ 		var ns = Object.create(null);
+/******/ 		__nccwpck_require__.r(ns);
+/******/ 		var def = {};
+/******/ 		leafPrototypes = leafPrototypes || [null, getProto({}), getProto([]), getProto(getProto)];
+/******/ 		for(var current = mode & 2 && value; typeof current == 'object' && !~leafPrototypes.indexOf(current); current = getProto(current)) {
+/******/ 			Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => (value[key])));
+/******/ 		}
+/******/ 		def['default'] = () => (value);
+/******/ 		__nccwpck_require__.d(ns, def);
+/******/ 		return ns;
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/define property getters */
+/******/ (() => {
+/******/ 	// define getter functions for harmony exports
+/******/ 	__nccwpck_require__.d = (exports, definition) => {
+/******/ 		for(var key in definition) {
+/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
+/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 			}
+/******/ 		}
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/hasOwnProperty shorthand */
+/******/ (() => {
+/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/make namespace object */
+/******/ (() => {
+/******/ 	// define __esModule on exports
+/******/ 	__nccwpck_require__.r = (exports) => {
+/******/ 		if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 			Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 		}
+/******/ 		Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/compat */
+/******/ 
+/******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
+/******/ 
+/************************************************************************/
+var __webpack_exports__ = {};
+
+// NAMESPACE OBJECT: ./node_modules/micromark/lib/constructs.js
+var constructs_namespaceObject = {};
+__nccwpck_require__.r(constructs_namespaceObject);
+__nccwpck_require__.d(constructs_namespaceObject, {
+  attentionMarkers: () => (attentionMarkers),
+  contentInitial: () => (contentInitial),
+  disable: () => (disable),
+  document: () => (constructs_document),
+  flow: () => (constructs_flow),
+  flowInitial: () => (flowInitial),
+  insideSpan: () => (insideSpan),
+  string: () => (constructs_string),
+  text: () => (constructs_text)
+});
+
+// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
+var core = __nccwpck_require__(7484);
+;// CONCATENATED MODULE: external "node:fs"
+const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
+var external_node_fs_namespaceObject_0 = /*#__PURE__*/__nccwpck_require__.t(external_node_fs_namespaceObject, 2);
+;// CONCATENATED MODULE: external "node:module"
+const external_node_module_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:module");
+;// CONCATENATED MODULE: external "node:os"
+const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
+var external_node_os_namespaceObject_0 = /*#__PURE__*/__nccwpck_require__.t(external_node_os_namespaceObject, 2);
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
+;// CONCATENATED MODULE: external "node:url"
+const external_node_url_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:url");
+// EXTERNAL MODULE: external "path"
+var external_path_ = __nccwpck_require__(6928);
+;// CONCATENATED MODULE: external "process"
+const external_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("process");
+;// CONCATENATED MODULE: external "module"
+const external_module_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("module");
+// EXTERNAL MODULE: external "url"
+var external_url_ = __nccwpck_require__(7016);
+;// CONCATENATED MODULE: ./node_modules/es-main/main.js
+
+
+
+
+
+/**
+ * Strip the extension from a filename if it has one.
+ * @param {string} name A filename.
+ * @return {string} The filename without a path.
+ */
+function stripExt(name) {
+  const extension = external_path_.extname(name);
+  if (!extension) {
+    return name;
+  }
+
+  return name.slice(0, -extension.length);
+}
+
+/**
+ * Check if a module was run directly with node as opposed to being
+ * imported from another module.
+ * @param {ImportMeta} meta The `import.meta` object.
+ * @return {boolean} The module was run directly with node.
+ */
+function esMain(meta) {
+  if (!meta || !external_process_namespaceObject.argv[1]) {
+    return false;
+  }
+
+  const require = (0,external_module_namespaceObject.createRequire)(meta.url);
+  const scriptPath = require.resolve(external_process_namespaceObject.argv[1]);
+
+  const modulePath = (0,external_url_.fileURLToPath)(meta.url);
+
+  const extension = external_path_.extname(scriptPath);
+  if (extension) {
+    return modulePath === scriptPath;
+  }
+
+  return stripExt(modulePath) === scriptPath;
+}
+
+;// CONCATENATED MODULE: external "node:process"
+const external_node_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:process");
+// EXTERNAL MODULE: external "node:events"
+var external_node_events_ = __nccwpck_require__(8474);
+// EXTERNAL MODULE: external "node:stream"
+var external_node_stream_ = __nccwpck_require__(7075);
+;// CONCATENATED MODULE: external "node:stream/promises"
+const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
+;// CONCATENATED MODULE: ./node_modules/@sindresorhus/merge-streams/index.js
+
+
+
+
+function mergeStreams(streams) {
+	if (!Array.isArray(streams)) {
+		throw new TypeError(`Expected an array, got \`${typeof streams}\`.`);
+	}
+
+	for (const stream of streams) {
+		validateStream(stream);
+	}
+
+	const objectMode = streams.some(({readableObjectMode}) => readableObjectMode);
+	const highWaterMark = getHighWaterMark(streams, objectMode);
+	const passThroughStream = new MergedStream({
+		objectMode,
+		writableHighWaterMark: highWaterMark,
+		readableHighWaterMark: highWaterMark,
+	});
+
+	for (const stream of streams) {
+		passThroughStream.add(stream);
+	}
+
+	if (streams.length === 0) {
+		endStream(passThroughStream);
+	}
+
+	return passThroughStream;
+}
+
+const getHighWaterMark = (streams, objectMode) => {
+	if (streams.length === 0) {
+		// @todo Use `node:stream` `getDefaultHighWaterMark(objectMode)` in next major release
+		return 16_384;
+	}
+
+	const highWaterMarks = streams
+		.filter(({readableObjectMode}) => readableObjectMode === objectMode)
+		.map(({readableHighWaterMark}) => readableHighWaterMark);
+	return Math.max(...highWaterMarks);
+};
+
+class MergedStream extends external_node_stream_.PassThrough {
+	#streams = new Set([]);
+	#ended = new Set([]);
+	#aborted = new Set([]);
+	#onFinished;
+
+	add(stream) {
+		validateStream(stream);
+
+		if (this.#streams.has(stream)) {
+			return;
+		}
+
+		this.#streams.add(stream);
+
+		this.#onFinished ??= onMergedStreamFinished(this, this.#streams);
+		endWhenStreamsDone({
+			passThroughStream: this,
+			stream,
+			streams: this.#streams,
+			ended: this.#ended,
+			aborted: this.#aborted,
+			onFinished: this.#onFinished,
+		});
+
+		stream.pipe(this, {end: false});
+	}
+
+	remove(stream) {
+		validateStream(stream);
+
+		if (!this.#streams.has(stream)) {
+			return false;
+		}
+
+		stream.unpipe(this);
+		return true;
+	}
+}
+
+const onMergedStreamFinished = async (passThroughStream, streams) => {
+	updateMaxListeners(passThroughStream, PASSTHROUGH_LISTENERS_COUNT);
+	const controller = new AbortController();
+
+	try {
+		await Promise.race([
+			onMergedStreamEnd(passThroughStream, controller),
+			onInputStreamsUnpipe(passThroughStream, streams, controller),
+		]);
+	} finally {
+		controller.abort();
+		updateMaxListeners(passThroughStream, -PASSTHROUGH_LISTENERS_COUNT);
+	}
+};
+
+const onMergedStreamEnd = async (passThroughStream, {signal}) => {
+	await (0,promises_namespaceObject.finished)(passThroughStream, {signal, cleanup: true});
+};
+
+const onInputStreamsUnpipe = async (passThroughStream, streams, {signal}) => {
+	for await (const [unpipedStream] of (0,external_node_events_.on)(passThroughStream, 'unpipe', {signal})) {
+		if (streams.has(unpipedStream)) {
+			unpipedStream.emit(unpipeEvent);
+		}
+	}
+};
+
+const validateStream = stream => {
+	if (typeof stream?.pipe !== 'function') {
+		throw new TypeError(`Expected a readable stream, got: \`${typeof stream}\`.`);
+	}
+};
+
+const endWhenStreamsDone = async ({passThroughStream, stream, streams, ended, aborted, onFinished}) => {
+	updateMaxListeners(passThroughStream, PASSTHROUGH_LISTENERS_PER_STREAM);
+	const controller = new AbortController();
+
+	try {
+		await Promise.race([
+			afterMergedStreamFinished(onFinished, stream),
+			onInputStreamEnd({passThroughStream, stream, streams, ended, aborted, controller}),
+			onInputStreamUnpipe({stream, streams, ended, aborted, controller}),
+		]);
+	} finally {
+		controller.abort();
+		updateMaxListeners(passThroughStream, -PASSTHROUGH_LISTENERS_PER_STREAM);
+	}
+
+	if (streams.size === ended.size + aborted.size) {
+		if (ended.size === 0 && aborted.size > 0) {
+			abortStream(passThroughStream);
+		} else {
+			endStream(passThroughStream);
+		}
+	}
+};
+
+// This is the error thrown by `finished()` on `stream.destroy()`
+const isAbortError = error => error?.code === 'ERR_STREAM_PREMATURE_CLOSE';
+
+const afterMergedStreamFinished = async (onFinished, stream) => {
+	try {
+		await onFinished;
+		abortStream(stream);
+	} catch (error) {
+		if (isAbortError(error)) {
+			abortStream(stream);
+		} else {
+			errorStream(stream, error);
+		}
+	}
+};
+
+const onInputStreamEnd = async ({passThroughStream, stream, streams, ended, aborted, controller: {signal}}) => {
+	try {
+		await (0,promises_namespaceObject.finished)(stream, {signal, cleanup: true, readable: true, writable: false});
+		if (streams.has(stream)) {
+			ended.add(stream);
+		}
+	} catch (error) {
+		if (signal.aborted || !streams.has(stream)) {
+			return;
+		}
+
+		if (isAbortError(error)) {
+			aborted.add(stream);
+		} else {
+			errorStream(passThroughStream, error);
+		}
+	}
+};
+
+const onInputStreamUnpipe = async ({stream, streams, ended, aborted, controller: {signal}}) => {
+	await (0,external_node_events_.once)(stream, unpipeEvent, {signal});
+	streams.delete(stream);
+	ended.delete(stream);
+	aborted.delete(stream);
+};
+
+const unpipeEvent = Symbol('unpipe');
+
+const endStream = stream => {
+	if (stream.writable) {
+		stream.end();
+	}
+};
+
+const abortStream = stream => {
+	if (stream.readable || stream.writable) {
+		stream.destroy();
+	}
+};
+
+// `stream.destroy(error)` crashes the process with `uncaughtException` if no `error` event listener exists on `stream`.
+// We take care of error handling on user behalf, so we do not want this to happen.
+const errorStream = (stream, error) => {
+	if (!stream.destroyed) {
+		stream.once('error', noop);
+		stream.destroy(error);
+	}
+};
+
+const noop = () => {};
+
+const updateMaxListeners = (passThroughStream, increment) => {
+	const maxListeners = passThroughStream.getMaxListeners();
+	if (maxListeners !== 0 && maxListeners !== Number.POSITIVE_INFINITY) {
+		passThroughStream.setMaxListeners(maxListeners + increment);
+	}
+};
+
+// Number of times `passThroughStream.on()` is called regardless of streams:
+//  - once due to `finished(passThroughStream)`
+//  - once due to `on(passThroughStream)`
+const PASSTHROUGH_LISTENERS_COUNT = 2;
+
+// Number of times `passThroughStream.on()` is called per stream:
+//  - once due to `stream.pipe(passThroughStream)`
+const PASSTHROUGH_LISTENERS_PER_STREAM = 1;
+
+// EXTERNAL MODULE: ./node_modules/fast-glob/out/index.js
+var out = __nccwpck_require__(5648);
+// EXTERNAL MODULE: external "fs"
+var external_fs_ = __nccwpck_require__(9896);
+;// CONCATENATED MODULE: ./node_modules/path-type/index.js
+
+
+async function isType(fsStatType, statsMethodName, filePath) {
+	if (typeof filePath !== 'string') {
+		throw new TypeError(`Expected a string, got ${typeof filePath}`);
+	}
+
+	try {
+		const stats = await external_fs_.promises[fsStatType](filePath);
+		return stats[statsMethodName]();
+	} catch (error) {
+		if (error.code === 'ENOENT') {
+			return false;
+		}
+
+		throw error;
+	}
+}
+
+function isTypeSync(fsStatType, statsMethodName, filePath) {
+	if (typeof filePath !== 'string') {
+		throw new TypeError(`Expected a string, got ${typeof filePath}`);
+	}
+
+	try {
+		return external_fs_[fsStatType](filePath)[statsMethodName]();
+	} catch (error) {
+		if (error.code === 'ENOENT') {
+			return false;
+		}
+
+		throw error;
+	}
+}
+
+const isFile = isType.bind(null, 'stat', 'isFile');
+const isDirectory = isType.bind(null, 'stat', 'isDirectory');
+const isSymlink = isType.bind(null, 'lstat', 'isSymbolicLink');
+const isFileSync = isTypeSync.bind(null, 'statSync', 'isFile');
+const isDirectorySync = isTypeSync.bind(null, 'statSync', 'isDirectory');
+const isSymlinkSync = isTypeSync.bind(null, 'lstatSync', 'isSymbolicLink');
+
+;// CONCATENATED MODULE: ./node_modules/unicorn-magic/node.js
+
+
+function toPath(urlOrPath) {
+	return urlOrPath instanceof URL ? (0,external_node_url_namespaceObject.fileURLToPath)(urlOrPath) : urlOrPath;
+}
+
+
+
+;// CONCATENATED MODULE: external "node:fs/promises"
+const external_node_fs_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
+// EXTERNAL MODULE: ./node_modules/ignore/index.js
+var ignore = __nccwpck_require__(298);
+;// CONCATENATED MODULE: ./node_modules/slash/index.js
+function slash(path) {
+	const isExtendedLengthPath = path.startsWith('\\\\?\\');
+
+	if (isExtendedLengthPath) {
+		return path;
+	}
+
+	return path.replace(/\\/g, '/');
+}
+
+;// CONCATENATED MODULE: ./node_modules/globby/utilities.js
+const isNegativePattern = pattern => pattern[0] === '!';
+
+;// CONCATENATED MODULE: ./node_modules/globby/ignore.js
+
+
+
+
+
+
+
+
+
+
+const defaultIgnoredDirectories = [
+	'**/node_modules',
+	'**/flow-typed',
+	'**/coverage',
+	'**/.git',
+];
+const ignoreFilesGlobOptions = {
+	absolute: true,
+	dot: true,
+};
+
+const GITIGNORE_FILES_PATTERN = '**/.gitignore';
+
+const applyBaseToPattern = (pattern, base) => isNegativePattern(pattern)
+	? '!' + external_node_path_namespaceObject.posix.join(base, pattern.slice(1))
+	: external_node_path_namespaceObject.posix.join(base, pattern);
+
+const parseIgnoreFile = (file, cwd) => {
+	const base = slash(external_node_path_namespaceObject.relative(cwd, external_node_path_namespaceObject.dirname(file.filePath)));
+
+	return file.content
+		.split(/\r?\n/)
+		.filter(line => line && !line.startsWith('#'))
+		.map(pattern => applyBaseToPattern(pattern, base));
+};
+
+const toRelativePath = (fileOrDirectory, cwd) => {
+	cwd = slash(cwd);
+	if (external_node_path_namespaceObject.isAbsolute(fileOrDirectory)) {
+		if (slash(fileOrDirectory).startsWith(cwd)) {
+			return external_node_path_namespaceObject.relative(cwd, fileOrDirectory);
+		}
+
+		throw new Error(`Path ${fileOrDirectory} is not in cwd ${cwd}`);
+	}
+
+	return fileOrDirectory;
+};
+
+const getIsIgnoredPredicate = (files, cwd) => {
+	const patterns = files.flatMap(file => parseIgnoreFile(file, cwd));
+	const ignores = ignore().add(patterns);
+
+	return fileOrDirectory => {
+		fileOrDirectory = toPath(fileOrDirectory);
+		fileOrDirectory = toRelativePath(fileOrDirectory, cwd);
+		return fileOrDirectory ? ignores.ignores(slash(fileOrDirectory)) : false;
+	};
+};
+
+const normalizeOptions = (options = {}) => ({
+	cwd: toPath(options.cwd) ?? external_node_process_namespaceObject.cwd(),
+	suppressErrors: Boolean(options.suppressErrors),
+	deep: typeof options.deep === 'number' ? options.deep : Number.POSITIVE_INFINITY,
+	ignore: [...options.ignore ?? [], ...defaultIgnoredDirectories],
+});
+
+const isIgnoredByIgnoreFiles = async (patterns, options) => {
+	const {cwd, suppressErrors, deep, ignore} = normalizeOptions(options);
+
+	const paths = await out(patterns, {
+		cwd,
+		suppressErrors,
+		deep,
+		ignore,
+		...ignoreFilesGlobOptions,
+	});
+
+	const files = await Promise.all(
+		paths.map(async filePath => ({
+			filePath,
+			content: await external_node_fs_promises_namespaceObject.readFile(filePath, 'utf8'),
+		})),
+	);
+
+	return getIsIgnoredPredicate(files, cwd);
+};
+
+const isIgnoredByIgnoreFilesSync = (patterns, options) => {
+	const {cwd, suppressErrors, deep, ignore} = normalizeOptions(options);
+
+	const paths = out.sync(patterns, {
+		cwd,
+		suppressErrors,
+		deep,
+		ignore,
+		...ignoreFilesGlobOptions,
+	});
+
+	const files = paths.map(filePath => ({
+		filePath,
+		content: external_node_fs_namespaceObject.readFileSync(filePath, 'utf8'),
+	}));
+
+	return getIsIgnoredPredicate(files, cwd);
+};
+
+const isGitIgnored = options => isIgnoredByIgnoreFiles(GITIGNORE_FILES_PATTERN, options);
+const isGitIgnoredSync = options => isIgnoredByIgnoreFilesSync(GITIGNORE_FILES_PATTERN, options);
+
+;// CONCATENATED MODULE: ./node_modules/globby/index.js
+
+
+
+
+
+
+
+
+
+
+const assertPatternsInput = patterns => {
+	if (patterns.some(pattern => typeof pattern !== 'string')) {
+		throw new TypeError('Patterns must be a string or an array of strings');
+	}
+};
+
+const normalizePathForDirectoryGlob = (filePath, cwd) => {
+	const path = isNegativePattern(filePath) ? filePath.slice(1) : filePath;
+	return external_node_path_namespaceObject.isAbsolute(path) ? path : external_node_path_namespaceObject.join(cwd, path);
+};
+
+const getDirectoryGlob = ({directoryPath, files, extensions}) => {
+	const extensionGlob = extensions?.length > 0 ? `.${extensions.length > 1 ? `{${extensions.join(',')}}` : extensions[0]}` : '';
+	return files
+		? files.map(file => external_node_path_namespaceObject.posix.join(directoryPath, `**/${external_node_path_namespaceObject.extname(file) ? file : `${file}${extensionGlob}`}`))
+		: [external_node_path_namespaceObject.posix.join(directoryPath, `**${extensionGlob ? `/*${extensionGlob}` : ''}`)];
+};
+
+const directoryToGlob = async (directoryPaths, {
+	cwd = external_node_process_namespaceObject.cwd(),
+	files,
+	extensions,
+} = {}) => {
+	const globs = await Promise.all(directoryPaths.map(async directoryPath =>
+		(await isDirectory(normalizePathForDirectoryGlob(directoryPath, cwd))) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath),
+	);
+
+	return globs.flat();
+};
+
+const directoryToGlobSync = (directoryPaths, {
+	cwd = external_node_process_namespaceObject.cwd(),
+	files,
+	extensions,
+} = {}) => directoryPaths.flatMap(directoryPath => isDirectorySync(normalizePathForDirectoryGlob(directoryPath, cwd)) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath);
+
+const toPatternsArray = patterns => {
+	patterns = [...new Set([patterns].flat())];
+	assertPatternsInput(patterns);
+	return patterns;
+};
+
+const checkCwdOption = cwd => {
+	if (!cwd) {
+		return;
+	}
+
+	let stat;
+	try {
+		stat = external_node_fs_namespaceObject.statSync(cwd);
+	} catch {
+		return;
+	}
+
+	if (!stat.isDirectory()) {
+		throw new Error('The `cwd` option must be a path to a directory');
+	}
+};
+
+const globby_normalizeOptions = (options = {}) => {
+	options = {
+		...options,
+		ignore: options.ignore ?? [],
+		expandDirectories: options.expandDirectories ?? true,
+		cwd: toPath(options.cwd),
+	};
+
+	checkCwdOption(options.cwd);
+
+	return options;
+};
+
+const normalizeArguments = function_ => async (patterns, options) => function_(toPatternsArray(patterns), globby_normalizeOptions(options));
+const normalizeArgumentsSync = function_ => (patterns, options) => function_(toPatternsArray(patterns), globby_normalizeOptions(options));
+
+const getIgnoreFilesPatterns = options => {
+	const {ignoreFiles, gitignore} = options;
+
+	const patterns = ignoreFiles ? toPatternsArray(ignoreFiles) : [];
+	if (gitignore) {
+		patterns.push(GITIGNORE_FILES_PATTERN);
+	}
+
+	return patterns;
+};
+
+const getFilter = async options => {
+	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
+	return createFilterFunction(
+		ignoreFilesPatterns.length > 0 && await isIgnoredByIgnoreFiles(ignoreFilesPatterns, options),
+	);
+};
+
+const getFilterSync = options => {
+	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
+	return createFilterFunction(
+		ignoreFilesPatterns.length > 0 && isIgnoredByIgnoreFilesSync(ignoreFilesPatterns, options),
+	);
+};
+
+const createFilterFunction = isIgnored => {
+	const seen = new Set();
+
+	return fastGlobResult => {
+		const pathKey = external_node_path_namespaceObject.normalize(fastGlobResult.path ?? fastGlobResult);
+
+		if (seen.has(pathKey) || (isIgnored && isIgnored(pathKey))) {
+			return false;
+		}
+
+		seen.add(pathKey);
+
+		return true;
+	};
+};
+
+const unionFastGlobResults = (results, filter) => results.flat().filter(fastGlobResult => filter(fastGlobResult));
+
+const convertNegativePatterns = (patterns, options) => {
+	const tasks = [];
+
+	while (patterns.length > 0) {
+		const index = patterns.findIndex(pattern => isNegativePattern(pattern));
+
+		if (index === -1) {
+			tasks.push({patterns, options});
+			break;
+		}
+
+		const ignorePattern = patterns[index].slice(1);
+
+		for (const task of tasks) {
+			task.options.ignore.push(ignorePattern);
+		}
+
+		if (index !== 0) {
+			tasks.push({
+				patterns: patterns.slice(0, index),
+				options: {
+					...options,
+					ignore: [
+						...options.ignore,
+						ignorePattern,
+					],
+				},
+			});
+		}
+
+		patterns = patterns.slice(index + 1);
+	}
+
+	return tasks;
+};
+
+const normalizeExpandDirectoriesOption = (options, cwd) => ({
+	...(cwd ? {cwd} : {}),
+	...(Array.isArray(options) ? {files: options} : options),
+});
+
+const generateTasks = async (patterns, options) => {
+	const globTasks = convertNegativePatterns(patterns, options);
+
+	const {cwd, expandDirectories} = options;
+
+	if (!expandDirectories) {
+		return globTasks;
+	}
+
+	const directoryToGlobOptions = normalizeExpandDirectoriesOption(expandDirectories, cwd);
+
+	return Promise.all(
+		globTasks.map(async task => {
+			let {patterns, options} = task;
+
+			[
+				patterns,
+				options.ignore,
+			] = await Promise.all([
+				directoryToGlob(patterns, directoryToGlobOptions),
+				directoryToGlob(options.ignore, {cwd}),
+			]);
+
+			return {patterns, options};
+		}),
+	);
+};
+
+const generateTasksSync = (patterns, options) => {
+	const globTasks = convertNegativePatterns(patterns, options);
+	const {cwd, expandDirectories} = options;
+
+	if (!expandDirectories) {
+		return globTasks;
+	}
+
+	const directoryToGlobSyncOptions = normalizeExpandDirectoriesOption(expandDirectories, cwd);
+
+	return globTasks.map(task => {
+		let {patterns, options} = task;
+		patterns = directoryToGlobSync(patterns, directoryToGlobSyncOptions);
+		options.ignore = directoryToGlobSync(options.ignore, {cwd});
+		return {patterns, options};
+	});
+};
+
+const globby = normalizeArguments(async (patterns, options) => {
+	const [
+		tasks,
+		filter,
+	] = await Promise.all([
+		generateTasks(patterns, options),
+		getFilter(options),
+	]);
+
+	const results = await Promise.all(tasks.map(task => out(task.patterns, task.options)));
+	return unionFastGlobResults(results, filter);
+});
+
+const globbySync = normalizeArgumentsSync((patterns, options) => {
+	const tasks = generateTasksSync(patterns, options);
+	const filter = getFilterSync(options);
+	const results = tasks.map(task => out.sync(task.patterns, task.options));
+	return unionFastGlobResults(results, filter);
+});
+
+const globbyStream = normalizeArgumentsSync((patterns, options) => {
+	const tasks = generateTasksSync(patterns, options);
+	const filter = getFilterSync(options);
+	const streams = tasks.map(task => out.stream(task.patterns, task.options));
+	const stream = mergeStreams(streams).filter(fastGlobResult => filter(fastGlobResult));
+
+	// TODO: Make it return a web stream at some point.
+	// return Readable.toWeb(stream);
+
+	return stream;
+});
+
+const isDynamicPattern = normalizeArgumentsSync(
+	(patterns, options) => patterns.some(pattern => out.isDynamicPattern(pattern, options)),
+);
+
+const generateGlobTasks = normalizeArguments(generateTasks);
+const generateGlobTasksSync = normalizeArgumentsSync(generateTasksSync);
+
+
+
+const {convertPathToPattern} = out;
+
+// EXTERNAL MODULE: ./node_modules/micromatch/index.js
+var micromatch = __nccwpck_require__(8785);
+// EXTERNAL MODULE: external "node:util"
+var external_node_util_ = __nccwpck_require__(7975);
+// EXTERNAL MODULE: ./node_modules/markdownlint/lib/markdownit.cjs
+var markdownit = __nccwpck_require__(9917);
+;// CONCATENATED MODULE: ./node_modules/micromark-util-character/index.js
+/**
+ * @import {Code} from 'micromark-util-types'
+ */
+
+/**
+ * Check whether the character code represents an ASCII alpha (`a` through `z`,
+ * case insensitive).
+ *
+ * An **ASCII alpha** is an ASCII upper alpha or ASCII lower alpha.
+ *
+ * An **ASCII upper alpha** is a character in the inclusive range U+0041 (`A`)
+ * to U+005A (`Z`).
+ *
+ * An **ASCII lower alpha** is a character in the inclusive range U+0061 (`a`)
+ * to U+007A (`z`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiAlpha = regexCheck(/[A-Za-z]/);
+
+/**
+ * Check whether the character code represents an ASCII alphanumeric (`a`
+ * through `z`, case insensitive, or `0` through `9`).
+ *
+ * An **ASCII alphanumeric** is an ASCII digit (see `asciiDigit`) or ASCII alpha
+ * (see `asciiAlpha`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiAlphanumeric = regexCheck(/[\dA-Za-z]/);
+
+/**
+ * Check whether the character code represents an ASCII atext.
+ *
+ * atext is an ASCII alphanumeric (see `asciiAlphanumeric`), or a character in
+ * the inclusive ranges U+0023 NUMBER SIGN (`#`) to U+0027 APOSTROPHE (`'`),
+ * U+002A ASTERISK (`*`), U+002B PLUS SIGN (`+`), U+002D DASH (`-`), U+002F
+ * SLASH (`/`), U+003D EQUALS TO (`=`), U+003F QUESTION MARK (`?`), U+005E
+ * CARET (`^`) to U+0060 GRAVE ACCENT (`` ` ``), or U+007B LEFT CURLY BRACE
+ * (`{`) to U+007E TILDE (`~`).
+ *
+ * See:
+ * **\[RFC5322]**:
+ * [Internet Message Format](https://tools.ietf.org/html/rfc5322).
+ * P. Resnick.
+ * IETF.
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiAtext = regexCheck(/[#-'*+\--9=?A-Z^-~]/);
+
+/**
+ * Check whether a character code is an ASCII control character.
+ *
+ * An **ASCII control** is a character in the inclusive range U+0000 NULL (NUL)
+ * to U+001F (US), or U+007F (DEL).
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+function asciiControl(code) {
+  return (
+    // Special whitespace codes (which have negative values), C0 and Control
+    // character DEL
+    code !== null && (code < 32 || code === 127)
+  );
+}
+
+/**
+ * Check whether the character code represents an ASCII digit (`0` through `9`).
+ *
+ * An **ASCII digit** is a character in the inclusive range U+0030 (`0`) to
+ * U+0039 (`9`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiDigit = regexCheck(/\d/);
+
+/**
+ * Check whether the character code represents an ASCII hex digit (`a` through
+ * `f`, case insensitive, or `0` through `9`).
+ *
+ * An **ASCII hex digit** is an ASCII digit (see `asciiDigit`), ASCII upper hex
+ * digit, or an ASCII lower hex digit.
+ *
+ * An **ASCII upper hex digit** is a character in the inclusive range U+0041
+ * (`A`) to U+0046 (`F`).
+ *
+ * An **ASCII lower hex digit** is a character in the inclusive range U+0061
+ * (`a`) to U+0066 (`f`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiHexDigit = regexCheck(/[\dA-Fa-f]/);
+
+/**
+ * Check whether the character code represents ASCII punctuation.
+ *
+ * An **ASCII punctuation** is a character in the inclusive ranges U+0021
+ * EXCLAMATION MARK (`!`) to U+002F SLASH (`/`), U+003A COLON (`:`) to U+0040 AT
+ * SIGN (`@`), U+005B LEFT SQUARE BRACKET (`[`) to U+0060 GRAVE ACCENT
+ * (`` ` ``), or U+007B LEFT CURLY BRACE (`{`) to U+007E TILDE (`~`).
+ *
+ * @param code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+const asciiPunctuation = regexCheck(/[!-/:-@[-`{-~]/);
+
+/**
+ * Check whether a character code is a markdown line ending.
+ *
+ * A **markdown line ending** is the virtual characters M-0003 CARRIAGE RETURN
+ * LINE FEED (CRLF), M-0004 LINE FEED (LF) and M-0005 CARRIAGE RETURN (CR).
+ *
+ * In micromark, the actual character U+000A LINE FEED (LF) and U+000D CARRIAGE
+ * RETURN (CR) are replaced by these virtual characters depending on whether
+ * they occurred together.
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+function markdownLineEnding(code) {
+  return code !== null && code < -2;
+}
+
+/**
+ * Check whether a character code is a markdown line ending (see
+ * `markdownLineEnding`) or markdown space (see `markdownSpace`).
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+function markdownLineEndingOrSpace(code) {
+  return code !== null && (code < 0 || code === 32);
+}
+
+/**
+ * Check whether a character code is a markdown space.
+ *
+ * A **markdown space** is the concrete character U+0020 SPACE (SP) and the
+ * virtual characters M-0001 VIRTUAL SPACE (VS) and M-0002 HORIZONTAL TAB (HT).
+ *
+ * In micromark, the actual character U+0009 CHARACTER TABULATION (HT) is
+ * replaced by one M-0002 HORIZONTAL TAB (HT) and between 0 and 3 M-0001 VIRTUAL
+ * SPACE (VS) characters, depending on the column at which the tab occurred.
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {boolean}
+ *   Whether it matches.
+ */
+function markdownSpace(code) {
+  return code === -2 || code === -1 || code === 32;
+}
+
+// Size note: removing ASCII from the regex and using `asciiPunctuation` here
+// In fact adds to the bundle size.
+/**
+ * Check whether the character code represents Unicode punctuation.
+ *
+ * A **Unicode punctuation** is a character in the Unicode `Pc` (Punctuation,
+ * Connector), `Pd` (Punctuation, Dash), `Pe` (Punctuation, Close), `Pf`
+ * (Punctuation, Final quote), `Pi` (Punctuation, Initial quote), `Po`
+ * (Punctuation, Other), or `Ps` (Punctuation, Open) categories, or an ASCII
+ * punctuation (see `asciiPunctuation`).
+ *
+ * See:
+ * **\[UNICODE]**:
+ * [The Unicode Standard](https://www.unicode.org/versions/).
+ * Unicode Consortium.
+ *
+ * @param code
+ *   Code.
+ * @returns
+ *   Whether it matches.
+ */
+const unicodePunctuation = regexCheck(/\p{P}|\p{S}/u);
+
+/**
+ * Check whether the character code represents Unicode whitespace.
+ *
+ * Note that this does handle micromark specific markdown whitespace characters.
+ * See `markdownLineEndingOrSpace` to check that.
+ *
+ * A **Unicode whitespace** is a character in the Unicode `Zs` (Separator,
+ * Space) category, or U+0009 CHARACTER TABULATION (HT), U+000A LINE FEED (LF),
+ * U+000C (FF), or U+000D CARRIAGE RETURN (CR) (**\[UNICODE]**).
+ *
+ * See:
+ * **\[UNICODE]**:
+ * [The Unicode Standard](https://www.unicode.org/versions/).
+ * Unicode Consortium.
+ *
+ * @param code
+ *   Code.
+ * @returns
+ *   Whether it matches.
+ */
+const unicodeWhitespace = regexCheck(/\s/);
+
+/**
+ * Create a code check from a regex.
+ *
+ * @param {RegExp} regex
+ *   Expression.
+ * @returns {(code: Code) => boolean}
+ *   Check.
+ */
+function regexCheck(regex) {
+  return check;
+
+  /**
+   * Check whether a code matches the bound regex.
+   *
+   * @param {Code} code
+   *   Character code.
+   * @returns {boolean}
+   *   Whether the character code matches the bound regex.
+   */
+  function check(code) {
+    return code !== null && code > -1 && regex.test(String.fromCharCode(code));
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-factory-space/index.js
+/**
+ * @import {Effects, State, TokenType} from 'micromark-util-types'
+ */
+
+
+
+// To do: implement `spaceOrTab`, `spaceOrTabMinMax`, `spaceOrTabWithOptions`.
+
+/**
+ * Parse spaces and tabs.
+ *
+ * There is no `nok` parameter:
+ *
+ * *   spaces in markdown are often optional, in which case this factory can be
+ *     used and `ok` will be switched to whether spaces were found or not
+ * *   one line ending or space can be detected with `markdownSpace(code)` right
+ *     before using `factorySpace`
+ *
+ * ###### Examples
+ *
+ * Where `␉` represents a tab (plus how much it expands) and `␠` represents a
+ * single space.
+ *
+ * ```markdown
+ * ␉
+ * ␠␠␠␠
+ * ␉␠
+ * ```
+ *
+ * @param {Effects} effects
+ *   Context.
+ * @param {State} ok
+ *   State switched to when successful.
+ * @param {TokenType} type
+ *   Type (`' \t'`).
+ * @param {number | undefined} [max=Infinity]
+ *   Max (exclusive).
+ * @returns {State}
+ *   Start state.
+ */
+function factorySpace(effects, ok, type, max) {
+  const limit = max ? max - 1 : Number.POSITIVE_INFINITY;
+  let size = 0;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    if (markdownSpace(code)) {
+      effects.enter(type);
+      return prefix(code);
+    }
+    return ok(code);
+  }
+
+  /** @type {State} */
+  function prefix(code) {
+    if (markdownSpace(code) && size++ < limit) {
+      effects.consume(code);
+      return prefix;
+    }
+    effects.exit(type);
+    return ok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-factory-whitespace/index.js
+/**
+ * @import {Effects, State} from 'micromark-util-types'
+ */
+
+
+
+/**
+ * Parse spaces and tabs.
+ *
+ * There is no `nok` parameter:
+ *
+ * *   line endings or spaces in markdown are often optional, in which case this
+ *     factory can be used and `ok` will be switched to whether spaces were found
+ *     or not
+ * *   one line ending or space can be detected with
+ *     `markdownLineEndingOrSpace(code)` right before using `factoryWhitespace`
+ *
+ * @param {Effects} effects
+ *   Context.
+ * @param {State} ok
+ *   State switched to when successful.
+ * @returns {State}
+ *   Start state.
+ */
+function factoryWhitespace(effects, ok) {
+  /** @type {boolean} */
+  let seen;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    if (markdownLineEnding(code)) {
+      effects.enter("lineEnding");
+      effects.consume(code);
+      effects.exit("lineEnding");
+      seen = true;
+      return start;
+    }
+    if (markdownSpace(code)) {
+      return factorySpace(effects, start, seen ? "linePrefix" : "lineSuffix")(code);
+    }
+    return ok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-directive/lib/factory-attributes.js
+/**
+ * @import {Code, Effects, State, TokenType} from 'micromark-util-types'
+ */
+
+
+
+
+/**
+ * @param {Effects} effects
+ * @param {State} ok
+ * @param {State} nok
+ * @param {TokenType} attributesType
+ * @param {TokenType} attributesMarkerType
+ * @param {TokenType} attributeType
+ * @param {TokenType} attributeIdType
+ * @param {TokenType} attributeClassType
+ * @param {TokenType} attributeNameType
+ * @param {TokenType} attributeInitializerType
+ * @param {TokenType} attributeValueLiteralType
+ * @param {TokenType} attributeValueType
+ * @param {TokenType} attributeValueMarker
+ * @param {TokenType} attributeValueData
+ * @param {boolean | undefined} [disallowEol=false]
+ */
+function factoryAttributes(effects, ok, nok, attributesType, attributesMarkerType, attributeType, attributeIdType, attributeClassType, attributeNameType, attributeInitializerType, attributeValueLiteralType, attributeValueType, attributeValueMarker, attributeValueData, disallowEol) {
+  /** @type {TokenType} */
+  let type;
+  /** @type {Code | undefined} */
+  let marker;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    effects.enter(attributesType);
+    effects.enter(attributesMarkerType);
+    effects.consume(code);
+    effects.exit(attributesMarkerType);
+    return between;
+  }
+
+  /** @type {State} */
+  function between(code) {
+    if (code === 35) {
+      type = attributeIdType;
+      return shortcutStart(code);
+    }
+    if (code === 46) {
+      type = attributeClassType;
+      return shortcutStart(code);
+    }
+    if (code === 58 || code === 95 || asciiAlpha(code)) {
+      effects.enter(attributeType);
+      effects.enter(attributeNameType);
+      effects.consume(code);
+      return name;
+    }
+    if (disallowEol && markdownSpace(code)) {
+      return factorySpace(effects, between, "whitespace")(code);
+    }
+    if (!disallowEol && markdownLineEndingOrSpace(code)) {
+      return factoryWhitespace(effects, between)(code);
+    }
+    return end(code);
+  }
+
+  /** @type {State} */
+  function shortcutStart(code) {
+    // Assume it’s registered.
+    const markerType = /** @type {TokenType} */type + 'Marker';
+    effects.enter(attributeType);
+    effects.enter(type);
+    effects.enter(markerType);
+    effects.consume(code);
+    effects.exit(markerType);
+    return shortcutStartAfter;
+  }
+
+  /** @type {State} */
+  function shortcutStartAfter(code) {
+    if (code === null || code === 34 || code === 35 || code === 39 || code === 46 || code === 60 || code === 61 || code === 62 || code === 96 || code === 125 || markdownLineEndingOrSpace(code)) {
+      return nok(code);
+    }
+
+    // Assume it’s registered.
+    const valueType = /** @type {TokenType} */type + 'Value';
+    effects.enter(valueType);
+    effects.consume(code);
+    return shortcut;
+  }
+
+  /** @type {State} */
+  function shortcut(code) {
+    if (code === null || code === 34 || code === 39 || code === 60 || code === 61 || code === 62 || code === 96) {
+      return nok(code);
+    }
+    if (code === 35 || code === 46 || code === 125 || markdownLineEndingOrSpace(code)) {
+      // Assume it’s registered.
+      const valueType = /** @type {TokenType} */type + 'Value';
+      effects.exit(valueType);
+      effects.exit(type);
+      effects.exit(attributeType);
+      return between(code);
+    }
+    effects.consume(code);
+    return shortcut;
+  }
+
+  /** @type {State} */
+  function name(code) {
+    if (code === 45 || code === 46 || code === 58 || code === 95 || asciiAlphanumeric(code)) {
+      effects.consume(code);
+      return name;
+    }
+    effects.exit(attributeNameType);
+    if (disallowEol && markdownSpace(code)) {
+      return factorySpace(effects, nameAfter, "whitespace")(code);
+    }
+    if (!disallowEol && markdownLineEndingOrSpace(code)) {
+      return factoryWhitespace(effects, nameAfter)(code);
+    }
+    return nameAfter(code);
+  }
+
+  /** @type {State} */
+  function nameAfter(code) {
+    if (code === 61) {
+      effects.enter(attributeInitializerType);
+      effects.consume(code);
+      effects.exit(attributeInitializerType);
+      return valueBefore;
+    }
+
+    // Attribute w/o value.
+    effects.exit(attributeType);
+    return between(code);
+  }
+
+  /** @type {State} */
+  function valueBefore(code) {
+    if (code === null || code === 60 || code === 61 || code === 62 || code === 96 || code === 125 || disallowEol && markdownLineEnding(code)) {
+      return nok(code);
+    }
+    if (code === 34 || code === 39) {
+      effects.enter(attributeValueLiteralType);
+      effects.enter(attributeValueMarker);
+      effects.consume(code);
+      effects.exit(attributeValueMarker);
+      marker = code;
+      return valueQuotedStart;
+    }
+    if (disallowEol && markdownSpace(code)) {
+      return factorySpace(effects, valueBefore, "whitespace")(code);
+    }
+    if (!disallowEol && markdownLineEndingOrSpace(code)) {
+      return factoryWhitespace(effects, valueBefore)(code);
+    }
+    effects.enter(attributeValueType);
+    effects.enter(attributeValueData);
+    effects.consume(code);
+    marker = undefined;
+    return valueUnquoted;
+  }
+
+  /** @type {State} */
+  function valueUnquoted(code) {
+    if (code === null || code === 34 || code === 39 || code === 60 || code === 61 || code === 62 || code === 96) {
+      return nok(code);
+    }
+    if (code === 125 || markdownLineEndingOrSpace(code)) {
+      effects.exit(attributeValueData);
+      effects.exit(attributeValueType);
+      effects.exit(attributeType);
+      return between(code);
+    }
+    effects.consume(code);
+    return valueUnquoted;
+  }
+
+  /** @type {State} */
+  function valueQuotedStart(code) {
+    if (code === marker) {
+      effects.enter(attributeValueMarker);
+      effects.consume(code);
+      effects.exit(attributeValueMarker);
+      effects.exit(attributeValueLiteralType);
+      effects.exit(attributeType);
+      return valueQuotedAfter;
+    }
+    effects.enter(attributeValueType);
+    return valueQuotedBetween(code);
+  }
+
+  /** @type {State} */
+  function valueQuotedBetween(code) {
+    if (code === marker) {
+      effects.exit(attributeValueType);
+      return valueQuotedStart(code);
+    }
+    if (code === null) {
+      return nok(code);
+    }
+
+    // Note: blank lines can’t exist in content.
+    if (markdownLineEnding(code)) {
+      return disallowEol ? nok(code) : factoryWhitespace(effects, valueQuotedBetween)(code);
+    }
+    effects.enter(attributeValueData);
+    effects.consume(code);
+    return valueQuoted;
+  }
+
+  /** @type {State} */
+  function valueQuoted(code) {
+    if (code === marker || code === null || markdownLineEnding(code)) {
+      effects.exit(attributeValueData);
+      return valueQuotedBetween(code);
+    }
+    effects.consume(code);
+    return valueQuoted;
+  }
+
+  /** @type {State} */
+  function valueQuotedAfter(code) {
+    return code === 125 || markdownLineEndingOrSpace(code) ? between(code) : end(code);
+  }
+
+  /** @type {State} */
+  function end(code) {
+    if (code === 125) {
+      effects.enter(attributesMarkerType);
+      effects.consume(code);
+      effects.exit(attributesMarkerType);
+      effects.exit(attributesType);
+      return ok;
+    }
+    return nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-directive/lib/factory-label.js
+/**
+ * @import {Code, Effects, State, Token, TokenType} from 'micromark-util-types'
+ */
+
+
+// This is a fork of:
+// <https://github.com/micromark/micromark/tree/main/packages/micromark-factory-label>
+// to allow empty labels, balanced brackets (such as for nested directives),
+// text instead of strings, and optionally disallows EOLs.
+
+/**
+ * @param {Effects} effects
+ * @param {State} ok
+ * @param {State} nok
+ * @param {TokenType} type
+ * @param {TokenType} markerType
+ * @param {TokenType} stringType
+ * @param {boolean | undefined} [disallowEol=false]
+ */
+function factoryLabel(effects, ok, nok, type, markerType, stringType, disallowEol) {
+  let size = 0;
+  let balance = 0;
+  /** @type {Token | undefined} */
+  let previous;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    effects.enter(type);
+    effects.enter(markerType);
+    effects.consume(code);
+    effects.exit(markerType);
+    return afterStart;
+  }
+
+  /** @type {State} */
+  function afterStart(code) {
+    if (code === 93) {
+      effects.enter(markerType);
+      effects.consume(code);
+      effects.exit(markerType);
+      effects.exit(type);
+      return ok;
+    }
+    effects.enter(stringType);
+    return lineStart(code);
+  }
+
+  /** @type {State} */
+  function lineStart(code) {
+    if (code === 93 && !balance) {
+      return atClosingBrace(code);
+    }
+    const token = effects.enter("chunkText", {
+      contentType: "text",
+      previous
+    });
+    if (previous) previous.next = token;
+    previous = token;
+    return data(code);
+  }
+
+  /** @type {State} */
+  function data(code) {
+    if (code === null || size > 999) {
+      return nok(code);
+    }
+    if (code === 91 && ++balance > 32) {
+      return nok(code);
+    }
+    if (code === 93 && !balance--) {
+      effects.exit("chunkText");
+      return atClosingBrace(code);
+    }
+    if (markdownLineEnding(code)) {
+      if (disallowEol) {
+        return nok(code);
+      }
+      effects.consume(code);
+      effects.exit("chunkText");
+      return lineStart;
+    }
+    effects.consume(code);
+    return code === 92 ? dataEscape : data;
+  }
+
+  /** @type {State} */
+  function dataEscape(code) {
+    if (code === 91 || code === 92 || code === 93) {
+      effects.consume(code);
+      size++;
+      return data;
+    }
+    return data(code);
+  }
+
+  /** @type {State} */
+  function atClosingBrace(code) {
+    effects.exit(stringType);
+    effects.enter(markerType);
+    effects.consume(code);
+    effects.exit(markerType);
+    effects.exit(type);
+    return ok;
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-directive/lib/factory-name.js
+/**
+ * @import {Code, Effects, State, TokenizeContext, TokenType} from 'micromark-util-types'
+ */
+
+
+/**
+ * @this {TokenizeContext}
+ * @param {Effects} effects
+ * @param {State} ok
+ * @param {State} nok
+ * @param {TokenType} type
+ */
+function factoryName(effects, ok, nok, type) {
+  const self = this;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    if (asciiAlpha(code)) {
+      effects.enter(type);
+      effects.consume(code);
+      return name;
+    }
+    return nok(code);
+  }
+
+  /** @type {State} */
+  function name(code) {
+    if (code === 45 || code === 95 || asciiAlphanumeric(code)) {
+      effects.consume(code);
+      return name;
+    }
+    effects.exit(type);
+    return self.previous === 45 || self.previous === 95 ? nok(code) : ok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-directive/lib/directive-container.js
+/**
+ * @import {Construct, State, Token, TokenizeContext, Tokenizer} from 'micromark-util-types'
+ */
+
+
+
+
+
+
+
+/** @type {Construct} */
+const directiveContainer = {
+  tokenize: tokenizeDirectiveContainer,
+  concrete: true
+};
+const label = {
+  tokenize: tokenizeLabel,
+  partial: true
+};
+const attributes = {
+  tokenize: tokenizeAttributes,
+  partial: true
+};
+const nonLazyLine = {
+  tokenize: tokenizeNonLazyLine,
+  partial: true
+};
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeDirectiveContainer(effects, ok, nok) {
+  const self = this;
+  const tail = self.events[self.events.length - 1];
+  const initialSize = tail && tail[1].type === "linePrefix" ? tail[2].sliceSerialize(tail[1], true).length : 0;
+  let sizeOpen = 0;
+  /** @type {Token} */
+  let previous;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    effects.enter('directiveContainer');
+    effects.enter('directiveContainerFence');
+    effects.enter('directiveContainerSequence');
+    return sequenceOpen(code);
+  }
+
+  /** @type {State} */
+  function sequenceOpen(code) {
+    if (code === 58) {
+      effects.consume(code);
+      sizeOpen++;
+      return sequenceOpen;
+    }
+    if (sizeOpen < 3) {
+      return nok(code);
+    }
+    effects.exit('directiveContainerSequence');
+    return factoryName.call(self, effects, afterName, nok, 'directiveContainerName')(code);
+  }
+
+  /** @type {State} */
+  function afterName(code) {
+    return code === 91 ? effects.attempt(label, afterLabel, afterLabel)(code) : afterLabel(code);
+  }
+
+  /** @type {State} */
+  function afterLabel(code) {
+    return code === 123 ? effects.attempt(attributes, afterAttributes, afterAttributes)(code) : afterAttributes(code);
+  }
+
+  /** @type {State} */
+  function afterAttributes(code) {
+    return factorySpace(effects, openAfter, "whitespace")(code);
+  }
+
+  /** @type {State} */
+  function openAfter(code) {
+    effects.exit('directiveContainerFence');
+    if (code === null) {
+      return after(code);
+    }
+    if (markdownLineEnding(code)) {
+      if (self.interrupt) {
+        return ok(code);
+      }
+      return effects.attempt(nonLazyLine, contentStart, after)(code);
+    }
+    return nok(code);
+  }
+
+  /** @type {State} */
+  function contentStart(code) {
+    if (code === null) {
+      return after(code);
+    }
+    if (markdownLineEnding(code)) {
+      return effects.check(nonLazyLine, emptyContentNonLazyLineAfter, after)(code);
+    }
+    effects.enter('directiveContainerContent');
+    return lineStart(code);
+  }
+
+  /** @type {State} */
+  function lineStart(code) {
+    return effects.attempt({
+      tokenize: tokenizeClosingFence,
+      partial: true
+    }, afterContent, initialSize ? factorySpace(effects, chunkStart, "linePrefix", initialSize + 1) : chunkStart)(code);
+  }
+
+  /** @type {State} */
+  function chunkStart(code) {
+    if (code === null) {
+      return afterContent(code);
+    }
+    if (markdownLineEnding(code)) {
+      return effects.check(nonLazyLine, chunkNonLazyStart, afterContent)(code);
+    }
+    return chunkNonLazyStart(code);
+  }
+
+  /** @type {State} */
+  function contentContinue(code) {
+    if (code === null) {
+      const t = effects.exit("chunkDocument");
+      self.parser.lazy[t.start.line] = false;
+      return afterContent(code);
+    }
+    if (markdownLineEnding(code)) {
+      return effects.check(nonLazyLine, nonLazyLineAfter, lineAfter)(code);
+    }
+    effects.consume(code);
+    return contentContinue;
+  }
+
+  /** @type {State} */
+  function chunkNonLazyStart(code) {
+    const token = effects.enter("chunkDocument", {
+      contentType: "document",
+      previous
+    });
+    if (previous) previous.next = token;
+    previous = token;
+    return contentContinue(code);
+  }
+
+  /** @type {State} */
+  function emptyContentNonLazyLineAfter(code) {
+    effects.enter('directiveContainerContent');
+    return lineStart(code);
+  }
+
+  /** @type {State} */
+  function nonLazyLineAfter(code) {
+    effects.consume(code);
+    const t = effects.exit("chunkDocument");
+    self.parser.lazy[t.start.line] = false;
+    return lineStart;
+  }
+
+  /** @type {State} */
+  function lineAfter(code) {
+    const t = effects.exit("chunkDocument");
+    self.parser.lazy[t.start.line] = false;
+    return afterContent(code);
+  }
+
+  /** @type {State} */
+  function afterContent(code) {
+    effects.exit('directiveContainerContent');
+    return after(code);
+  }
+
+  /** @type {State} */
+  function after(code) {
+    effects.exit('directiveContainer');
+    return ok(code);
+  }
+
+  /**
+   * @this {TokenizeContext}
+   * @type {Tokenizer}
+   */
+  function tokenizeClosingFence(effects, ok, nok) {
+    let size = 0;
+    return factorySpace(effects, closingPrefixAfter, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4);
+
+    /** @type {State} */
+    function closingPrefixAfter(code) {
+      effects.enter('directiveContainerFence');
+      effects.enter('directiveContainerSequence');
+      return closingSequence(code);
+    }
+
+    /** @type {State} */
+    function closingSequence(code) {
+      if (code === 58) {
+        effects.consume(code);
+        size++;
+        return closingSequence;
+      }
+      if (size < sizeOpen) return nok(code);
+      effects.exit('directiveContainerSequence');
+      return factorySpace(effects, closingSequenceEnd, "whitespace")(code);
+    }
+
+    /** @type {State} */
+    function closingSequenceEnd(code) {
+      if (code === null || markdownLineEnding(code)) {
+        effects.exit('directiveContainerFence');
+        return ok(code);
+      }
+      return nok(code);
+    }
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeLabel(effects, ok, nok) {
+  // Always a `[`
+  return factoryLabel(effects, ok, nok, 'directiveContainerLabel', 'directiveContainerLabelMarker', 'directiveContainerLabelString', true);
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeAttributes(effects, ok, nok) {
+  // Always a `{`
+  return factoryAttributes(effects, ok, nok, 'directiveContainerAttributes', 'directiveContainerAttributesMarker', 'directiveContainerAttribute', 'directiveContainerAttributeId', 'directiveContainerAttributeClass', 'directiveContainerAttributeName', 'directiveContainerAttributeInitializerMarker', 'directiveContainerAttributeValueLiteral', 'directiveContainerAttributeValue', 'directiveContainerAttributeValueMarker', 'directiveContainerAttributeValueData', true);
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeNonLazyLine(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return lineStart;
+  }
+
+  /** @type {State} */
+  function lineStart(code) {
+    return self.parser.lazy[self.now().line] ? nok(code) : ok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-directive/lib/directive-leaf.js
+/**
+ * @import {Construct, State, TokenizeContext, Tokenizer} from 'micromark-util-types'
+ */
+
+
+
+
+
+
+
+/** @type {Construct} */
+const directiveLeaf = {
+  tokenize: tokenizeDirectiveLeaf
+};
+const directive_leaf_label = {
+  tokenize: directive_leaf_tokenizeLabel,
+  partial: true
+};
+const directive_leaf_attributes = {
+  tokenize: directive_leaf_tokenizeAttributes,
+  partial: true
+};
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeDirectiveLeaf(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    effects.enter('directiveLeaf');
+    effects.enter('directiveLeafSequence');
+    effects.consume(code);
+    return inStart;
+  }
+
+  /** @type {State} */
+  function inStart(code) {
+    if (code === 58) {
+      effects.consume(code);
+      effects.exit('directiveLeafSequence');
+      return factoryName.call(self, effects, afterName, nok, 'directiveLeafName');
+    }
+    return nok(code);
+  }
+
+  /** @type {State} */
+  function afterName(code) {
+    return code === 91 ? effects.attempt(directive_leaf_label, afterLabel, afterLabel)(code) : afterLabel(code);
+  }
+
+  /** @type {State} */
+  function afterLabel(code) {
+    return code === 123 ? effects.attempt(directive_leaf_attributes, afterAttributes, afterAttributes)(code) : afterAttributes(code);
+  }
+
+  /** @type {State} */
+  function afterAttributes(code) {
+    return factorySpace(effects, end, "whitespace")(code);
+  }
+
+  /** @type {State} */
+  function end(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit('directiveLeaf');
+      return ok(code);
+    }
+    return nok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function directive_leaf_tokenizeLabel(effects, ok, nok) {
+  // Always a `[`
+  return factoryLabel(effects, ok, nok, 'directiveLeafLabel', 'directiveLeafLabelMarker', 'directiveLeafLabelString', true);
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function directive_leaf_tokenizeAttributes(effects, ok, nok) {
+  // Always a `{`
+  return factoryAttributes(effects, ok, nok, 'directiveLeafAttributes', 'directiveLeafAttributesMarker', 'directiveLeafAttribute', 'directiveLeafAttributeId', 'directiveLeafAttributeClass', 'directiveLeafAttributeName', 'directiveLeafAttributeInitializerMarker', 'directiveLeafAttributeValueLiteral', 'directiveLeafAttributeValue', 'directiveLeafAttributeValueMarker', 'directiveLeafAttributeValueData', true);
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-directive/lib/directive-text.js
+/**
+ * @import {Construct, Previous, State, TokenizeContext, Tokenizer} from 'micromark-util-types'
+ */
+
+
+
+
+
+/** @type {Construct} */
+const directiveText = {
+  tokenize: tokenizeDirectiveText,
+  previous
+};
+const directive_text_label = {
+  tokenize: directive_text_tokenizeLabel,
+  partial: true
+};
+const directive_text_attributes = {
+  tokenize: directive_text_tokenizeAttributes,
+  partial: true
+};
+
+/**
+ * @this {TokenizeContext}
+ * @type {Previous}
+ */
+function previous(code) {
+  // If there is a previous code, there will always be a tail.
+  return code !== 58 || this.events[this.events.length - 1][1].type === "characterEscape";
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeDirectiveText(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    effects.enter('directiveText');
+    effects.enter('directiveTextMarker');
+    effects.consume(code);
+    effects.exit('directiveTextMarker');
+    return factoryName.call(self, effects, afterName, nok, 'directiveTextName');
+  }
+
+  /** @type {State} */
+  function afterName(code) {
+    return code === 58 ? nok(code) : code === 91 ? effects.attempt(directive_text_label, afterLabel, afterLabel)(code) : afterLabel(code);
+  }
+
+  /** @type {State} */
+  function afterLabel(code) {
+    return code === 123 ? effects.attempt(directive_text_attributes, afterAttributes, afterAttributes)(code) : afterAttributes(code);
+  }
+
+  /** @type {State} */
+  function afterAttributes(code) {
+    effects.exit('directiveText');
+    return ok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function directive_text_tokenizeLabel(effects, ok, nok) {
+  // Always a `[`
+  return factoryLabel(effects, ok, nok, 'directiveTextLabel', 'directiveTextLabelMarker', 'directiveTextLabelString');
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function directive_text_tokenizeAttributes(effects, ok, nok) {
+  // Always a `{`
+  return factoryAttributes(effects, ok, nok, 'directiveTextAttributes', 'directiveTextAttributesMarker', 'directiveTextAttribute', 'directiveTextAttributeId', 'directiveTextAttributeClass', 'directiveTextAttributeName', 'directiveTextAttributeInitializerMarker', 'directiveTextAttributeValueLiteral', 'directiveTextAttributeValue', 'directiveTextAttributeValueMarker', 'directiveTextAttributeValueData');
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-directive/lib/syntax.js
+/**
+ * @import {Extension} from 'micromark-util-types'
+ */
+
+
+
+
+
+/**
+ * Create an extension for `micromark` to enable directive syntax.
+ *
+ * @returns {Extension}
+ *   Extension for `micromark` that can be passed in `extensions`, to
+ *   enable directive syntax.
+ */
+function directive() {
+  return {
+    text: {
+      [58]: directiveText
+    },
+    flow: {
+      [58]: [directiveContainer, directiveLeaf]
+    }
+  };
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-gfm-autolink-literal/lib/syntax.js
+/**
+ * @import {Code, ConstructRecord, Event, Extension, Previous, State, TokenizeContext, Tokenizer} from 'micromark-util-types'
+ */
+
+
+const wwwPrefix = {
+  tokenize: tokenizeWwwPrefix,
+  partial: true
+};
+const domain = {
+  tokenize: tokenizeDomain,
+  partial: true
+};
+const path = {
+  tokenize: tokenizePath,
+  partial: true
+};
+const trail = {
+  tokenize: tokenizeTrail,
+  partial: true
+};
+const emailDomainDotTrail = {
+  tokenize: tokenizeEmailDomainDotTrail,
+  partial: true
+};
+const wwwAutolink = {
+  name: 'wwwAutolink',
+  tokenize: tokenizeWwwAutolink,
+  previous: previousWww
+};
+const protocolAutolink = {
+  name: 'protocolAutolink',
+  tokenize: tokenizeProtocolAutolink,
+  previous: previousProtocol
+};
+const emailAutolink = {
+  name: 'emailAutolink',
+  tokenize: tokenizeEmailAutolink,
+  previous: previousEmail
+};
+
+/** @type {ConstructRecord} */
+const syntax_text = {};
+
+/**
+ * Create an extension for `micromark` to support GitHub autolink literal
+ * syntax.
+ *
+ * @returns {Extension}
+ *   Extension for `micromark` that can be passed in `extensions` to enable GFM
+ *   autolink literal syntax.
+ */
+function gfmAutolinkLiteral() {
+  return {
+    text: syntax_text
+  };
+}
+
+/** @type {Code} */
+let code = 48;
+
+// Add alphanumerics.
+while (code < 123) {
+  syntax_text[code] = emailAutolink;
+  code++;
+  if (code === 58) code = 65;else if (code === 91) code = 97;
+}
+syntax_text[43] = emailAutolink;
+syntax_text[45] = emailAutolink;
+syntax_text[46] = emailAutolink;
+syntax_text[95] = emailAutolink;
+syntax_text[72] = [emailAutolink, protocolAutolink];
+syntax_text[104] = [emailAutolink, protocolAutolink];
+syntax_text[87] = [emailAutolink, wwwAutolink];
+syntax_text[119] = [emailAutolink, wwwAutolink];
+
+// To do: perform email autolink literals on events, afterwards.
+// That’s where `markdown-rs` and `cmark-gfm` perform it.
+// It should look for `@`, then for atext backwards, and then for a label
+// forwards.
+// To do: `mailto:`, `xmpp:` protocol as prefix.
+
+/**
+ * Email autolink literal.
+ *
+ * ```markdown
+ * > | a contact@example.org b
+ *       ^^^^^^^^^^^^^^^^^^^
+ * ```
+ *
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeEmailAutolink(effects, ok, nok) {
+  const self = this;
+  /** @type {boolean | undefined} */
+  let dot;
+  /** @type {boolean} */
+  let data;
+  return start;
+
+  /**
+   * Start of email autolink literal.
+   *
+   * ```markdown
+   * > | a contact@example.org b
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    if (!gfmAtext(code) || !previousEmail.call(self, self.previous) || previousUnbalanced(self.events)) {
+      return nok(code);
+    }
+    effects.enter('literalAutolink');
+    effects.enter('literalAutolinkEmail');
+    return atext(code);
+  }
+
+  /**
+   * In email atext.
+   *
+   * ```markdown
+   * > | a contact@example.org b
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function atext(code) {
+    if (gfmAtext(code)) {
+      effects.consume(code);
+      return atext;
+    }
+    if (code === 64) {
+      effects.consume(code);
+      return emailDomain;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In email domain.
+   *
+   * The reference code is a bit overly complex as it handles the `@`, of which
+   * there may be just one.
+   * Source: <https://github.com/github/cmark-gfm/blob/ef1cfcb/extensions/autolink.c#L318>
+   *
+   * ```markdown
+   * > | a contact@example.org b
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function emailDomain(code) {
+    // Dot followed by alphanumerical (not `-` or `_`).
+    if (code === 46) {
+      return effects.check(emailDomainDotTrail, emailDomainAfter, emailDomainDot)(code);
+    }
+
+    // Alphanumerical, `-`, and `_`.
+    if (code === 45 || code === 95 || asciiAlphanumeric(code)) {
+      data = true;
+      effects.consume(code);
+      return emailDomain;
+    }
+
+    // To do: `/` if xmpp.
+
+    // Note: normally we’d truncate trailing punctuation from the link.
+    // However, email autolink literals cannot contain any of those markers,
+    // except for `.`, but that can only occur if it isn’t trailing.
+    // So we can ignore truncating!
+    return emailDomainAfter(code);
+  }
+
+  /**
+   * In email domain, on dot that is not a trail.
+   *
+   * ```markdown
+   * > | a contact@example.org b
+   *                      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function emailDomainDot(code) {
+    effects.consume(code);
+    dot = true;
+    return emailDomain;
+  }
+
+  /**
+   * After email domain.
+   *
+   * ```markdown
+   * > | a contact@example.org b
+   *                          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function emailDomainAfter(code) {
+    // Domain must not be empty, must include a dot, and must end in alphabetical.
+    // Source: <https://github.com/github/cmark-gfm/blob/ef1cfcb/extensions/autolink.c#L332>.
+    if (data && dot && asciiAlpha(self.previous)) {
+      effects.exit('literalAutolinkEmail');
+      effects.exit('literalAutolink');
+      return ok(code);
+    }
+    return nok(code);
+  }
+}
+
+/**
+ * `www` autolink literal.
+ *
+ * ```markdown
+ * > | a www.example.org b
+ *       ^^^^^^^^^^^^^^^
+ * ```
+ *
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeWwwAutolink(effects, ok, nok) {
+  const self = this;
+  return wwwStart;
+
+  /**
+   * Start of www autolink literal.
+   *
+   * ```markdown
+   * > | www.example.com/a?b#c
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function wwwStart(code) {
+    if (code !== 87 && code !== 119 || !previousWww.call(self, self.previous) || previousUnbalanced(self.events)) {
+      return nok(code);
+    }
+    effects.enter('literalAutolink');
+    effects.enter('literalAutolinkWww');
+    // Note: we *check*, so we can discard the `www.` we parsed.
+    // If it worked, we consider it as a part of the domain.
+    return effects.check(wwwPrefix, effects.attempt(domain, effects.attempt(path, wwwAfter), nok), nok)(code);
+  }
+
+  /**
+   * After a www autolink literal.
+   *
+   * ```markdown
+   * > | www.example.com/a?b#c
+   *                          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function wwwAfter(code) {
+    effects.exit('literalAutolinkWww');
+    effects.exit('literalAutolink');
+    return ok(code);
+  }
+}
+
+/**
+ * Protocol autolink literal.
+ *
+ * ```markdown
+ * > | a https://example.org b
+ *       ^^^^^^^^^^^^^^^^^^^
+ * ```
+ *
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeProtocolAutolink(effects, ok, nok) {
+  const self = this;
+  let buffer = '';
+  let seen = false;
+  return protocolStart;
+
+  /**
+   * Start of protocol autolink literal.
+   *
+   * ```markdown
+   * > | https://example.com/a?b#c
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function protocolStart(code) {
+    if ((code === 72 || code === 104) && previousProtocol.call(self, self.previous) && !previousUnbalanced(self.events)) {
+      effects.enter('literalAutolink');
+      effects.enter('literalAutolinkHttp');
+      buffer += String.fromCodePoint(code);
+      effects.consume(code);
+      return protocolPrefixInside;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In protocol.
+   *
+   * ```markdown
+   * > | https://example.com/a?b#c
+   *     ^^^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function protocolPrefixInside(code) {
+    // `5` is size of `https`
+    if (asciiAlpha(code) && buffer.length < 5) {
+      // @ts-expect-error: definitely number.
+      buffer += String.fromCodePoint(code);
+      effects.consume(code);
+      return protocolPrefixInside;
+    }
+    if (code === 58) {
+      const protocol = buffer.toLowerCase();
+      if (protocol === 'http' || protocol === 'https') {
+        effects.consume(code);
+        return protocolSlashesInside;
+      }
+    }
+    return nok(code);
+  }
+
+  /**
+   * In slashes.
+   *
+   * ```markdown
+   * > | https://example.com/a?b#c
+   *           ^^
+   * ```
+   *
+   * @type {State}
+   */
+  function protocolSlashesInside(code) {
+    if (code === 47) {
+      effects.consume(code);
+      if (seen) {
+        return afterProtocol;
+      }
+      seen = true;
+      return protocolSlashesInside;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After protocol, before domain.
+   *
+   * ```markdown
+   * > | https://example.com/a?b#c
+   *             ^
+   * ```
+   *
+   * @type {State}
+   */
+  function afterProtocol(code) {
+    // To do: this is different from `markdown-rs`:
+    // https://github.com/wooorm/markdown-rs/blob/b3a921c761309ae00a51fe348d8a43adbc54b518/src/construct/gfm_autolink_literal.rs#L172-L182
+    return code === null || asciiControl(code) || markdownLineEndingOrSpace(code) || unicodeWhitespace(code) || unicodePunctuation(code) ? nok(code) : effects.attempt(domain, effects.attempt(path, protocolAfter), nok)(code);
+  }
+
+  /**
+   * After a protocol autolink literal.
+   *
+   * ```markdown
+   * > | https://example.com/a?b#c
+   *                              ^
+   * ```
+   *
+   * @type {State}
+   */
+  function protocolAfter(code) {
+    effects.exit('literalAutolinkHttp');
+    effects.exit('literalAutolink');
+    return ok(code);
+  }
+}
+
+/**
+ * `www` prefix.
+ *
+ * ```markdown
+ * > | a www.example.org b
+ *       ^^^^
+ * ```
+ *
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeWwwPrefix(effects, ok, nok) {
+  let size = 0;
+  return wwwPrefixInside;
+
+  /**
+   * In www prefix.
+   *
+   * ```markdown
+   * > | www.example.com
+   *     ^^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function wwwPrefixInside(code) {
+    if ((code === 87 || code === 119) && size < 3) {
+      size++;
+      effects.consume(code);
+      return wwwPrefixInside;
+    }
+    if (code === 46 && size === 3) {
+      effects.consume(code);
+      return wwwPrefixAfter;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After www prefix.
+   *
+   * ```markdown
+   * > | www.example.com
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function wwwPrefixAfter(code) {
+    // If there is *anything*, we can link.
+    return code === null ? nok(code) : ok(code);
+  }
+}
+
+/**
+ * Domain.
+ *
+ * ```markdown
+ * > | a https://example.org b
+ *               ^^^^^^^^^^^
+ * ```
+ *
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeDomain(effects, ok, nok) {
+  /** @type {boolean | undefined} */
+  let underscoreInLastSegment;
+  /** @type {boolean | undefined} */
+  let underscoreInLastLastSegment;
+  /** @type {boolean | undefined} */
+  let seen;
+  return domainInside;
+
+  /**
+   * In domain.
+   *
+   * ```markdown
+   * > | https://example.com/a
+   *             ^^^^^^^^^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function domainInside(code) {
+    // Check whether this marker, which is a trailing punctuation
+    // marker, optionally followed by more trailing markers, and then
+    // followed by an end.
+    if (code === 46 || code === 95) {
+      return effects.check(trail, domainAfter, domainAtPunctuation)(code);
+    }
+
+    // GH documents that only alphanumerics (other than `-`, `.`, and `_`) can
+    // occur, which sounds like ASCII only, but they also support `www.點看.com`,
+    // so that’s Unicode.
+    // Instead of some new production for Unicode alphanumerics, markdown
+    // already has that for Unicode punctuation and whitespace, so use those.
+    // Source: <https://github.com/github/cmark-gfm/blob/ef1cfcb/extensions/autolink.c#L12>.
+    if (code === null || markdownLineEndingOrSpace(code) || unicodeWhitespace(code) || code !== 45 && unicodePunctuation(code)) {
+      return domainAfter(code);
+    }
+    seen = true;
+    effects.consume(code);
+    return domainInside;
+  }
+
+  /**
+   * In domain, at potential trailing punctuation, that was not trailing.
+   *
+   * ```markdown
+   * > | https://example.com
+   *                    ^
+   * ```
+   *
+   * @type {State}
+   */
+  function domainAtPunctuation(code) {
+    // There is an underscore in the last segment of the domain
+    if (code === 95) {
+      underscoreInLastSegment = true;
+    }
+    // Otherwise, it’s a `.`: save the last segment underscore in the
+    // penultimate segment slot.
+    else {
+      underscoreInLastLastSegment = underscoreInLastSegment;
+      underscoreInLastSegment = undefined;
+    }
+    effects.consume(code);
+    return domainInside;
+  }
+
+  /**
+   * After domain.
+   *
+   * ```markdown
+   * > | https://example.com/a
+   *                        ^
+   * ```
+   *
+   * @type {State} */
+  function domainAfter(code) {
+    // Note: that’s GH says a dot is needed, but it’s not true:
+    // <https://github.com/github/cmark-gfm/issues/279>
+    if (underscoreInLastLastSegment || underscoreInLastSegment || !seen) {
+      return nok(code);
+    }
+    return ok(code);
+  }
+}
+
+/**
+ * Path.
+ *
+ * ```markdown
+ * > | a https://example.org/stuff b
+ *                          ^^^^^^
+ * ```
+ *
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizePath(effects, ok) {
+  let sizeOpen = 0;
+  let sizeClose = 0;
+  return pathInside;
+
+  /**
+   * In path.
+   *
+   * ```markdown
+   * > | https://example.com/a
+   *                        ^^
+   * ```
+   *
+   * @type {State}
+   */
+  function pathInside(code) {
+    if (code === 40) {
+      sizeOpen++;
+      effects.consume(code);
+      return pathInside;
+    }
+
+    // To do: `markdown-rs` also needs this.
+    // If this is a paren, and there are less closings than openings,
+    // we don’t check for a trail.
+    if (code === 41 && sizeClose < sizeOpen) {
+      return pathAtPunctuation(code);
+    }
+
+    // Check whether this trailing punctuation marker is optionally
+    // followed by more trailing markers, and then followed
+    // by an end.
+    if (code === 33 || code === 34 || code === 38 || code === 39 || code === 41 || code === 42 || code === 44 || code === 46 || code === 58 || code === 59 || code === 60 || code === 63 || code === 93 || code === 95 || code === 126) {
+      return effects.check(trail, ok, pathAtPunctuation)(code);
+    }
+    if (code === null || markdownLineEndingOrSpace(code) || unicodeWhitespace(code)) {
+      return ok(code);
+    }
+    effects.consume(code);
+    return pathInside;
+  }
+
+  /**
+   * In path, at potential trailing punctuation, that was not trailing.
+   *
+   * ```markdown
+   * > | https://example.com/a"b
+   *                          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function pathAtPunctuation(code) {
+    // Count closing parens.
+    if (code === 41) {
+      sizeClose++;
+    }
+    effects.consume(code);
+    return pathInside;
+  }
+}
+
+/**
+ * Trail.
+ *
+ * This calls `ok` if this *is* the trail, followed by an end, which means
+ * the entire trail is not part of the link.
+ * It calls `nok` if this *is* part of the link.
+ *
+ * ```markdown
+ * > | https://example.com").
+ *                        ^^^
+ * ```
+ *
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeTrail(effects, ok, nok) {
+  return trail;
+
+  /**
+   * In trail of domain or path.
+   *
+   * ```markdown
+   * > | https://example.com").
+   *                        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function trail(code) {
+    // Regular trailing punctuation.
+    if (code === 33 || code === 34 || code === 39 || code === 41 || code === 42 || code === 44 || code === 46 || code === 58 || code === 59 || code === 63 || code === 95 || code === 126) {
+      effects.consume(code);
+      return trail;
+    }
+
+    // `&` followed by one or more alphabeticals and then a `;`, is
+    // as a whole considered as trailing punctuation.
+    // In all other cases, it is considered as continuation of the URL.
+    if (code === 38) {
+      effects.consume(code);
+      return trailCharacterReferenceStart;
+    }
+
+    // Needed because we allow literals after `[`, as we fix:
+    // <https://github.com/github/cmark-gfm/issues/278>.
+    // Check that it is not followed by `(` or `[`.
+    if (code === 93) {
+      effects.consume(code);
+      return trailBracketAfter;
+    }
+    if (
+    // `<` is an end.
+    code === 60 ||
+    // So is whitespace.
+    code === null || markdownLineEndingOrSpace(code) || unicodeWhitespace(code)) {
+      return ok(code);
+    }
+    return nok(code);
+  }
+
+  /**
+   * In trail, after `]`.
+   *
+   * > 👉 **Note**: this deviates from `cmark-gfm` to fix a bug.
+   * > See end of <https://github.com/github/cmark-gfm/issues/278> for more.
+   *
+   * ```markdown
+   * > | https://example.com](
+   *                         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function trailBracketAfter(code) {
+    // Whitespace or something that could start a resource or reference is the end.
+    // Switch back to trail otherwise.
+    if (code === null || code === 40 || code === 91 || markdownLineEndingOrSpace(code) || unicodeWhitespace(code)) {
+      return ok(code);
+    }
+    return trail(code);
+  }
+
+  /**
+   * In character-reference like trail, after `&`.
+   *
+   * ```markdown
+   * > | https://example.com&amp;).
+   *                         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function trailCharacterReferenceStart(code) {
+    // When non-alpha, it’s not a trail.
+    return asciiAlpha(code) ? trailCharacterReferenceInside(code) : nok(code);
+  }
+
+  /**
+   * In character-reference like trail.
+   *
+   * ```markdown
+   * > | https://example.com&amp;).
+   *                         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function trailCharacterReferenceInside(code) {
+    // Switch back to trail if this is well-formed.
+    if (code === 59) {
+      effects.consume(code);
+      return trail;
+    }
+    if (asciiAlpha(code)) {
+      effects.consume(code);
+      return trailCharacterReferenceInside;
+    }
+
+    // It’s not a trail.
+    return nok(code);
+  }
+}
+
+/**
+ * Dot in email domain trail.
+ *
+ * This calls `ok` if this *is* the trail, followed by an end, which means
+ * the trail is not part of the link.
+ * It calls `nok` if this *is* part of the link.
+ *
+ * ```markdown
+ * > | contact@example.org.
+ *                        ^
+ * ```
+ *
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeEmailDomainDotTrail(effects, ok, nok) {
+  return start;
+
+  /**
+   * Dot.
+   *
+   * ```markdown
+   * > | contact@example.org.
+   *                    ^   ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    // Must be dot.
+    effects.consume(code);
+    return after;
+  }
+
+  /**
+   * After dot.
+   *
+   * ```markdown
+   * > | contact@example.org.
+   *                     ^   ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    // Not a trail if alphanumeric.
+    return asciiAlphanumeric(code) ? nok(code) : ok(code);
+  }
+}
+
+/**
+ * See:
+ * <https://github.com/github/cmark-gfm/blob/ef1cfcb/extensions/autolink.c#L156>.
+ *
+ * @type {Previous}
+ */
+function previousWww(code) {
+  return code === null || code === 40 || code === 42 || code === 95 || code === 91 || code === 93 || code === 126 || markdownLineEndingOrSpace(code);
+}
+
+/**
+ * See:
+ * <https://github.com/github/cmark-gfm/blob/ef1cfcb/extensions/autolink.c#L214>.
+ *
+ * @type {Previous}
+ */
+function previousProtocol(code) {
+  return !asciiAlpha(code);
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Previous}
+ */
+function previousEmail(code) {
+  // Do not allow a slash “inside” atext.
+  // The reference code is a bit weird, but that’s what it results in.
+  // Source: <https://github.com/github/cmark-gfm/blob/ef1cfcb/extensions/autolink.c#L307>.
+  // Other than slash, every preceding character is allowed.
+  return !(code === 47 || gfmAtext(code));
+}
+
+/**
+ * @param {Code} code
+ * @returns {boolean}
+ */
+function gfmAtext(code) {
+  return code === 43 || code === 45 || code === 46 || code === 95 || asciiAlphanumeric(code);
+}
+
+/**
+ * @param {Array<Event>} events
+ * @returns {boolean}
+ */
+function previousUnbalanced(events) {
+  let index = events.length;
+  let result = false;
+  while (index--) {
+    const token = events[index][1];
+    if ((token.type === 'labelLink' || token.type === 'labelImage') && !token._balanced) {
+      result = true;
+      break;
+    }
+
+    // If we’ve seen this token, and it was marked as not having any unbalanced
+    // bracket before it, we can exit.
+    if (token._gfmAutolinkLiteralWalkedInto) {
+      result = false;
+      break;
+    }
+  }
+  if (events.length > 0 && !result) {
+    // Mark the last token as “walked into” w/o finding
+    // anything.
+    events[events.length - 1][1]._gfmAutolinkLiteralWalkedInto = true;
+  }
+  return result;
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/blank-line.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const blankLine = {
+  partial: true,
+  tokenize: tokenizeBlankLine
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeBlankLine(effects, ok, nok) {
+  return start;
+
+  /**
+   * Start of blank line.
+   *
+   * > 👉 **Note**: `␠` represents a space character.
+   *
+   * ```markdown
+   * > | ␠␠␊
+   *     ^
+   * > | ␊
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    return markdownSpace(code) ? factorySpace(effects, after, "linePrefix")(code) : after(code);
+  }
+
+  /**
+   * At eof/eol, after optional whitespace.
+   *
+   * > 👉 **Note**: `␠` represents a space character.
+   *
+   * ```markdown
+   * > | ␠␠␊
+   *       ^
+   * > | ␊
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    return code === null || markdownLineEnding(code) ? ok(code) : nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-util-normalize-identifier/index.js
+/**
+ * Normalize an identifier (as found in references, definitions).
+ *
+ * Collapses markdown whitespace, trim, and then lower- and uppercase.
+ *
+ * Some characters are considered “uppercase”, such as U+03F4 (`ϴ`), but if their
+ * lowercase counterpart (U+03B8 (`θ`)) is uppercased will result in a different
+ * uppercase character (U+0398 (`Θ`)).
+ * So, to get a canonical form, we perform both lower- and uppercase.
+ *
+ * Using uppercase last makes sure keys will never interact with default
+ * prototypal values (such as `constructor`): nothing in the prototype of
+ * `Object` is uppercase.
+ *
+ * @param {string} value
+ *   Identifier to normalize.
+ * @returns {string}
+ *   Normalized identifier.
+ */
+function normalizeIdentifier(value) {
+  return value
+  // Collapse markdown whitespace.
+  .replace(/[\t\n\r ]+/g, " ")
+  // Trim.
+  .replace(/^ | $/g, '')
+  // Some characters are considered “uppercase”, but if their lowercase
+  // counterpart is uppercased will result in a different uppercase
+  // character.
+  // Hence, to get that form, we perform both lower- and uppercase.
+  // Upper case makes sure keys will not interact with default prototypal
+  // methods: no method is uppercase.
+  .toLowerCase().toUpperCase();
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-gfm-footnote/lib/syntax.js
+/**
+ * @import {Event, Exiter, Extension, Resolver, State, Token, TokenizeContext, Tokenizer} from 'micromark-util-types'
+ */
+
+
+
+
+
+const indent = {
+  tokenize: tokenizeIndent,
+  partial: true
+};
+
+// To do: micromark should support a `_hiddenGfmFootnoteSupport`, which only
+// affects label start (image).
+// That will let us drop `tokenizePotentialGfmFootnote*`.
+// It currently has a `_hiddenFootnoteSupport`, which affects that and more.
+// That can be removed when `micromark-extension-footnote` is archived.
+
+/**
+ * Create an extension for `micromark` to enable GFM footnote syntax.
+ *
+ * @returns {Extension}
+ *   Extension for `micromark` that can be passed in `extensions` to
+ *   enable GFM footnote syntax.
+ */
+function gfmFootnote() {
+  /** @type {Extension} */
+  return {
+    document: {
+      [91]: {
+        name: 'gfmFootnoteDefinition',
+        tokenize: tokenizeDefinitionStart,
+        continuation: {
+          tokenize: tokenizeDefinitionContinuation
+        },
+        exit: gfmFootnoteDefinitionEnd
+      }
+    },
+    text: {
+      [91]: {
+        name: 'gfmFootnoteCall',
+        tokenize: tokenizeGfmFootnoteCall
+      },
+      [93]: {
+        name: 'gfmPotentialFootnoteCall',
+        add: 'after',
+        tokenize: tokenizePotentialGfmFootnoteCall,
+        resolveTo: resolveToPotentialGfmFootnoteCall
+      }
+    }
+  };
+}
+
+// To do: remove after micromark update.
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizePotentialGfmFootnoteCall(effects, ok, nok) {
+  const self = this;
+  let index = self.events.length;
+  const defined = self.parser.gfmFootnotes || (self.parser.gfmFootnotes = []);
+  /** @type {Token} */
+  let labelStart;
+
+  // Find an opening.
+  while (index--) {
+    const token = self.events[index][1];
+    if (token.type === "labelImage") {
+      labelStart = token;
+      break;
+    }
+
+    // Exit if we’ve walked far enough.
+    if (token.type === 'gfmFootnoteCall' || token.type === "labelLink" || token.type === "label" || token.type === "image" || token.type === "link") {
+      break;
+    }
+  }
+  return start;
+
+  /**
+   * @type {State}
+   */
+  function start(code) {
+    if (!labelStart || !labelStart._balanced) {
+      return nok(code);
+    }
+    const id = normalizeIdentifier(self.sliceSerialize({
+      start: labelStart.end,
+      end: self.now()
+    }));
+    if (id.codePointAt(0) !== 94 || !defined.includes(id.slice(1))) {
+      return nok(code);
+    }
+    effects.enter('gfmFootnoteCallLabelMarker');
+    effects.consume(code);
+    effects.exit('gfmFootnoteCallLabelMarker');
+    return ok(code);
+  }
+}
+
+// To do: remove after micromark update.
+/** @type {Resolver} */
+function resolveToPotentialGfmFootnoteCall(events, context) {
+  let index = events.length;
+  /** @type {Token | undefined} */
+  let labelStart;
+
+  // Find an opening.
+  while (index--) {
+    if (events[index][1].type === "labelImage" && events[index][0] === 'enter') {
+      labelStart = events[index][1];
+      break;
+    }
+  }
+  // Change the `labelImageMarker` to a `data`.
+  events[index + 1][1].type = "data";
+  events[index + 3][1].type = 'gfmFootnoteCallLabelMarker';
+
+  // The whole (without `!`):
+  /** @type {Token} */
+  const call = {
+    type: 'gfmFootnoteCall',
+    start: Object.assign({}, events[index + 3][1].start),
+    end: Object.assign({}, events[events.length - 1][1].end)
+  };
+  // The `^` marker
+  /** @type {Token} */
+  const marker = {
+    type: 'gfmFootnoteCallMarker',
+    start: Object.assign({}, events[index + 3][1].end),
+    end: Object.assign({}, events[index + 3][1].end)
+  };
+  // Increment the end 1 character.
+  marker.end.column++;
+  marker.end.offset++;
+  marker.end._bufferIndex++;
+  /** @type {Token} */
+  const string = {
+    type: 'gfmFootnoteCallString',
+    start: Object.assign({}, marker.end),
+    end: Object.assign({}, events[events.length - 1][1].start)
+  };
+  /** @type {Token} */
+  const chunk = {
+    type: "chunkString",
+    contentType: 'string',
+    start: Object.assign({}, string.start),
+    end: Object.assign({}, string.end)
+  };
+
+  /** @type {Array<Event>} */
+  const replacement = [
+  // Take the `labelImageMarker` (now `data`, the `!`)
+  events[index + 1], events[index + 2], ['enter', call, context],
+  // The `[`
+  events[index + 3], events[index + 4],
+  // The `^`.
+  ['enter', marker, context], ['exit', marker, context],
+  // Everything in between.
+  ['enter', string, context], ['enter', chunk, context], ['exit', chunk, context], ['exit', string, context],
+  // The ending (`]`, properly parsed and labelled).
+  events[events.length - 2], events[events.length - 1], ['exit', call, context]];
+  events.splice(index, events.length - index + 1, ...replacement);
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeGfmFootnoteCall(effects, ok, nok) {
+  const self = this;
+  const defined = self.parser.gfmFootnotes || (self.parser.gfmFootnotes = []);
+  let size = 0;
+  /** @type {boolean} */
+  let data;
+
+  // Note: the implementation of `markdown-rs` is different, because it houses
+  // core *and* extensions in one project.
+  // Therefore, it can include footnote logic inside `label-end`.
+  // We can’t do that, but luckily, we can parse footnotes in a simpler way than
+  // needed for labels.
+  return start;
+
+  /**
+   * Start of footnote label.
+   *
+   * ```markdown
+   * > | a [^b] c
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter('gfmFootnoteCall');
+    effects.enter('gfmFootnoteCallLabelMarker');
+    effects.consume(code);
+    effects.exit('gfmFootnoteCallLabelMarker');
+    return callStart;
+  }
+
+  /**
+   * After `[`, at `^`.
+   *
+   * ```markdown
+   * > | a [^b] c
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function callStart(code) {
+    if (code !== 94) return nok(code);
+    effects.enter('gfmFootnoteCallMarker');
+    effects.consume(code);
+    effects.exit('gfmFootnoteCallMarker');
+    effects.enter('gfmFootnoteCallString');
+    effects.enter('chunkString').contentType = 'string';
+    return callData;
+  }
+
+  /**
+   * In label.
+   *
+   * ```markdown
+   * > | a [^b] c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function callData(code) {
+    if (
+    // Too long.
+    size > 999 ||
+    // Closing brace with nothing.
+    code === 93 && !data ||
+    // Space or tab is not supported by GFM for some reason.
+    // `\n` and `[` not being supported makes sense.
+    code === null || code === 91 || markdownLineEndingOrSpace(code)) {
+      return nok(code);
+    }
+    if (code === 93) {
+      effects.exit('chunkString');
+      const token = effects.exit('gfmFootnoteCallString');
+      if (!defined.includes(normalizeIdentifier(self.sliceSerialize(token)))) {
+        return nok(code);
+      }
+      effects.enter('gfmFootnoteCallLabelMarker');
+      effects.consume(code);
+      effects.exit('gfmFootnoteCallLabelMarker');
+      effects.exit('gfmFootnoteCall');
+      return ok;
+    }
+    if (!markdownLineEndingOrSpace(code)) {
+      data = true;
+    }
+    size++;
+    effects.consume(code);
+    return code === 92 ? callEscape : callData;
+  }
+
+  /**
+   * On character after escape.
+   *
+   * ```markdown
+   * > | a [^b\c] d
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function callEscape(code) {
+    if (code === 91 || code === 92 || code === 93) {
+      effects.consume(code);
+      size++;
+      return callData;
+    }
+    return callData(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeDefinitionStart(effects, ok, nok) {
+  const self = this;
+  const defined = self.parser.gfmFootnotes || (self.parser.gfmFootnotes = []);
+  /** @type {string} */
+  let identifier;
+  let size = 0;
+  /** @type {boolean | undefined} */
+  let data;
+  return start;
+
+  /**
+   * Start of GFM footnote definition.
+   *
+   * ```markdown
+   * > | [^a]: b
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter('gfmFootnoteDefinition')._container = true;
+    effects.enter('gfmFootnoteDefinitionLabel');
+    effects.enter('gfmFootnoteDefinitionLabelMarker');
+    effects.consume(code);
+    effects.exit('gfmFootnoteDefinitionLabelMarker');
+    return labelAtMarker;
+  }
+
+  /**
+   * In label, at caret.
+   *
+   * ```markdown
+   * > | [^a]: b
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelAtMarker(code) {
+    if (code === 94) {
+      effects.enter('gfmFootnoteDefinitionMarker');
+      effects.consume(code);
+      effects.exit('gfmFootnoteDefinitionMarker');
+      effects.enter('gfmFootnoteDefinitionLabelString');
+      effects.enter('chunkString').contentType = 'string';
+      return labelInside;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In label.
+   *
+   * > 👉 **Note**: `cmark-gfm` prevents whitespace from occurring in footnote
+   * > definition labels.
+   *
+   * ```markdown
+   * > | [^a]: b
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelInside(code) {
+    if (
+    // Too long.
+    size > 999 ||
+    // Closing brace with nothing.
+    code === 93 && !data ||
+    // Space or tab is not supported by GFM for some reason.
+    // `\n` and `[` not being supported makes sense.
+    code === null || code === 91 || markdownLineEndingOrSpace(code)) {
+      return nok(code);
+    }
+    if (code === 93) {
+      effects.exit('chunkString');
+      const token = effects.exit('gfmFootnoteDefinitionLabelString');
+      identifier = normalizeIdentifier(self.sliceSerialize(token));
+      effects.enter('gfmFootnoteDefinitionLabelMarker');
+      effects.consume(code);
+      effects.exit('gfmFootnoteDefinitionLabelMarker');
+      effects.exit('gfmFootnoteDefinitionLabel');
+      return labelAfter;
+    }
+    if (!markdownLineEndingOrSpace(code)) {
+      data = true;
+    }
+    size++;
+    effects.consume(code);
+    return code === 92 ? labelEscape : labelInside;
+  }
+
+  /**
+   * After `\`, at a special character.
+   *
+   * > 👉 **Note**: `cmark-gfm` currently does not support escaped brackets:
+   * > <https://github.com/github/cmark-gfm/issues/240>
+   *
+   * ```markdown
+   * > | [^a\*b]: c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelEscape(code) {
+    if (code === 91 || code === 92 || code === 93) {
+      effects.consume(code);
+      size++;
+      return labelInside;
+    }
+    return labelInside(code);
+  }
+
+  /**
+   * After definition label.
+   *
+   * ```markdown
+   * > | [^a]: b
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelAfter(code) {
+    if (code === 58) {
+      effects.enter('definitionMarker');
+      effects.consume(code);
+      effects.exit('definitionMarker');
+      if (!defined.includes(identifier)) {
+        defined.push(identifier);
+      }
+
+      // Any whitespace after the marker is eaten, forming indented code
+      // is not possible.
+      // No space is also fine, just like a block quote marker.
+      return factorySpace(effects, whitespaceAfter, 'gfmFootnoteDefinitionWhitespace');
+    }
+    return nok(code);
+  }
+
+  /**
+   * After definition prefix.
+   *
+   * ```markdown
+   * > | [^a]: b
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function whitespaceAfter(code) {
+    // `markdown-rs` has a wrapping token for the prefix that is closed here.
+    return ok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeDefinitionContinuation(effects, ok, nok) {
+  /// Start of footnote definition continuation.
+  ///
+  /// ```markdown
+  ///   | [^a]: b
+  /// > |     c
+  ///     ^
+  /// ```
+  //
+  // Either a blank line, which is okay, or an indented thing.
+  return effects.check(blankLine, ok, effects.attempt(indent, ok, nok));
+}
+
+/** @type {Exiter} */
+function gfmFootnoteDefinitionEnd(effects) {
+  effects.exit('gfmFootnoteDefinition');
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeIndent(effects, ok, nok) {
+  const self = this;
+  return factorySpace(effects, afterPrefix, 'gfmFootnoteDefinitionIndent', 4 + 1);
+
+  /**
+   * @type {State}
+   */
+  function afterPrefix(code) {
+    const tail = self.events[self.events.length - 1];
+    return tail && tail[1].type === 'gfmFootnoteDefinitionIndent' && tail[2].sliceSerialize(tail[1], true).length === 4 ? ok(code) : nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-gfm-table/lib/edit-map.js
+/**
+ * @import {Event} from 'micromark-util-types'
+ */
+
+// Port of `edit_map.rs` from `markdown-rs`.
+// This should move to `markdown-js` later.
+
+// Deal with several changes in events, batching them together.
+//
+// Preferably, changes should be kept to a minimum.
+// Sometimes, it’s needed to change the list of events, because parsing can be
+// messy, and it helps to expose a cleaner interface of events to the compiler
+// and other users.
+// It can also help to merge many adjacent similar events.
+// And, in other cases, it’s needed to parse subcontent: pass some events
+// through another tokenizer and inject the result.
+
+/**
+ * @typedef {[number, number, Array<Event>]} Change
+ * @typedef {[number, number, number]} Jump
+ */
+
+/**
+ * Tracks a bunch of edits.
+ */
+class EditMap {
+  /**
+   * Create a new edit map.
+   */
+  constructor() {
+    /**
+     * Record of changes.
+     *
+     * @type {Array<Change>}
+     */
+    this.map = [];
+  }
+
+  /**
+   * Create an edit: a remove and/or add at a certain place.
+   *
+   * @param {number} index
+   * @param {number} remove
+   * @param {Array<Event>} add
+   * @returns {undefined}
+   */
+  add(index, remove, add) {
+    addImplementation(this, index, remove, add);
+  }
+
+  // To do: add this when moving to `micromark`.
+  // /**
+  //  * Create an edit: but insert `add` before existing additions.
+  //  *
+  //  * @param {number} index
+  //  * @param {number} remove
+  //  * @param {Array<Event>} add
+  //  * @returns {undefined}
+  //  */
+  // addBefore(index, remove, add) {
+  //   addImplementation(this, index, remove, add, true)
+  // }
+
+  /**
+   * Done, change the events.
+   *
+   * @param {Array<Event>} events
+   * @returns {undefined}
+   */
+  consume(events) {
+    this.map.sort(function (a, b) {
+      return a[0] - b[0];
+    });
+
+    /* c8 ignore next 3 -- `resolve` is never called without tables, so without edits. */
+    if (this.map.length === 0) {
+      return;
+    }
+
+    // To do: if links are added in events, like they are in `markdown-rs`,
+    // this is needed.
+    // // Calculate jumps: where items in the current list move to.
+    // /** @type {Array<Jump>} */
+    // const jumps = []
+    // let index = 0
+    // let addAcc = 0
+    // let removeAcc = 0
+    // while (index < this.map.length) {
+    //   const [at, remove, add] = this.map[index]
+    //   removeAcc += remove
+    //   addAcc += add.length
+    //   jumps.push([at, removeAcc, addAcc])
+    //   index += 1
+    // }
+    //
+    // . shiftLinks(events, jumps)
+
+    let index = this.map.length;
+    /** @type {Array<Array<Event>>} */
+    const vecs = [];
+    while (index > 0) {
+      index -= 1;
+      vecs.push(events.slice(this.map[index][0] + this.map[index][1]), this.map[index][2]);
+
+      // Truncate rest.
+      events.length = this.map[index][0];
+    }
+    vecs.push([...events]);
+    events.length = 0;
+    let slice = vecs.pop();
+    while (slice) {
+      events.push(...slice);
+      slice = vecs.pop();
+    }
+
+    // Truncate everything.
+    this.map.length = 0;
+  }
+}
+
+/**
+ * Create an edit.
+ *
+ * @param {EditMap} editMap
+ * @param {number} at
+ * @param {number} remove
+ * @param {Array<Event>} add
+ * @returns {undefined}
+ */
+function addImplementation(editMap, at, remove, add) {
+  let index = 0;
+
+  /* c8 ignore next 3 -- `resolve` is never called without tables, so without edits. */
+  if (remove === 0 && add.length === 0) {
+    return;
+  }
+  while (index < editMap.map.length) {
+    if (editMap.map[index][0] === at) {
+      editMap.map[index][1] += remove;
+
+      // To do: before not used by tables, use when moving to micromark.
+      // if (before) {
+      //   add.push(...editMap.map[index][2])
+      //   editMap.map[index][2] = add
+      // } else {
+      editMap.map[index][2].push(...add);
+      // }
+
+      return;
+    }
+    index += 1;
+  }
+  editMap.map.push([at, remove, add]);
+}
+
+// /**
+//  * Shift `previous` and `next` links according to `jumps`.
+//  *
+//  * This fixes links in case there are events removed or added between them.
+//  *
+//  * @param {Array<Event>} events
+//  * @param {Array<Jump>} jumps
+//  */
+// function shiftLinks(events, jumps) {
+//   let jumpIndex = 0
+//   let index = 0
+//   let add = 0
+//   let rm = 0
+
+//   while (index < events.length) {
+//     const rmCurr = rm
+
+//     while (jumpIndex < jumps.length && jumps[jumpIndex][0] <= index) {
+//       add = jumps[jumpIndex][2]
+//       rm = jumps[jumpIndex][1]
+//       jumpIndex += 1
+//     }
+
+//     // Ignore items that will be removed.
+//     if (rm > rmCurr) {
+//       index += rm - rmCurr
+//     } else {
+//       // ?
+//       // if let Some(link) = &events[index].link {
+//       //     if let Some(next) = link.next {
+//       //         events[next].link.as_mut().unwrap().previous = Some(index + add - rm);
+//       //         while jumpIndex < jumps.len() && jumps[jumpIndex].0 <= next {
+//       //             add = jumps[jumpIndex].2;
+//       //             rm = jumps[jumpIndex].1;
+//       //             jumpIndex += 1;
+//       //         }
+//       //         events[index].link.as_mut().unwrap().next = Some(next + add - rm);
+//       //         index = next;
+//       //         continue;
+//       //     }
+//       // }
+//       index += 1
+//     }
+//   }
+// }
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-gfm-table/lib/infer.js
+/**
+ * @import {Event} from 'micromark-util-types'
+ */
+
+/**
+ * @typedef {'center' | 'left' | 'none' | 'right'} Align
+ */
+
+/**
+ * Figure out the alignment of a GFM table.
+ *
+ * @param {Readonly<Array<Event>>} events
+ *   List of events.
+ * @param {number} index
+ *   Table enter event.
+ * @returns {Array<Align>}
+ *   List of aligns.
+ */
+function gfmTableAlign(events, index) {
+  let inDelimiterRow = false;
+  /** @type {Array<Align>} */
+  const align = [];
+  while (index < events.length) {
+    const event = events[index];
+    if (inDelimiterRow) {
+      if (event[0] === 'enter') {
+        // Start of alignment value: set a new column.
+        // To do: `markdown-rs` uses `tableDelimiterCellValue`.
+        if (event[1].type === 'tableContent') {
+          align.push(events[index + 1][1].type === 'tableDelimiterMarker' ? 'left' : 'none');
+        }
+      }
+      // Exits:
+      // End of alignment value: change the column.
+      // To do: `markdown-rs` uses `tableDelimiterCellValue`.
+      else if (event[1].type === 'tableContent') {
+        if (events[index - 1][1].type === 'tableDelimiterMarker') {
+          const alignIndex = align.length - 1;
+          align[alignIndex] = align[alignIndex] === 'left' ? 'center' : 'right';
+        }
+      }
+      // Done!
+      else if (event[1].type === 'tableDelimiterRow') {
+        break;
+      }
+    } else if (event[0] === 'enter' && event[1].type === 'tableDelimiterRow') {
+      inDelimiterRow = true;
+    }
+    index += 1;
+  }
+  return align;
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-gfm-table/lib/syntax.js
+/**
+ * @import {Event, Extension, Point, Resolver, State, Token, TokenizeContext, Tokenizer} from 'micromark-util-types'
+ */
+
+/**
+ * @typedef {[number, number, number, number]} Range
+ *   Cell info.
+ *
+ * @typedef {0 | 1 | 2 | 3} RowKind
+ *   Where we are: `1` for head row, `2` for delimiter row, `3` for body row.
+ */
+
+
+
+
+
+
+/**
+ * Create an HTML extension for `micromark` to support GitHub tables syntax.
+ *
+ * @returns {Extension}
+ *   Extension for `micromark` that can be passed in `extensions` to enable GFM
+ *   table syntax.
+ */
+function gfmTable() {
+  return {
+    flow: {
+      null: {
+        name: 'table',
+        tokenize: tokenizeTable,
+        resolveAll: resolveTable
+      }
+    }
+  };
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeTable(effects, ok, nok) {
+  const self = this;
+  let size = 0;
+  let sizeB = 0;
+  /** @type {boolean | undefined} */
+  let seen;
+  return start;
+
+  /**
+   * Start of a GFM table.
+   *
+   * If there is a valid table row or table head before, then we try to parse
+   * another row.
+   * Otherwise, we try to parse a head.
+   *
+   * ```markdown
+   * > | | a |
+   *     ^
+   *   | | - |
+   * > | | b |
+   *     ^
+   * ```
+   * @type {State}
+   */
+  function start(code) {
+    let index = self.events.length - 1;
+    while (index > -1) {
+      const type = self.events[index][1].type;
+      if (type === "lineEnding" ||
+      // Note: markdown-rs uses `whitespace` instead of `linePrefix`
+      type === "linePrefix") index--;else break;
+    }
+    const tail = index > -1 ? self.events[index][1].type : null;
+    const next = tail === 'tableHead' || tail === 'tableRow' ? bodyRowStart : headRowBefore;
+
+    // Don’t allow lazy body rows.
+    if (next === bodyRowStart && self.parser.lazy[self.now().line]) {
+      return nok(code);
+    }
+    return next(code);
+  }
+
+  /**
+   * Before table head row.
+   *
+   * ```markdown
+   * > | | a |
+   *     ^
+   *   | | - |
+   *   | | b |
+   * ```
+   *
+   * @type {State}
+   */
+  function headRowBefore(code) {
+    effects.enter('tableHead');
+    effects.enter('tableRow');
+    return headRowStart(code);
+  }
+
+  /**
+   * Before table head row, after whitespace.
+   *
+   * ```markdown
+   * > | | a |
+   *     ^
+   *   | | - |
+   *   | | b |
+   * ```
+   *
+   * @type {State}
+   */
+  function headRowStart(code) {
+    if (code === 124) {
+      return headRowBreak(code);
+    }
+
+    // To do: micromark-js should let us parse our own whitespace in extensions,
+    // like `markdown-rs`:
+    //
+    // ```js
+    // // 4+ spaces.
+    // if (markdownSpace(code)) {
+    //   return nok(code)
+    // }
+    // ```
+
+    seen = true;
+    // Count the first character, that isn’t a pipe, double.
+    sizeB += 1;
+    return headRowBreak(code);
+  }
+
+  /**
+   * At break in table head row.
+   *
+   * ```markdown
+   * > | | a |
+   *     ^
+   *       ^
+   *         ^
+   *   | | - |
+   *   | | b |
+   * ```
+   *
+   * @type {State}
+   */
+  function headRowBreak(code) {
+    if (code === null) {
+      // Note: in `markdown-rs`, we need to reset, in `micromark-js` we don‘t.
+      return nok(code);
+    }
+    if (markdownLineEnding(code)) {
+      // If anything other than one pipe (ignoring whitespace) was used, it’s fine.
+      if (sizeB > 1) {
+        sizeB = 0;
+        // To do: check if this works.
+        // Feel free to interrupt:
+        self.interrupt = true;
+        effects.exit('tableRow');
+        effects.enter("lineEnding");
+        effects.consume(code);
+        effects.exit("lineEnding");
+        return headDelimiterStart;
+      }
+
+      // Note: in `markdown-rs`, we need to reset, in `micromark-js` we don‘t.
+      return nok(code);
+    }
+    if (markdownSpace(code)) {
+      // To do: check if this is fine.
+      // effects.attempt(State::Next(StateName::GfmTableHeadRowBreak), State::Nok)
+      // State::Retry(space_or_tab(tokenizer))
+      return factorySpace(effects, headRowBreak, "whitespace")(code);
+    }
+    sizeB += 1;
+    if (seen) {
+      seen = false;
+      // Header cell count.
+      size += 1;
+    }
+    if (code === 124) {
+      effects.enter('tableCellDivider');
+      effects.consume(code);
+      effects.exit('tableCellDivider');
+      // Whether a delimiter was seen.
+      seen = true;
+      return headRowBreak;
+    }
+
+    // Anything else is cell data.
+    effects.enter("data");
+    return headRowData(code);
+  }
+
+  /**
+   * In table head row data.
+   *
+   * ```markdown
+   * > | | a |
+   *       ^
+   *   | | - |
+   *   | | b |
+   * ```
+   *
+   * @type {State}
+   */
+  function headRowData(code) {
+    if (code === null || code === 124 || markdownLineEndingOrSpace(code)) {
+      effects.exit("data");
+      return headRowBreak(code);
+    }
+    effects.consume(code);
+    return code === 92 ? headRowEscape : headRowData;
+  }
+
+  /**
+   * In table head row escape.
+   *
+   * ```markdown
+   * > | | a\-b |
+   *         ^
+   *   | | ---- |
+   *   | | c    |
+   * ```
+   *
+   * @type {State}
+   */
+  function headRowEscape(code) {
+    if (code === 92 || code === 124) {
+      effects.consume(code);
+      return headRowData;
+    }
+    return headRowData(code);
+  }
+
+  /**
+   * Before delimiter row.
+   *
+   * ```markdown
+   *   | | a |
+   * > | | - |
+   *     ^
+   *   | | b |
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterStart(code) {
+    // Reset `interrupt`.
+    self.interrupt = false;
+
+    // Note: in `markdown-rs`, we need to handle piercing here too.
+    if (self.parser.lazy[self.now().line]) {
+      return nok(code);
+    }
+    effects.enter('tableDelimiterRow');
+    // Track if we’ve seen a `:` or `|`.
+    seen = false;
+    if (markdownSpace(code)) {
+      return factorySpace(effects, headDelimiterBefore, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code);
+    }
+    return headDelimiterBefore(code);
+  }
+
+  /**
+   * Before delimiter row, after optional whitespace.
+   *
+   * Reused when a `|` is found later, to parse another cell.
+   *
+   * ```markdown
+   *   | | a |
+   * > | | - |
+   *     ^
+   *   | | b |
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterBefore(code) {
+    if (code === 45 || code === 58) {
+      return headDelimiterValueBefore(code);
+    }
+    if (code === 124) {
+      seen = true;
+      // If we start with a pipe, we open a cell marker.
+      effects.enter('tableCellDivider');
+      effects.consume(code);
+      effects.exit('tableCellDivider');
+      return headDelimiterCellBefore;
+    }
+
+    // More whitespace / empty row not allowed at start.
+    return headDelimiterNok(code);
+  }
+
+  /**
+   * After `|`, before delimiter cell.
+   *
+   * ```markdown
+   *   | | a |
+   * > | | - |
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterCellBefore(code) {
+    if (markdownSpace(code)) {
+      return factorySpace(effects, headDelimiterValueBefore, "whitespace")(code);
+    }
+    return headDelimiterValueBefore(code);
+  }
+
+  /**
+   * Before delimiter cell value.
+   *
+   * ```markdown
+   *   | | a |
+   * > | | - |
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterValueBefore(code) {
+    // Align: left.
+    if (code === 58) {
+      sizeB += 1;
+      seen = true;
+      effects.enter('tableDelimiterMarker');
+      effects.consume(code);
+      effects.exit('tableDelimiterMarker');
+      return headDelimiterLeftAlignmentAfter;
+    }
+
+    // Align: none.
+    if (code === 45) {
+      sizeB += 1;
+      // To do: seems weird that this *isn’t* left aligned, but that state is used?
+      return headDelimiterLeftAlignmentAfter(code);
+    }
+    if (code === null || markdownLineEnding(code)) {
+      return headDelimiterCellAfter(code);
+    }
+    return headDelimiterNok(code);
+  }
+
+  /**
+   * After delimiter cell left alignment marker.
+   *
+   * ```markdown
+   *   | | a  |
+   * > | | :- |
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterLeftAlignmentAfter(code) {
+    if (code === 45) {
+      effects.enter('tableDelimiterFiller');
+      return headDelimiterFiller(code);
+    }
+
+    // Anything else is not ok after the left-align colon.
+    return headDelimiterNok(code);
+  }
+
+  /**
+   * In delimiter cell filler.
+   *
+   * ```markdown
+   *   | | a |
+   * > | | - |
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterFiller(code) {
+    if (code === 45) {
+      effects.consume(code);
+      return headDelimiterFiller;
+    }
+
+    // Align is `center` if it was `left`, `right` otherwise.
+    if (code === 58) {
+      seen = true;
+      effects.exit('tableDelimiterFiller');
+      effects.enter('tableDelimiterMarker');
+      effects.consume(code);
+      effects.exit('tableDelimiterMarker');
+      return headDelimiterRightAlignmentAfter;
+    }
+    effects.exit('tableDelimiterFiller');
+    return headDelimiterRightAlignmentAfter(code);
+  }
+
+  /**
+   * After delimiter cell right alignment marker.
+   *
+   * ```markdown
+   *   | |  a |
+   * > | | -: |
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterRightAlignmentAfter(code) {
+    if (markdownSpace(code)) {
+      return factorySpace(effects, headDelimiterCellAfter, "whitespace")(code);
+    }
+    return headDelimiterCellAfter(code);
+  }
+
+  /**
+   * After delimiter cell.
+   *
+   * ```markdown
+   *   | |  a |
+   * > | | -: |
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterCellAfter(code) {
+    if (code === 124) {
+      return headDelimiterBefore(code);
+    }
+    if (code === null || markdownLineEnding(code)) {
+      // Exit when:
+      // * there was no `:` or `|` at all (it’s a thematic break or setext
+      //   underline instead)
+      // * the header cell count is not the delimiter cell count
+      if (!seen || size !== sizeB) {
+        return headDelimiterNok(code);
+      }
+
+      // Note: in markdown-rs`, a reset is needed here.
+      effects.exit('tableDelimiterRow');
+      effects.exit('tableHead');
+      // To do: in `markdown-rs`, resolvers need to be registered manually.
+      // effects.register_resolver(ResolveName::GfmTable)
+      return ok(code);
+    }
+    return headDelimiterNok(code);
+  }
+
+  /**
+   * In delimiter row, at a disallowed byte.
+   *
+   * ```markdown
+   *   | | a |
+   * > | | x |
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function headDelimiterNok(code) {
+    // Note: in `markdown-rs`, we need to reset, in `micromark-js` we don‘t.
+    return nok(code);
+  }
+
+  /**
+   * Before table body row.
+   *
+   * ```markdown
+   *   | | a |
+   *   | | - |
+   * > | | b |
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function bodyRowStart(code) {
+    // Note: in `markdown-rs` we need to manually take care of a prefix,
+    // but in `micromark-js` that is done for us, so if we’re here, we’re
+    // never at whitespace.
+    effects.enter('tableRow');
+    return bodyRowBreak(code);
+  }
+
+  /**
+   * At break in table body row.
+   *
+   * ```markdown
+   *   | | a |
+   *   | | - |
+   * > | | b |
+   *     ^
+   *       ^
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function bodyRowBreak(code) {
+    if (code === 124) {
+      effects.enter('tableCellDivider');
+      effects.consume(code);
+      effects.exit('tableCellDivider');
+      return bodyRowBreak;
+    }
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit('tableRow');
+      return ok(code);
+    }
+    if (markdownSpace(code)) {
+      return factorySpace(effects, bodyRowBreak, "whitespace")(code);
+    }
+
+    // Anything else is cell content.
+    effects.enter("data");
+    return bodyRowData(code);
+  }
+
+  /**
+   * In table body row data.
+   *
+   * ```markdown
+   *   | | a |
+   *   | | - |
+   * > | | b |
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function bodyRowData(code) {
+    if (code === null || code === 124 || markdownLineEndingOrSpace(code)) {
+      effects.exit("data");
+      return bodyRowBreak(code);
+    }
+    effects.consume(code);
+    return code === 92 ? bodyRowEscape : bodyRowData;
+  }
+
+  /**
+   * In table body row escape.
+   *
+   * ```markdown
+   *   | | a    |
+   *   | | ---- |
+   * > | | b\-c |
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function bodyRowEscape(code) {
+    if (code === 92 || code === 124) {
+      effects.consume(code);
+      return bodyRowData;
+    }
+    return bodyRowData(code);
+  }
+}
+
+/** @type {Resolver} */
+
+function resolveTable(events, context) {
+  let index = -1;
+  let inFirstCellAwaitingPipe = true;
+  /** @type {RowKind} */
+  let rowKind = 0;
+  /** @type {Range} */
+  let lastCell = [0, 0, 0, 0];
+  /** @type {Range} */
+  let cell = [0, 0, 0, 0];
+  let afterHeadAwaitingFirstBodyRow = false;
+  let lastTableEnd = 0;
+  /** @type {Token | undefined} */
+  let currentTable;
+  /** @type {Token | undefined} */
+  let currentBody;
+  /** @type {Token | undefined} */
+  let currentCell;
+  const map = new EditMap();
+  while (++index < events.length) {
+    const event = events[index];
+    const token = event[1];
+    if (event[0] === 'enter') {
+      // Start of head.
+      if (token.type === 'tableHead') {
+        afterHeadAwaitingFirstBodyRow = false;
+
+        // Inject previous (body end and) table end.
+        if (lastTableEnd !== 0) {
+          flushTableEnd(map, context, lastTableEnd, currentTable, currentBody);
+          currentBody = undefined;
+          lastTableEnd = 0;
+        }
+
+        // Inject table start.
+        currentTable = {
+          type: 'table',
+          start: Object.assign({}, token.start),
+          // Note: correct end is set later.
+          end: Object.assign({}, token.end)
+        };
+        map.add(index, 0, [['enter', currentTable, context]]);
+      } else if (token.type === 'tableRow' || token.type === 'tableDelimiterRow') {
+        inFirstCellAwaitingPipe = true;
+        currentCell = undefined;
+        lastCell = [0, 0, 0, 0];
+        cell = [0, index + 1, 0, 0];
+
+        // Inject table body start.
+        if (afterHeadAwaitingFirstBodyRow) {
+          afterHeadAwaitingFirstBodyRow = false;
+          currentBody = {
+            type: 'tableBody',
+            start: Object.assign({}, token.start),
+            // Note: correct end is set later.
+            end: Object.assign({}, token.end)
+          };
+          map.add(index, 0, [['enter', currentBody, context]]);
+        }
+        rowKind = token.type === 'tableDelimiterRow' ? 2 : currentBody ? 3 : 1;
+      }
+      // Cell data.
+      else if (rowKind && (token.type === "data" || token.type === 'tableDelimiterMarker' || token.type === 'tableDelimiterFiller')) {
+        inFirstCellAwaitingPipe = false;
+
+        // First value in cell.
+        if (cell[2] === 0) {
+          if (lastCell[1] !== 0) {
+            cell[0] = cell[1];
+            currentCell = flushCell(map, context, lastCell, rowKind, undefined, currentCell);
+            lastCell = [0, 0, 0, 0];
+          }
+          cell[2] = index;
+        }
+      } else if (token.type === 'tableCellDivider') {
+        if (inFirstCellAwaitingPipe) {
+          inFirstCellAwaitingPipe = false;
+        } else {
+          if (lastCell[1] !== 0) {
+            cell[0] = cell[1];
+            currentCell = flushCell(map, context, lastCell, rowKind, undefined, currentCell);
+          }
+          lastCell = cell;
+          cell = [lastCell[1], index, 0, 0];
+        }
+      }
+    }
+    // Exit events.
+    else if (token.type === 'tableHead') {
+      afterHeadAwaitingFirstBodyRow = true;
+      lastTableEnd = index;
+    } else if (token.type === 'tableRow' || token.type === 'tableDelimiterRow') {
+      lastTableEnd = index;
+      if (lastCell[1] !== 0) {
+        cell[0] = cell[1];
+        currentCell = flushCell(map, context, lastCell, rowKind, index, currentCell);
+      } else if (cell[1] !== 0) {
+        currentCell = flushCell(map, context, cell, rowKind, index, currentCell);
+      }
+      rowKind = 0;
+    } else if (rowKind && (token.type === "data" || token.type === 'tableDelimiterMarker' || token.type === 'tableDelimiterFiller')) {
+      cell[3] = index;
+    }
+  }
+  if (lastTableEnd !== 0) {
+    flushTableEnd(map, context, lastTableEnd, currentTable, currentBody);
+  }
+  map.consume(context.events);
+
+  // To do: move this into `html`, when events are exposed there.
+  // That’s what `markdown-rs` does.
+  // That needs updates to `mdast-util-gfm-table`.
+  index = -1;
+  while (++index < context.events.length) {
+    const event = context.events[index];
+    if (event[0] === 'enter' && event[1].type === 'table') {
+      event[1]._align = gfmTableAlign(context.events, index);
+    }
+  }
+  return events;
+}
+
+/**
+ * Generate a cell.
+ *
+ * @param {EditMap} map
+ * @param {Readonly<TokenizeContext>} context
+ * @param {Readonly<Range>} range
+ * @param {RowKind} rowKind
+ * @param {number | undefined} rowEnd
+ * @param {Token | undefined} previousCell
+ * @returns {Token | undefined}
+ */
+// eslint-disable-next-line max-params
+function flushCell(map, context, range, rowKind, rowEnd, previousCell) {
+  // `markdown-rs` uses:
+  // rowKind === 2 ? 'tableDelimiterCell' : 'tableCell'
+  const groupName = rowKind === 1 ? 'tableHeader' : rowKind === 2 ? 'tableDelimiter' : 'tableData';
+  // `markdown-rs` uses:
+  // rowKind === 2 ? 'tableDelimiterCellValue' : 'tableCellText'
+  const valueName = 'tableContent';
+
+  // Insert an exit for the previous cell, if there is one.
+  //
+  // ```markdown
+  // > | | aa | bb | cc |
+  //          ^-- exit
+  //           ^^^^-- this cell
+  // ```
+  if (range[0] !== 0) {
+    previousCell.end = Object.assign({}, getPoint(context.events, range[0]));
+    map.add(range[0], 0, [['exit', previousCell, context]]);
+  }
+
+  // Insert enter of this cell.
+  //
+  // ```markdown
+  // > | | aa | bb | cc |
+  //           ^-- enter
+  //           ^^^^-- this cell
+  // ```
+  const now = getPoint(context.events, range[1]);
+  previousCell = {
+    type: groupName,
+    start: Object.assign({}, now),
+    // Note: correct end is set later.
+    end: Object.assign({}, now)
+  };
+  map.add(range[1], 0, [['enter', previousCell, context]]);
+
+  // Insert text start at first data start and end at last data end, and
+  // remove events between.
+  //
+  // ```markdown
+  // > | | aa | bb | cc |
+  //            ^-- enter
+  //             ^-- exit
+  //           ^^^^-- this cell
+  // ```
+  if (range[2] !== 0) {
+    const relatedStart = getPoint(context.events, range[2]);
+    const relatedEnd = getPoint(context.events, range[3]);
+    /** @type {Token} */
+    const valueToken = {
+      type: valueName,
+      start: Object.assign({}, relatedStart),
+      end: Object.assign({}, relatedEnd)
+    };
+    map.add(range[2], 0, [['enter', valueToken, context]]);
+    if (rowKind !== 2) {
+      // Fix positional info on remaining events
+      const start = context.events[range[2]];
+      const end = context.events[range[3]];
+      start[1].end = Object.assign({}, end[1].end);
+      start[1].type = "chunkText";
+      start[1].contentType = "text";
+
+      // Remove if needed.
+      if (range[3] > range[2] + 1) {
+        const a = range[2] + 1;
+        const b = range[3] - range[2] - 1;
+        map.add(a, b, []);
+      }
+    }
+    map.add(range[3] + 1, 0, [['exit', valueToken, context]]);
+  }
+
+  // Insert an exit for the last cell, if at the row end.
+  //
+  // ```markdown
+  // > | | aa | bb | cc |
+  //                    ^-- exit
+  //               ^^^^^^-- this cell (the last one contains two “between” parts)
+  // ```
+  if (rowEnd !== undefined) {
+    previousCell.end = Object.assign({}, getPoint(context.events, rowEnd));
+    map.add(rowEnd, 0, [['exit', previousCell, context]]);
+    previousCell = undefined;
+  }
+  return previousCell;
+}
+
+/**
+ * Generate table end (and table body end).
+ *
+ * @param {Readonly<EditMap>} map
+ * @param {Readonly<TokenizeContext>} context
+ * @param {number} index
+ * @param {Token} table
+ * @param {Token | undefined} tableBody
+ */
+// eslint-disable-next-line max-params
+function flushTableEnd(map, context, index, table, tableBody) {
+  /** @type {Array<Event>} */
+  const exits = [];
+  const related = getPoint(context.events, index);
+  if (tableBody) {
+    tableBody.end = Object.assign({}, related);
+    exits.push(['exit', tableBody, context]);
+  }
+  table.end = Object.assign({}, related);
+  exits.push(['exit', table, context]);
+  map.add(index + 1, 0, exits);
+}
+
+/**
+ * @param {Readonly<Array<Event>>} events
+ * @param {number} index
+ * @returns {Readonly<Point>}
+ */
+function getPoint(events, index) {
+  const event = events[index];
+  const side = event[0] === 'enter' ? 'start' : 'end';
+  return event[1][side];
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-math/lib/math-flow.js
+/**
+ * @import {Construct, State, TokenizeContext, Tokenizer} from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const mathFlow = {
+  tokenize: tokenizeMathFenced,
+  concrete: true,
+  name: 'mathFlow'
+};
+
+/** @type {Construct} */
+const nonLazyContinuation = {
+  tokenize: tokenizeNonLazyContinuation,
+  partial: true
+};
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeMathFenced(effects, ok, nok) {
+  const self = this;
+  const tail = self.events[self.events.length - 1];
+  const initialSize = tail && tail[1].type === "linePrefix" ? tail[2].sliceSerialize(tail[1], true).length : 0;
+  let sizeOpen = 0;
+  return start;
+
+  /**
+   * Start of math.
+   *
+   * ```markdown
+   * > | $$
+   *     ^
+   *   | \frac{1}{2}
+   *   | $$
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter('mathFlow');
+    effects.enter('mathFlowFence');
+    effects.enter('mathFlowFenceSequence');
+    return sequenceOpen(code);
+  }
+
+  /**
+   * In opening fence sequence.
+   *
+   * ```markdown
+   * > | $$
+   *      ^
+   *   | \frac{1}{2}
+   *   | $$
+   * ```
+   *
+   * @type {State}
+   */
+  function sequenceOpen(code) {
+    if (code === 36) {
+      effects.consume(code);
+      sizeOpen++;
+      return sequenceOpen;
+    }
+    if (sizeOpen < 2) {
+      return nok(code);
+    }
+    effects.exit('mathFlowFenceSequence');
+    return factorySpace(effects, metaBefore, "whitespace")(code);
+  }
+
+  /**
+   * In opening fence, before meta.
+   *
+   * ```markdown
+   * > | $$asciimath
+   *       ^
+   *   | x < y
+   *   | $$
+   * ```
+   *
+   * @type {State}
+   */
+
+  function metaBefore(code) {
+    if (code === null || markdownLineEnding(code)) {
+      return metaAfter(code);
+    }
+    effects.enter('mathFlowFenceMeta');
+    effects.enter("chunkString", {
+      contentType: "string"
+    });
+    return meta(code);
+  }
+
+  /**
+   * In meta.
+   *
+   * ```markdown
+   * > | $$asciimath
+   *        ^
+   *   | x < y
+   *   | $$
+   * ```
+   *
+   * @type {State}
+   */
+  function meta(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("chunkString");
+      effects.exit('mathFlowFenceMeta');
+      return metaAfter(code);
+    }
+    if (code === 36) {
+      return nok(code);
+    }
+    effects.consume(code);
+    return meta;
+  }
+
+  /**
+   * After meta.
+   *
+   * ```markdown
+   * > | $$
+   *       ^
+   *   | \frac{1}{2}
+   *   | $$
+   * ```
+   *
+   * @type {State}
+   */
+  function metaAfter(code) {
+    // Guaranteed to be eol/eof.
+    effects.exit('mathFlowFence');
+    if (self.interrupt) {
+      return ok(code);
+    }
+    return effects.attempt(nonLazyContinuation, beforeNonLazyContinuation, after)(code);
+  }
+
+  /**
+   * After eol/eof in math, at a non-lazy closing fence or content.
+   *
+   * ```markdown
+   *   | $$
+   * > | \frac{1}{2}
+   *     ^
+   * > | $$
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function beforeNonLazyContinuation(code) {
+    return effects.attempt({
+      tokenize: tokenizeClosingFence,
+      partial: true
+    }, after, contentStart)(code);
+  }
+
+  /**
+   * Before math content, definitely not before a closing fence.
+   *
+   * ```markdown
+   *   | $$
+   * > | \frac{1}{2}
+   *     ^
+   *   | $$
+   * ```
+   *
+   * @type {State}
+   */
+  function contentStart(code) {
+    return (initialSize ? factorySpace(effects, beforeContentChunk, "linePrefix", initialSize + 1) : beforeContentChunk)(code);
+  }
+
+  /**
+   * Before math content, after optional prefix.
+   *
+   * ```markdown
+   *   | $$
+   * > | \frac{1}{2}
+   *     ^
+   *   | $$
+   * ```
+   *
+   * @type {State}
+   */
+  function beforeContentChunk(code) {
+    if (code === null) {
+      return after(code);
+    }
+    if (markdownLineEnding(code)) {
+      return effects.attempt(nonLazyContinuation, beforeNonLazyContinuation, after)(code);
+    }
+    effects.enter('mathFlowValue');
+    return contentChunk(code);
+  }
+
+  /**
+   * In math content.
+   *
+   * ```markdown
+   *   | $$
+   * > | \frac{1}{2}
+   *      ^
+   *   | $$
+   * ```
+   *
+   * @type {State}
+   */
+  function contentChunk(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit('mathFlowValue');
+      return beforeContentChunk(code);
+    }
+    effects.consume(code);
+    return contentChunk;
+  }
+
+  /**
+   * After math (ha!).
+   *
+   * ```markdown
+   *   | $$
+   *   | \frac{1}{2}
+   * > | $$
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    effects.exit('mathFlow');
+    return ok(code);
+  }
+
+  /** @type {Tokenizer} */
+  function tokenizeClosingFence(effects, ok, nok) {
+    let size = 0;
+    /**
+     * Before closing fence, at optional whitespace.
+     *
+     * ```markdown
+     *   | $$
+     *   | \frac{1}{2}
+     * > | $$
+     *     ^
+     * ```
+     */
+    return factorySpace(effects, beforeSequenceClose, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4);
+
+    /**
+     * In closing fence, after optional whitespace, at sequence.
+     *
+     * ```markdown
+     *   | $$
+     *   | \frac{1}{2}
+     * > | $$
+     *     ^
+     * ```
+     *
+     * @type {State}
+     */
+    function beforeSequenceClose(code) {
+      effects.enter('mathFlowFence');
+      effects.enter('mathFlowFenceSequence');
+      return sequenceClose(code);
+    }
+
+    /**
+     * In closing fence sequence.
+     *
+     * ```markdown
+     *   | $$
+     *   | \frac{1}{2}
+     * > | $$
+     *      ^
+     * ```
+     *
+     * @type {State}
+     */
+    function sequenceClose(code) {
+      if (code === 36) {
+        size++;
+        effects.consume(code);
+        return sequenceClose;
+      }
+      if (size < sizeOpen) {
+        return nok(code);
+      }
+      effects.exit('mathFlowFenceSequence');
+      return factorySpace(effects, afterSequenceClose, "whitespace")(code);
+    }
+
+    /**
+     * After closing fence sequence, after optional whitespace.
+     *
+     * ```markdown
+     *   | $$
+     *   | \frac{1}{2}
+     * > | $$
+     *       ^
+     * ```
+     *
+     * @type {State}
+     */
+    function afterSequenceClose(code) {
+      if (code === null || markdownLineEnding(code)) {
+        effects.exit('mathFlowFence');
+        return ok(code);
+      }
+      return nok(code);
+    }
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeNonLazyContinuation(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    if (code === null) {
+      return ok(code);
+    }
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return lineStart;
+  }
+
+  /** @type {State} */
+  function lineStart(code) {
+    return self.parser.lazy[self.now().line] ? nok(code) : ok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-math/lib/math-text.js
+/**
+ * @import {Options} from 'micromark-extension-math'
+ * @import {Construct, Previous, Resolver, State, Token, TokenizeContext, Tokenizer} from 'micromark-util-types'
+ */
+
+// To do: next major: clean spaces in HTML compiler.
+// This has to be coordinated together with `mdast-util-math`.
+
+
+/**
+ * @param {Options | null | undefined} [options={}]
+ *   Configuration (default: `{}`).
+ * @returns {Construct}
+ *   Construct.
+ */
+function mathText(options) {
+  const options_ = options || {};
+  let single = options_.singleDollarTextMath;
+  if (single === null || single === undefined) {
+    single = true;
+  }
+  return {
+    tokenize: tokenizeMathText,
+    resolve: resolveMathText,
+    previous: math_text_previous,
+    name: 'mathText'
+  };
+
+  /**
+   * @this {TokenizeContext}
+   * @type {Tokenizer}
+   */
+  function tokenizeMathText(effects, ok, nok) {
+    const self = this;
+    let sizeOpen = 0;
+    /** @type {number} */
+    let size;
+    /** @type {Token} */
+    let token;
+    return start;
+
+    /**
+     * Start of math (text).
+     *
+     * ```markdown
+     * > | $a$
+     *     ^
+     * > | \$a$
+     *      ^
+     * ```
+     *
+     * @type {State}
+     */
+    function start(code) {
+      effects.enter('mathText');
+      effects.enter('mathTextSequence');
+      return sequenceOpen(code);
+    }
+
+    /**
+     * In opening sequence.
+     *
+     * ```markdown
+     * > | $a$
+     *     ^
+     * ```
+     *
+     * @type {State}
+     */
+
+    function sequenceOpen(code) {
+      if (code === 36) {
+        effects.consume(code);
+        sizeOpen++;
+        return sequenceOpen;
+      }
+
+      // Not enough markers in the sequence.
+      if (sizeOpen < 2 && !single) {
+        return nok(code);
+      }
+      effects.exit('mathTextSequence');
+      return between(code);
+    }
+
+    /**
+     * Between something and something else.
+     *
+     * ```markdown
+     * > | $a$
+     *      ^^
+     * ```
+     *
+     * @type {State}
+     */
+    function between(code) {
+      if (code === null) {
+        return nok(code);
+      }
+      if (code === 36) {
+        token = effects.enter('mathTextSequence');
+        size = 0;
+        return sequenceClose(code);
+      }
+
+      // Tabs don’t work, and virtual spaces don’t make sense.
+      if (code === 32) {
+        effects.enter('space');
+        effects.consume(code);
+        effects.exit('space');
+        return between;
+      }
+      if (markdownLineEnding(code)) {
+        effects.enter("lineEnding");
+        effects.consume(code);
+        effects.exit("lineEnding");
+        return between;
+      }
+
+      // Data.
+      effects.enter('mathTextData');
+      return data(code);
+    }
+
+    /**
+     * In data.
+     *
+     * ```markdown
+     * > | $a$
+     *      ^
+     * ```
+     *
+     * @type {State}
+     */
+    function data(code) {
+      if (code === null || code === 32 || code === 36 || markdownLineEnding(code)) {
+        effects.exit('mathTextData');
+        return between(code);
+      }
+      effects.consume(code);
+      return data;
+    }
+
+    /**
+     * In closing sequence.
+     *
+     * ```markdown
+     * > | `a`
+     *       ^
+     * ```
+     *
+     * @type {State}
+     */
+
+    function sequenceClose(code) {
+      // More.
+      if (code === 36) {
+        effects.consume(code);
+        size++;
+        return sequenceClose;
+      }
+
+      // Done!
+      if (size === sizeOpen) {
+        effects.exit('mathTextSequence');
+        effects.exit('mathText');
+        return ok(code);
+      }
+
+      // More or less accents: mark as data.
+      token.type = 'mathTextData';
+      return data(code);
+    }
+  }
+}
+
+/** @type {Resolver} */
+function resolveMathText(events) {
+  let tailExitIndex = events.length - 4;
+  let headEnterIndex = 3;
+  /** @type {number} */
+  let index;
+  /** @type {number | undefined} */
+  let enter;
+
+  // If we start and end with an EOL or a space.
+  if ((events[headEnterIndex][1].type === "lineEnding" || events[headEnterIndex][1].type === 'space') && (events[tailExitIndex][1].type === "lineEnding" || events[tailExitIndex][1].type === 'space')) {
+    index = headEnterIndex;
+
+    // And we have data.
+    while (++index < tailExitIndex) {
+      if (events[index][1].type === 'mathTextData') {
+        // Then we have padding.
+        events[tailExitIndex][1].type = 'mathTextPadding';
+        events[headEnterIndex][1].type = 'mathTextPadding';
+        headEnterIndex += 2;
+        tailExitIndex -= 2;
+        break;
+      }
+    }
+  }
+
+  // Merge adjacent spaces and data.
+  index = headEnterIndex - 1;
+  tailExitIndex++;
+  while (++index <= tailExitIndex) {
+    if (enter === undefined) {
+      if (index !== tailExitIndex && events[index][1].type !== "lineEnding") {
+        enter = index;
+      }
+    } else if (index === tailExitIndex || events[index][1].type === "lineEnding") {
+      events[enter][1].type = 'mathTextData';
+      if (index !== enter + 2) {
+        events[enter][1].end = events[index - 1][1].end;
+        events.splice(enter + 2, index - enter - 2);
+        tailExitIndex -= index - enter - 2;
+        index = enter + 2;
+      }
+      enter = undefined;
+    }
+  }
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Previous}
+ */
+function math_text_previous(code) {
+  // If there is a previous code, there will always be a tail.
+  return code !== 36 || this.events[this.events.length - 1][1].type === "characterEscape";
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-extension-math/lib/syntax.js
+/**
+ * @import {Options} from 'micromark-extension-math'
+ * @import {Extension} from 'micromark-util-types'
+ */
+
+
+
+
+/**
+ * Create an extension for `micromark` to enable math syntax.
+ *
+ * @param {Options | null | undefined} [options={}]
+ *   Configuration (default: `{}`).
+ * @returns {Extension}
+ *   Extension for `micromark` that can be passed in `extensions`, to
+ *   enable math syntax.
+ */
+function math(options) {
+  return {
+    flow: {
+      [36]: mathFlow
+    },
+    text: {
+      [36]: mathText(options)
+    }
+  };
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-util-chunked/index.js
+/**
+ * Like `Array#splice`, but smarter for giant arrays.
+ *
+ * `Array#splice` takes all items to be inserted as individual argument which
+ * causes a stack overflow in V8 when trying to insert 100k items for instance.
+ *
+ * Otherwise, this does not return the removed items, and takes `items` as an
+ * array instead of rest parameters.
+ *
+ * @template {unknown} T
+ *   Item type.
+ * @param {Array<T>} list
+ *   List to operate on.
+ * @param {number} start
+ *   Index to remove/insert at (can be negative).
+ * @param {number} remove
+ *   Number of items to remove.
+ * @param {Array<T>} items
+ *   Items to inject into `list`.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function splice(list, start, remove, items) {
+  const end = list.length;
+  let chunkStart = 0;
+  /** @type {Array<unknown>} */
+  let parameters;
+
+  // Make start between zero and `end` (included).
+  if (start < 0) {
+    start = -start > end ? 0 : end + start;
+  } else {
+    start = start > end ? end : start;
+  }
+  remove = remove > 0 ? remove : 0;
+
+  // No need to chunk the items if there’s only a couple (10k) items.
+  if (items.length < 10000) {
+    parameters = Array.from(items);
+    parameters.unshift(start, remove);
+    // @ts-expect-error Hush, it’s fine.
+    list.splice(...parameters);
+  } else {
+    // Delete `remove` items starting from `start`
+    if (remove) list.splice(start, remove);
+
+    // Insert the items in chunks to not cause stack overflows.
+    while (chunkStart < items.length) {
+      parameters = items.slice(chunkStart, chunkStart + 10000);
+      parameters.unshift(start, 0);
+      // @ts-expect-error Hush, it’s fine.
+      list.splice(...parameters);
+      chunkStart += 10000;
+      start += 10000;
+    }
+  }
+}
+
+/**
+ * Append `items` (an array) at the end of `list` (another array).
+ * When `list` was empty, returns `items` instead.
+ *
+ * This prevents a potentially expensive operation when `list` is empty,
+ * and adds items in batches to prevent V8 from hanging.
+ *
+ * @template {unknown} T
+ *   Item type.
+ * @param {Array<T>} list
+ *   List to operate on.
+ * @param {Array<T>} items
+ *   Items to add to `list`.
+ * @returns {Array<T>}
+ *   Either `list` or `items`.
+ */
+function push(list, items) {
+  if (list.length > 0) {
+    splice(list, list.length, 0, items);
+    return list;
+  }
+  return items;
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-util-combine-extensions/index.js
+/**
+ * @import {
+ *   Extension,
+ *   Handles,
+ *   HtmlExtension,
+ *   NormalizedExtension
+ * } from 'micromark-util-types'
+ */
+
+
+
+const micromark_util_combine_extensions_hasOwnProperty = {}.hasOwnProperty
+
+/**
+ * Combine multiple syntax extensions into one.
+ *
+ * @param {ReadonlyArray<Extension>} extensions
+ *   List of syntax extensions.
+ * @returns {NormalizedExtension}
+ *   A single combined extension.
+ */
+function combineExtensions(extensions) {
+  /** @type {NormalizedExtension} */
+  const all = {}
+  let index = -1
+
+  while (++index < extensions.length) {
+    syntaxExtension(all, extensions[index])
+  }
+
+  return all
+}
+
+/**
+ * Merge `extension` into `all`.
+ *
+ * @param {NormalizedExtension} all
+ *   Extension to merge into.
+ * @param {Extension} extension
+ *   Extension to merge.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function syntaxExtension(all, extension) {
+  /** @type {keyof Extension} */
+  let hook
+
+  for (hook in extension) {
+    const maybe = micromark_util_combine_extensions_hasOwnProperty.call(all, hook) ? all[hook] : undefined
+    /** @type {Record<string, unknown>} */
+    const left = maybe || (all[hook] = {})
+    /** @type {Record<string, unknown> | undefined} */
+    const right = extension[hook]
+    /** @type {string} */
+    let code
+
+    if (right) {
+      for (code in right) {
+        if (!micromark_util_combine_extensions_hasOwnProperty.call(left, code)) left[code] = []
+        const value = right[code]
+        constructs(
+          // @ts-expect-error Looks like a list.
+          left[code],
+          Array.isArray(value) ? value : value ? [value] : []
+        )
+      }
+    }
+  }
+}
+
+/**
+ * Merge `list` into `existing` (both lists of constructs).
+ * Mutates `existing`.
+ *
+ * @param {Array<unknown>} existing
+ *   List of constructs to merge into.
+ * @param {Array<unknown>} list
+ *   List of constructs to merge.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function constructs(existing, list) {
+  let index = -1
+  /** @type {Array<unknown>} */
+  const before = []
+
+  while (++index < list.length) {
+    // @ts-expect-error Looks like an object.
+    ;(list[index].add === 'after' ? existing : before).push(list[index])
+  }
+
+  splice(existing, 0, 0, before)
+}
+
+/**
+ * Combine multiple HTML extensions into one.
+ *
+ * @param {ReadonlyArray<HtmlExtension>} htmlExtensions
+ *   List of HTML extensions.
+ * @returns {HtmlExtension}
+ *   Single combined HTML extension.
+ */
+function combineHtmlExtensions(htmlExtensions) {
+  /** @type {HtmlExtension} */
+  const handlers = {}
+  let index = -1
+
+  while (++index < htmlExtensions.length) {
+    htmlExtension(handlers, htmlExtensions[index])
+  }
+
+  return handlers
+}
+
+/**
+ * Merge `extension` into `all`.
+ *
+ * @param {HtmlExtension} all
+ *   Extension to merge into.
+ * @param {HtmlExtension} extension
+ *   Extension to merge.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function htmlExtension(all, extension) {
+  /** @type {keyof HtmlExtension} */
+  let hook
+
+  for (hook in extension) {
+    const maybe = micromark_util_combine_extensions_hasOwnProperty.call(all, hook) ? all[hook] : undefined
+    const left = maybe || (all[hook] = {})
+    const right = extension[hook]
+    /** @type {keyof Handles} */
+    let type
+
+    if (right) {
+      for (type in right) {
+        // @ts-expect-error assume document vs regular handler are managed correctly.
+        left[type] = right[type]
+      }
+    }
+  }
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/initialize/content.js
+/**
+ * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
+ * @typedef {import('micromark-util-types').Initializer} Initializer
+ * @typedef {import('micromark-util-types').State} State
+ * @typedef {import('micromark-util-types').Token} Token
+ * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
+ */
+
+
+
+/** @type {InitialConstruct} */
+const content = {
+  tokenize: initializeContent
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Initializer}
+ */
+function initializeContent(effects) {
+  const contentStart = effects.attempt(
+    this.parser.constructs.contentInitial,
+    afterContentStartConstruct,
+    paragraphInitial
+  )
+  /** @type {Token} */
+  let previous
+  return contentStart
+
+  /** @type {State} */
+  function afterContentStartConstruct(code) {
+    if (code === null) {
+      effects.consume(code)
+      return
+    }
+    effects.enter('lineEnding')
+    effects.consume(code)
+    effects.exit('lineEnding')
+    return factorySpace(effects, contentStart, 'linePrefix')
+  }
+
+  /** @type {State} */
+  function paragraphInitial(code) {
+    effects.enter('paragraph')
+    return lineStart(code)
+  }
+
+  /** @type {State} */
+  function lineStart(code) {
+    const token = effects.enter('chunkText', {
+      contentType: 'text',
+      previous
+    })
+    if (previous) {
+      previous.next = token
+    }
+    previous = token
+    return data(code)
+  }
+
+  /** @type {State} */
+  function data(code) {
+    if (code === null) {
+      effects.exit('chunkText')
+      effects.exit('paragraph')
+      effects.consume(code)
+      return
+    }
+    if (markdownLineEnding(code)) {
+      effects.consume(code)
+      effects.exit('chunkText')
+      return lineStart
+    }
+
+    // Data.
+    effects.consume(code)
+    return data
+  }
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/initialize/document.js
+/**
+ * @typedef {import('micromark-util-types').Construct} Construct
+ * @typedef {import('micromark-util-types').ContainerState} ContainerState
+ * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
+ * @typedef {import('micromark-util-types').Initializer} Initializer
+ * @typedef {import('micromark-util-types').Point} Point
+ * @typedef {import('micromark-util-types').State} State
+ * @typedef {import('micromark-util-types').Token} Token
+ * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
+ * @typedef {import('micromark-util-types').Tokenizer} Tokenizer
+ */
+
+/**
+ * @typedef {[Construct, ContainerState]} StackItem
+ */
+
+
+
+
+/** @type {InitialConstruct} */
+const document_document = {
+  tokenize: initializeDocument
+}
+
+/** @type {Construct} */
+const containerConstruct = {
+  tokenize: tokenizeContainer
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Initializer}
+ */
+function initializeDocument(effects) {
+  const self = this
+  /** @type {Array<StackItem>} */
+  const stack = []
+  let continued = 0
+  /** @type {TokenizeContext | undefined} */
+  let childFlow
+  /** @type {Token | undefined} */
+  let childToken
+  /** @type {number} */
+  let lineStartOffset
+  return start
+
+  /** @type {State} */
+  function start(code) {
+    // First we iterate through the open blocks, starting with the root
+    // document, and descending through last children down to the last open
+    // block.
+    // Each block imposes a condition that the line must satisfy if the block is
+    // to remain open.
+    // For example, a block quote requires a `>` character.
+    // A paragraph requires a non-blank line.
+    // In this phase we may match all or just some of the open blocks.
+    // But we cannot close unmatched blocks yet, because we may have a lazy
+    // continuation line.
+    if (continued < stack.length) {
+      const item = stack[continued]
+      self.containerState = item[1]
+      return effects.attempt(
+        item[0].continuation,
+        documentContinue,
+        checkNewContainers
+      )(code)
+    }
+
+    // Done.
+    return checkNewContainers(code)
+  }
+
+  /** @type {State} */
+  function documentContinue(code) {
+    continued++
+
+    // Note: this field is called `_closeFlow` but it also closes containers.
+    // Perhaps a good idea to rename it but it’s already used in the wild by
+    // extensions.
+    if (self.containerState._closeFlow) {
+      self.containerState._closeFlow = undefined
+      if (childFlow) {
+        closeFlow()
+      }
+
+      // Note: this algorithm for moving events around is similar to the
+      // algorithm when dealing with lazy lines in `writeToChild`.
+      const indexBeforeExits = self.events.length
+      let indexBeforeFlow = indexBeforeExits
+      /** @type {Point | undefined} */
+      let point
+
+      // Find the flow chunk.
+      while (indexBeforeFlow--) {
+        if (
+          self.events[indexBeforeFlow][0] === 'exit' &&
+          self.events[indexBeforeFlow][1].type === 'chunkFlow'
+        ) {
+          point = self.events[indexBeforeFlow][1].end
+          break
+        }
+      }
+      exitContainers(continued)
+
+      // Fix positions.
+      let index = indexBeforeExits
+      while (index < self.events.length) {
+        self.events[index][1].end = Object.assign({}, point)
+        index++
+      }
+
+      // Inject the exits earlier (they’re still also at the end).
+      splice(
+        self.events,
+        indexBeforeFlow + 1,
+        0,
+        self.events.slice(indexBeforeExits)
+      )
+
+      // Discard the duplicate exits.
+      self.events.length = index
+      return checkNewContainers(code)
+    }
+    return start(code)
+  }
+
+  /** @type {State} */
+  function checkNewContainers(code) {
+    // Next, after consuming the continuation markers for existing blocks, we
+    // look for new block starts (e.g. `>` for a block quote).
+    // If we encounter a new block start, we close any blocks unmatched in
+    // step 1 before creating the new block as a child of the last matched
+    // block.
+    if (continued === stack.length) {
+      // No need to `check` whether there’s a container, of `exitContainers`
+      // would be moot.
+      // We can instead immediately `attempt` to parse one.
+      if (!childFlow) {
+        return documentContinued(code)
+      }
+
+      // If we have concrete content, such as block HTML or fenced code,
+      // we can’t have containers “pierce” into them, so we can immediately
+      // start.
+      if (childFlow.currentConstruct && childFlow.currentConstruct.concrete) {
+        return flowStart(code)
+      }
+
+      // If we do have flow, it could still be a blank line,
+      // but we’d be interrupting it w/ a new container if there’s a current
+      // construct.
+      // To do: next major: remove `_gfmTableDynamicInterruptHack` (no longer
+      // needed in micromark-extension-gfm-table@1.0.6).
+      self.interrupt = Boolean(
+        childFlow.currentConstruct && !childFlow._gfmTableDynamicInterruptHack
+      )
+    }
+
+    // Check if there is a new container.
+    self.containerState = {}
+    return effects.check(
+      containerConstruct,
+      thereIsANewContainer,
+      thereIsNoNewContainer
+    )(code)
+  }
+
+  /** @type {State} */
+  function thereIsANewContainer(code) {
+    if (childFlow) closeFlow()
+    exitContainers(continued)
+    return documentContinued(code)
+  }
+
+  /** @type {State} */
+  function thereIsNoNewContainer(code) {
+    self.parser.lazy[self.now().line] = continued !== stack.length
+    lineStartOffset = self.now().offset
+    return flowStart(code)
+  }
+
+  /** @type {State} */
+  function documentContinued(code) {
+    // Try new containers.
+    self.containerState = {}
+    return effects.attempt(
+      containerConstruct,
+      containerContinue,
+      flowStart
+    )(code)
+  }
+
+  /** @type {State} */
+  function containerContinue(code) {
+    continued++
+    stack.push([self.currentConstruct, self.containerState])
+    // Try another.
+    return documentContinued(code)
+  }
+
+  /** @type {State} */
+  function flowStart(code) {
+    if (code === null) {
+      if (childFlow) closeFlow()
+      exitContainers(0)
+      effects.consume(code)
+      return
+    }
+    childFlow = childFlow || self.parser.flow(self.now())
+    effects.enter('chunkFlow', {
+      contentType: 'flow',
+      previous: childToken,
+      _tokenizer: childFlow
+    })
+    return flowContinue(code)
+  }
+
+  /** @type {State} */
+  function flowContinue(code) {
+    if (code === null) {
+      writeToChild(effects.exit('chunkFlow'), true)
+      exitContainers(0)
+      effects.consume(code)
+      return
+    }
+    if (markdownLineEnding(code)) {
+      effects.consume(code)
+      writeToChild(effects.exit('chunkFlow'))
+      // Get ready for the next line.
+      continued = 0
+      self.interrupt = undefined
+      return start
+    }
+    effects.consume(code)
+    return flowContinue
+  }
+
+  /**
+   * @param {Token} token
+   * @param {boolean | undefined} [eof]
+   * @returns {undefined}
+   */
+  function writeToChild(token, eof) {
+    const stream = self.sliceStream(token)
+    if (eof) stream.push(null)
+    token.previous = childToken
+    if (childToken) childToken.next = token
+    childToken = token
+    childFlow.defineSkip(token.start)
+    childFlow.write(stream)
+
+    // Alright, so we just added a lazy line:
+    //
+    // ```markdown
+    // > a
+    // b.
+    //
+    // Or:
+    //
+    // > ~~~c
+    // d
+    //
+    // Or:
+    //
+    // > | e |
+    // f
+    // ```
+    //
+    // The construct in the second example (fenced code) does not accept lazy
+    // lines, so it marked itself as done at the end of its first line, and
+    // then the content construct parses `d`.
+    // Most constructs in markdown match on the first line: if the first line
+    // forms a construct, a non-lazy line can’t “unmake” it.
+    //
+    // The construct in the third example is potentially a GFM table, and
+    // those are *weird*.
+    // It *could* be a table, from the first line, if the following line
+    // matches a condition.
+    // In this case, that second line is lazy, which “unmakes” the first line
+    // and turns the whole into one content block.
+    //
+    // We’ve now parsed the non-lazy and the lazy line, and can figure out
+    // whether the lazy line started a new flow block.
+    // If it did, we exit the current containers between the two flow blocks.
+    if (self.parser.lazy[token.start.line]) {
+      let index = childFlow.events.length
+      while (index--) {
+        if (
+          // The token starts before the line ending…
+          childFlow.events[index][1].start.offset < lineStartOffset &&
+          // …and either is not ended yet…
+          (!childFlow.events[index][1].end ||
+            // …or ends after it.
+            childFlow.events[index][1].end.offset > lineStartOffset)
+        ) {
+          // Exit: there’s still something open, which means it’s a lazy line
+          // part of something.
+          return
+        }
+      }
+
+      // Note: this algorithm for moving events around is similar to the
+      // algorithm when closing flow in `documentContinue`.
+      const indexBeforeExits = self.events.length
+      let indexBeforeFlow = indexBeforeExits
+      /** @type {boolean | undefined} */
+      let seen
+      /** @type {Point | undefined} */
+      let point
+
+      // Find the previous chunk (the one before the lazy line).
+      while (indexBeforeFlow--) {
+        if (
+          self.events[indexBeforeFlow][0] === 'exit' &&
+          self.events[indexBeforeFlow][1].type === 'chunkFlow'
+        ) {
+          if (seen) {
+            point = self.events[indexBeforeFlow][1].end
+            break
+          }
+          seen = true
+        }
+      }
+      exitContainers(continued)
+
+      // Fix positions.
+      index = indexBeforeExits
+      while (index < self.events.length) {
+        self.events[index][1].end = Object.assign({}, point)
+        index++
+      }
+
+      // Inject the exits earlier (they’re still also at the end).
+      splice(
+        self.events,
+        indexBeforeFlow + 1,
+        0,
+        self.events.slice(indexBeforeExits)
+      )
+
+      // Discard the duplicate exits.
+      self.events.length = index
+    }
+  }
+
+  /**
+   * @param {number} size
+   * @returns {undefined}
+   */
+  function exitContainers(size) {
+    let index = stack.length
+
+    // Exit open containers.
+    while (index-- > size) {
+      const entry = stack[index]
+      self.containerState = entry[1]
+      entry[0].exit.call(self, effects)
+    }
+    stack.length = size
+  }
+  function closeFlow() {
+    childFlow.write([null])
+    childToken = undefined
+    childFlow = undefined
+    self.containerState._closeFlow = undefined
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Tokenizer}
+ */
+function tokenizeContainer(effects, ok, nok) {
+  // Always populated by defaults.
+
+  return factorySpace(
+    effects,
+    effects.attempt(this.parser.constructs.document, ok, nok),
+    'linePrefix',
+    this.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4
+  )
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark-util-subtokenize/lib/splice-buffer.js
+/**
+ * Some of the internal operations of micromark do lots of editing
+ * operations on very large arrays. This runs into problems with two
+ * properties of most circa-2020 JavaScript interpreters:
+ *
+ *  - Array-length modifications at the high end of an array (push/pop) are
+ *    expected to be common and are implemented in (amortized) time
+ *    proportional to the number of elements added or removed, whereas
+ *    other operations (shift/unshift and splice) are much less efficient.
+ *  - Function arguments are passed on the stack, so adding tens of thousands
+ *    of elements to an array with `arr.push(...newElements)` will frequently
+ *    cause stack overflows. (see <https://stackoverflow.com/questions/22123769/rangeerror-maximum-call-stack-size-exceeded-why>)
+ *
+ * SpliceBuffers are an implementation of gap buffers, which are a
+ * generalization of the "queue made of two stacks" idea. The splice buffer
+ * maintains a cursor, and moving the cursor has cost proportional to the
+ * distance the cursor moves, but inserting, deleting, or splicing in
+ * new information at the cursor is as efficient as the push/pop operation.
+ * This allows for an efficient sequence of splices (or pushes, pops, shifts,
+ * or unshifts) as long such edits happen at the same part of the array or
+ * generally sweep through the array from the beginning to the end.
+ *
+ * The interface for splice buffers also supports large numbers of inputs by
+ * passing a single array argument rather passing multiple arguments on the
+ * function call stack.
+ *
+ * @template T
+ *   Item type.
+ */
+class SpliceBuffer {
+  /**
+   * @param {ReadonlyArray<T> | null | undefined} [initial]
+   *   Initial items (optional).
+   * @returns
+   *   Splice buffer.
+   */
+  constructor(initial) {
+    /** @type {Array<T>} */
+    this.left = initial ? [...initial] : [];
+    /** @type {Array<T>} */
+    this.right = [];
+  }
+
+  /**
+   * Array access;
+   * does not move the cursor.
+   *
+   * @param {number} index
+   *   Index.
+   * @return {T}
+   *   Item.
+   */
+  get(index) {
+    if (index < 0 || index >= this.left.length + this.right.length) {
+      throw new RangeError('Cannot access index `' + index + '` in a splice buffer of size `' + (this.left.length + this.right.length) + '`');
+    }
+    if (index < this.left.length) return this.left[index];
+    return this.right[this.right.length - index + this.left.length - 1];
+  }
+
+  /**
+   * The length of the splice buffer, one greater than the largest index in the
+   * array.
+   */
+  get length() {
+    return this.left.length + this.right.length;
+  }
+
+  /**
+   * Remove and return `list[0]`;
+   * moves the cursor to `0`.
+   *
+   * @returns {T | undefined}
+   *   Item, optional.
+   */
+  shift() {
+    this.setCursor(0);
+    return this.right.pop();
+  }
+
+  /**
+   * Slice the buffer to get an array;
+   * does not move the cursor.
+   *
+   * @param {number} start
+   *   Start.
+   * @param {number | null | undefined} [end]
+   *   End (optional).
+   * @returns {Array<T>}
+   *   Array of items.
+   */
+  slice(start, end) {
+    /** @type {number} */
+    const stop = end === null || end === undefined ? Number.POSITIVE_INFINITY : end;
+    if (stop < this.left.length) {
+      return this.left.slice(start, stop);
+    }
+    if (start > this.left.length) {
+      return this.right.slice(this.right.length - stop + this.left.length, this.right.length - start + this.left.length).reverse();
+    }
+    return this.left.slice(start).concat(this.right.slice(this.right.length - stop + this.left.length).reverse());
+  }
+
+  /**
+   * Mimics the behavior of Array.prototype.splice() except for the change of
+   * interface necessary to avoid segfaults when patching in very large arrays.
+   *
+   * This operation moves cursor is moved to `start` and results in the cursor
+   * placed after any inserted items.
+   *
+   * @param {number} start
+   *   Start;
+   *   zero-based index at which to start changing the array;
+   *   negative numbers count backwards from the end of the array and values
+   *   that are out-of bounds are clamped to the appropriate end of the array.
+   * @param {number | null | undefined} [deleteCount=0]
+   *   Delete count (default: `0`);
+   *   maximum number of elements to delete, starting from start.
+   * @param {Array<T> | null | undefined} [items=[]]
+   *   Items to include in place of the deleted items (default: `[]`).
+   * @return {Array<T>}
+   *   Any removed items.
+   */
+  splice(start, deleteCount, items) {
+    /** @type {number} */
+    const count = deleteCount || 0;
+    this.setCursor(Math.trunc(start));
+    const removed = this.right.splice(this.right.length - count, Number.POSITIVE_INFINITY);
+    if (items) chunkedPush(this.left, items);
+    return removed.reverse();
+  }
+
+  /**
+   * Remove and return the highest-numbered item in the array, so
+   * `list[list.length - 1]`;
+   * Moves the cursor to `length`.
+   *
+   * @returns {T | undefined}
+   *   Item, optional.
+   */
+  pop() {
+    this.setCursor(Number.POSITIVE_INFINITY);
+    return this.left.pop();
+  }
+
+  /**
+   * Inserts a single item to the high-numbered side of the array;
+   * moves the cursor to `length`.
+   *
+   * @param {T} item
+   *   Item.
+   * @returns {undefined}
+   *   Nothing.
+   */
+  push(item) {
+    this.setCursor(Number.POSITIVE_INFINITY);
+    this.left.push(item);
+  }
+
+  /**
+   * Inserts many items to the high-numbered side of the array.
+   * Moves the cursor to `length`.
+   *
+   * @param {Array<T>} items
+   *   Items.
+   * @returns {undefined}
+   *   Nothing.
+   */
+  pushMany(items) {
+    this.setCursor(Number.POSITIVE_INFINITY);
+    chunkedPush(this.left, items);
+  }
+
+  /**
+   * Inserts a single item to the low-numbered side of the array;
+   * Moves the cursor to `0`.
+   *
+   * @param {T} item
+   *   Item.
+   * @returns {undefined}
+   *   Nothing.
+   */
+  unshift(item) {
+    this.setCursor(0);
+    this.right.push(item);
+  }
+
+  /**
+   * Inserts many items to the low-numbered side of the array;
+   * moves the cursor to `0`.
+   *
+   * @param {Array<T>} items
+   *   Items.
+   * @returns {undefined}
+   *   Nothing.
+   */
+  unshiftMany(items) {
+    this.setCursor(0);
+    chunkedPush(this.right, items.reverse());
+  }
+
+  /**
+   * Move the cursor to a specific position in the array. Requires
+   * time proportional to the distance moved.
+   *
+   * If `n < 0`, the cursor will end up at the beginning.
+   * If `n > length`, the cursor will end up at the end.
+   *
+   * @param {number} n
+   *   Position.
+   * @return {undefined}
+   *   Nothing.
+   */
+  setCursor(n) {
+    if (n === this.left.length || n > this.left.length && this.right.length === 0 || n < 0 && this.left.length === 0) return;
+    if (n < this.left.length) {
+      // Move cursor to the this.left
+      const removed = this.left.splice(n, Number.POSITIVE_INFINITY);
+      chunkedPush(this.right, removed.reverse());
+    } else {
+      // Move cursor to the this.right
+      const removed = this.right.splice(this.left.length + this.right.length - n, Number.POSITIVE_INFINITY);
+      chunkedPush(this.left, removed.reverse());
+    }
+  }
+}
+
+/**
+ * Avoid stack overflow by pushing items onto the stack in segments
+ *
+ * @template T
+ *   Item type.
+ * @param {Array<T>} list
+ *   List to inject into.
+ * @param {ReadonlyArray<T>} right
+ *   Items to inject.
+ * @return {undefined}
+ *   Nothing.
+ */
+function chunkedPush(list, right) {
+  /** @type {number} */
+  let chunkStart = 0;
+  if (right.length < 10000) {
+    list.push(...right);
+  } else {
+    while (chunkStart < right.length) {
+      list.push(...right.slice(chunkStart, chunkStart + 10000));
+      chunkStart += 10000;
+    }
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-util-subtokenize/index.js
+/**
+ * @import {Chunk, Event, Token} from 'micromark-util-types'
+ */
+
+
+
+
+// Hidden API exposed for testing.
+
+
+/**
+ * Tokenize subcontent.
+ *
+ * @param {Array<Event>} eventsArray
+ *   List of events.
+ * @returns {boolean}
+ *   Whether subtokens were found.
+ */
+// eslint-disable-next-line complexity
+function subtokenize(eventsArray) {
+  /** @type {Record<string, number>} */
+  const jumps = {};
+  let index = -1;
+  /** @type {Event} */
+  let event;
+  /** @type {number | undefined} */
+  let lineIndex;
+  /** @type {number} */
+  let otherIndex;
+  /** @type {Event} */
+  let otherEvent;
+  /** @type {Array<Event>} */
+  let parameters;
+  /** @type {Array<Event>} */
+  let subevents;
+  /** @type {boolean | undefined} */
+  let more;
+  const events = new SpliceBuffer(eventsArray);
+  while (++index < events.length) {
+    while (index in jumps) {
+      index = jumps[index];
+    }
+    event = events.get(index);
+
+    // Add a hook for the GFM tasklist extension, which needs to know if text
+    // is in the first content of a list item.
+    if (index && event[1].type === "chunkFlow" && events.get(index - 1)[1].type === "listItemPrefix") {
+      subevents = event[1]._tokenizer.events;
+      otherIndex = 0;
+      if (otherIndex < subevents.length && subevents[otherIndex][1].type === "lineEndingBlank") {
+        otherIndex += 2;
+      }
+      if (otherIndex < subevents.length && subevents[otherIndex][1].type === "content") {
+        while (++otherIndex < subevents.length) {
+          if (subevents[otherIndex][1].type === "content") {
+            break;
+          }
+          if (subevents[otherIndex][1].type === "chunkText") {
+            subevents[otherIndex][1]._isInFirstContentOfListItem = true;
+            otherIndex++;
+          }
+        }
+      }
+    }
+
+    // Enter.
+    if (event[0] === 'enter') {
+      if (event[1].contentType) {
+        Object.assign(jumps, subcontent(events, index));
+        index = jumps[index];
+        more = true;
+      }
+    }
+    // Exit.
+    else if (event[1]._container) {
+      otherIndex = index;
+      lineIndex = undefined;
+      while (otherIndex--) {
+        otherEvent = events.get(otherIndex);
+        if (otherEvent[1].type === "lineEnding" || otherEvent[1].type === "lineEndingBlank") {
+          if (otherEvent[0] === 'enter') {
+            if (lineIndex) {
+              events.get(lineIndex)[1].type = "lineEndingBlank";
+            }
+            otherEvent[1].type = "lineEnding";
+            lineIndex = otherIndex;
+          }
+        } else {
+          break;
+        }
+      }
+      if (lineIndex) {
+        // Fix position.
+        event[1].end = {
+          ...events.get(lineIndex)[1].start
+        };
+
+        // Switch container exit w/ line endings.
+        parameters = events.slice(lineIndex, index);
+        parameters.unshift(event);
+        events.splice(lineIndex, index - lineIndex + 1, parameters);
+      }
+    }
+  }
+
+  // The changes to the `events` buffer must be copied back into the eventsArray
+  splice(eventsArray, 0, Number.POSITIVE_INFINITY, events.slice(0));
+  return !more;
+}
+
+/**
+ * Tokenize embedded tokens.
+ *
+ * @param {SpliceBuffer<Event>} events
+ *   Events.
+ * @param {number} eventIndex
+ *   Index.
+ * @returns {Record<string, number>}
+ *   Gaps.
+ */
+function subcontent(events, eventIndex) {
+  const token = events.get(eventIndex)[1];
+  const context = events.get(eventIndex)[2];
+  let startPosition = eventIndex - 1;
+  /** @type {Array<number>} */
+  const startPositions = [];
+  const tokenizer = token._tokenizer || context.parser[token.contentType](token.start);
+  const childEvents = tokenizer.events;
+  /** @type {Array<[number, number]>} */
+  const jumps = [];
+  /** @type {Record<string, number>} */
+  const gaps = {};
+  /** @type {Array<Chunk>} */
+  let stream;
+  /** @type {Token | undefined} */
+  let previous;
+  let index = -1;
+  /** @type {Token | undefined} */
+  let current = token;
+  let adjust = 0;
+  let start = 0;
+  const breaks = [start];
+
+  // Loop forward through the linked tokens to pass them in order to the
+  // subtokenizer.
+  while (current) {
+    // Find the position of the event for this token.
+    while (events.get(++startPosition)[1] !== current) {
+      // Empty.
+    }
+    startPositions.push(startPosition);
+    if (!current._tokenizer) {
+      stream = context.sliceStream(current);
+      if (!current.next) {
+        stream.push(null);
+      }
+      if (previous) {
+        tokenizer.defineSkip(current.start);
+      }
+      if (current._isInFirstContentOfListItem) {
+        tokenizer._gfmTasklistFirstContentOfListItem = true;
+      }
+      tokenizer.write(stream);
+      if (current._isInFirstContentOfListItem) {
+        tokenizer._gfmTasklistFirstContentOfListItem = undefined;
+      }
+    }
+
+    // Unravel the next token.
+    previous = current;
+    current = current.next;
+  }
+
+  // Now, loop back through all events (and linked tokens), to figure out which
+  // parts belong where.
+  current = token;
+  while (++index < childEvents.length) {
+    if (
+    // Find a void token that includes a break.
+    childEvents[index][0] === 'exit' && childEvents[index - 1][0] === 'enter' && childEvents[index][1].type === childEvents[index - 1][1].type && childEvents[index][1].start.line !== childEvents[index][1].end.line) {
+      start = index + 1;
+      breaks.push(start);
+      // Help GC.
+      current._tokenizer = undefined;
+      current.previous = undefined;
+      current = current.next;
+    }
+  }
+
+  // Help GC.
+  tokenizer.events = [];
+
+  // If there’s one more token (which is the cases for lines that end in an
+  // EOF), that’s perfect: the last point we found starts it.
+  // If there isn’t then make sure any remaining content is added to it.
+  if (current) {
+    // Help GC.
+    current._tokenizer = undefined;
+    current.previous = undefined;
+  } else {
+    breaks.pop();
+  }
+
+  // Now splice the events from the subtokenizer into the current events,
+  // moving back to front so that splice indices aren’t affected.
+  index = breaks.length;
+  while (index--) {
+    const slice = childEvents.slice(breaks[index], breaks[index + 1]);
+    const start = startPositions.pop();
+    jumps.push([start, start + slice.length - 1]);
+    events.splice(start, 2, slice);
+  }
+  jumps.reverse();
+  index = -1;
+  while (++index < jumps.length) {
+    gaps[adjust + jumps[index][0]] = adjust + jumps[index][1];
+    adjust += jumps[index][1] - jumps[index][0] - 1;
+  }
+  return gaps;
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/content.js
+/**
+ * @import {
+ *   Construct,
+ *   Resolver,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer,
+ *   Token
+ * } from 'micromark-util-types'
+ */
+
+
+
+
+/**
+ * No name because it must not be turned off.
+ * @type {Construct}
+ */
+const content_content = {
+  resolve: resolveContent,
+  tokenize: tokenizeContent
+};
+
+/** @type {Construct} */
+const continuationConstruct = {
+  partial: true,
+  tokenize: tokenizeContinuation
+};
+
+/**
+ * Content is transparent: it’s parsed right now. That way, definitions are also
+ * parsed right now: before text in paragraphs (specifically, media) are parsed.
+ *
+ * @type {Resolver}
+ */
+function resolveContent(events) {
+  subtokenize(events);
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeContent(effects, ok) {
+  /** @type {Token | undefined} */
+  let previous;
+  return chunkStart;
+
+  /**
+   * Before a content chunk.
+   *
+   * ```markdown
+   * > | abc
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function chunkStart(code) {
+    effects.enter("content");
+    previous = effects.enter("chunkContent", {
+      contentType: "content"
+    });
+    return chunkInside(code);
+  }
+
+  /**
+   * In a content chunk.
+   *
+   * ```markdown
+   * > | abc
+   *     ^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function chunkInside(code) {
+    if (code === null) {
+      return contentEnd(code);
+    }
+
+    // To do: in `markdown-rs`, each line is parsed on its own, and everything
+    // is stitched together resolving.
+    if (markdownLineEnding(code)) {
+      return effects.check(continuationConstruct, contentContinue, contentEnd)(code);
+    }
+
+    // Data.
+    effects.consume(code);
+    return chunkInside;
+  }
+
+  /**
+   *
+   *
+   * @type {State}
+   */
+  function contentEnd(code) {
+    effects.exit("chunkContent");
+    effects.exit("content");
+    return ok(code);
+  }
+
+  /**
+   *
+   *
+   * @type {State}
+   */
+  function contentContinue(code) {
+    effects.consume(code);
+    effects.exit("chunkContent");
+    previous.next = effects.enter("chunkContent", {
+      contentType: "content",
+      previous
+    });
+    previous = previous.next;
+    return chunkInside;
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeContinuation(effects, ok, nok) {
+  const self = this;
+  return startLookahead;
+
+  /**
+   *
+   *
+   * @type {State}
+   */
+  function startLookahead(code) {
+    effects.exit("chunkContent");
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return factorySpace(effects, prefixed, "linePrefix");
+  }
+
+  /**
+   *
+   *
+   * @type {State}
+   */
+  function prefixed(code) {
+    if (code === null || markdownLineEnding(code)) {
+      return nok(code);
+    }
+
+    // Always populated by defaults.
+
+    const tail = self.events[self.events.length - 1];
+    if (!self.parser.constructs.disable.null.includes('codeIndented') && tail && tail[1].type === "linePrefix" && tail[2].sliceSerialize(tail[1], true).length >= 4) {
+      return ok(code);
+    }
+    return effects.interrupt(self.parser.constructs.flow, nok, ok)(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/initialize/flow.js
+/**
+ * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
+ * @typedef {import('micromark-util-types').Initializer} Initializer
+ * @typedef {import('micromark-util-types').State} State
+ * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
+ */
+
+
+
+
+/** @type {InitialConstruct} */
+const flow = {
+  tokenize: initializeFlow
+}
+
+/**
+ * @this {TokenizeContext}
+ * @type {Initializer}
+ */
+function initializeFlow(effects) {
+  const self = this
+  const initial = effects.attempt(
+    // Try to parse a blank line.
+    blankLine,
+    atBlankEnding,
+    // Try to parse initial flow (essentially, only code).
+    effects.attempt(
+      this.parser.constructs.flowInitial,
+      afterConstruct,
+      factorySpace(
+        effects,
+        effects.attempt(
+          this.parser.constructs.flow,
+          afterConstruct,
+          effects.attempt(content_content, afterConstruct)
+        ),
+        'linePrefix'
+      )
+    )
+  )
+  return initial
+
+  /** @type {State} */
+  function atBlankEnding(code) {
+    if (code === null) {
+      effects.consume(code)
+      return
+    }
+    effects.enter('lineEndingBlank')
+    effects.consume(code)
+    effects.exit('lineEndingBlank')
+    self.currentConstruct = undefined
+    return initial
+  }
+
+  /** @type {State} */
+  function afterConstruct(code) {
+    if (code === null) {
+      effects.consume(code)
+      return
+    }
+    effects.enter('lineEnding')
+    effects.consume(code)
+    effects.exit('lineEnding')
+    self.currentConstruct = undefined
+    return initial
+  }
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/initialize/text.js
+/**
+ * @typedef {import('micromark-util-types').Code} Code
+ * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
+ * @typedef {import('micromark-util-types').Initializer} Initializer
+ * @typedef {import('micromark-util-types').Resolver} Resolver
+ * @typedef {import('micromark-util-types').State} State
+ * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
+ */
+
+const resolver = {
+  resolveAll: createResolver()
+}
+const string = initializeFactory('string')
+const text_text = initializeFactory('text')
+
+/**
+ * @param {'string' | 'text'} field
+ * @returns {InitialConstruct}
+ */
+function initializeFactory(field) {
+  return {
+    tokenize: initializeText,
+    resolveAll: createResolver(
+      field === 'text' ? resolveAllLineSuffixes : undefined
+    )
+  }
+
+  /**
+   * @this {TokenizeContext}
+   * @type {Initializer}
+   */
+  function initializeText(effects) {
+    const self = this
+    const constructs = this.parser.constructs[field]
+    const text = effects.attempt(constructs, start, notText)
+    return start
+
+    /** @type {State} */
+    function start(code) {
+      return atBreak(code) ? text(code) : notText(code)
+    }
+
+    /** @type {State} */
+    function notText(code) {
+      if (code === null) {
+        effects.consume(code)
+        return
+      }
+      effects.enter('data')
+      effects.consume(code)
+      return data
+    }
+
+    /** @type {State} */
+    function data(code) {
+      if (atBreak(code)) {
+        effects.exit('data')
+        return text(code)
+      }
+
+      // Data.
+      effects.consume(code)
+      return data
+    }
+
+    /**
+     * @param {Code} code
+     * @returns {boolean}
+     */
+    function atBreak(code) {
+      if (code === null) {
+        return true
+      }
+      const list = constructs[code]
+      let index = -1
+      if (list) {
+        // Always populated by defaults.
+
+        while (++index < list.length) {
+          const item = list[index]
+          if (!item.previous || item.previous.call(self, self.previous)) {
+            return true
+          }
+        }
+      }
+      return false
+    }
+  }
+}
+
+/**
+ * @param {Resolver | undefined} [extraResolver]
+ * @returns {Resolver}
+ */
+function createResolver(extraResolver) {
+  return resolveAllText
+
+  /** @type {Resolver} */
+  function resolveAllText(events, context) {
+    let index = -1
+    /** @type {number | undefined} */
+    let enter
+
+    // A rather boring computation (to merge adjacent `data` events) which
+    // improves mm performance by 29%.
+    while (++index <= events.length) {
+      if (enter === undefined) {
+        if (events[index] && events[index][1].type === 'data') {
+          enter = index
+          index++
+        }
+      } else if (!events[index] || events[index][1].type !== 'data') {
+        // Don’t do anything if there is one data token.
+        if (index !== enter + 2) {
+          events[enter][1].end = events[index - 1][1].end
+          events.splice(enter + 2, index - enter - 2)
+          index = enter + 2
+        }
+        enter = undefined
+      }
+    }
+    return extraResolver ? extraResolver(events, context) : events
+  }
+}
+
+/**
+ * A rather ugly set of instructions which again looks at chunks in the input
+ * stream.
+ * The reason to do this here is that it is *much* faster to parse in reverse.
+ * And that we can’t hook into `null` to split the line suffix before an EOF.
+ * To do: figure out if we can make this into a clean utility, or even in core.
+ * As it will be useful for GFMs literal autolink extension (and maybe even
+ * tables?)
+ *
+ * @type {Resolver}
+ */
+function resolveAllLineSuffixes(events, context) {
+  let eventIndex = 0 // Skip first.
+
+  while (++eventIndex <= events.length) {
+    if (
+      (eventIndex === events.length ||
+        events[eventIndex][1].type === 'lineEnding') &&
+      events[eventIndex - 1][1].type === 'data'
+    ) {
+      const data = events[eventIndex - 1][1]
+      const chunks = context.sliceStream(data)
+      let index = chunks.length
+      let bufferIndex = -1
+      let size = 0
+      /** @type {boolean | undefined} */
+      let tabs
+      while (index--) {
+        const chunk = chunks[index]
+        if (typeof chunk === 'string') {
+          bufferIndex = chunk.length
+          while (chunk.charCodeAt(bufferIndex - 1) === 32) {
+            size++
+            bufferIndex--
+          }
+          if (bufferIndex) break
+          bufferIndex = -1
+        }
+        // Number
+        else if (chunk === -2) {
+          tabs = true
+          size++
+        } else if (chunk === -1) {
+          // Empty
+        } else {
+          // Replacement character, exit.
+          index++
+          break
+        }
+      }
+      if (size) {
+        const token = {
+          type:
+            eventIndex === events.length || tabs || size < 2
+              ? 'lineSuffix'
+              : 'hardBreakTrailing',
+          start: {
+            line: data.end.line,
+            column: data.end.column - size,
+            offset: data.end.offset - size,
+            _index: data.start._index + index,
+            _bufferIndex: index
+              ? bufferIndex
+              : data.start._bufferIndex + bufferIndex
+          },
+          end: Object.assign({}, data.end)
+        }
+        data.end = Object.assign({}, token.start)
+        if (data.start.offset === data.end.offset) {
+          Object.assign(data, token)
+        } else {
+          events.splice(
+            eventIndex,
+            0,
+            ['enter', token, context],
+            ['exit', token, context]
+          )
+          eventIndex += 2
+        }
+      }
+      eventIndex++
+    }
+  }
+  return events
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark-util-resolve-all/index.js
+/**
+ * @import {Event, Resolver, TokenizeContext} from 'micromark-util-types'
+ */
+
+/**
+ * Call all `resolveAll`s.
+ *
+ * @param {ReadonlyArray<{resolveAll?: Resolver | undefined}>} constructs
+ *   List of constructs, optionally with `resolveAll`s.
+ * @param {Array<Event>} events
+ *   List of events.
+ * @param {TokenizeContext} context
+ *   Context used by `tokenize`.
+ * @returns {Array<Event>}
+ *   Changed events.
+ */
+function resolveAll(constructs, events, context) {
+  /** @type {Array<Resolver>} */
+  const called = []
+  let index = -1
+
+  while (++index < constructs.length) {
+    const resolve = constructs[index].resolveAll
+
+    if (resolve && !called.includes(resolve)) {
+      events = resolve(events, context)
+      called.push(resolve)
+    }
+  }
+
+  return events
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/create-tokenizer.js
+/**
+ * @typedef {import('micromark-util-types').Chunk} Chunk
+ * @typedef {import('micromark-util-types').Code} Code
+ * @typedef {import('micromark-util-types').Construct} Construct
+ * @typedef {import('micromark-util-types').ConstructRecord} ConstructRecord
+ * @typedef {import('micromark-util-types').Effects} Effects
+ * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
+ * @typedef {import('micromark-util-types').ParseContext} ParseContext
+ * @typedef {import('micromark-util-types').Point} Point
+ * @typedef {import('micromark-util-types').State} State
+ * @typedef {import('micromark-util-types').Token} Token
+ * @typedef {import('micromark-util-types').TokenType} TokenType
+ * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
+ */
+
+/**
+ * @callback Restore
+ * @returns {undefined}
+ *
+ * @typedef Info
+ * @property {Restore} restore
+ * @property {number} from
+ *
+ * @callback ReturnHandle
+ *   Handle a successful run.
+ * @param {Construct} construct
+ * @param {Info} info
+ * @returns {undefined}
+ */
+
+
+
+
+/**
+ * Create a tokenizer.
+ * Tokenizers deal with one type of data (e.g., containers, flow, text).
+ * The parser is the object dealing with it all.
+ * `initialize` works like other constructs, except that only its `tokenize`
+ * function is used, in which case it doesn’t receive an `ok` or `nok`.
+ * `from` can be given to set the point before the first character, although
+ * when further lines are indented, they must be set with `defineSkip`.
+ *
+ * @param {ParseContext} parser
+ * @param {InitialConstruct} initialize
+ * @param {Omit<Point, '_bufferIndex' | '_index'> | undefined} [from]
+ * @returns {TokenizeContext}
+ */
+function createTokenizer(parser, initialize, from) {
+  /** @type {Point} */
+  let point = Object.assign(
+    from
+      ? Object.assign({}, from)
+      : {
+          line: 1,
+          column: 1,
+          offset: 0
+        },
+    {
+      _index: 0,
+      _bufferIndex: -1
+    }
+  )
+  /** @type {Record<string, number>} */
+  const columnStart = {}
+  /** @type {Array<Construct>} */
+  const resolveAllConstructs = []
+  /** @type {Array<Chunk>} */
+  let chunks = []
+  /** @type {Array<Token>} */
+  let stack = []
+  /** @type {boolean | undefined} */
+  let consumed = true
+
+  /**
+   * Tools used for tokenizing.
+   *
+   * @type {Effects}
+   */
+  const effects = {
+    consume,
+    enter,
+    exit,
+    attempt: constructFactory(onsuccessfulconstruct),
+    check: constructFactory(onsuccessfulcheck),
+    interrupt: constructFactory(onsuccessfulcheck, {
+      interrupt: true
+    })
+  }
+
+  /**
+   * State and tools for resolving and serializing.
+   *
+   * @type {TokenizeContext}
+   */
+  const context = {
+    previous: null,
+    code: null,
+    containerState: {},
+    events: [],
+    parser,
+    sliceStream,
+    sliceSerialize,
+    now,
+    defineSkip,
+    write
+  }
+
+  /**
+   * The state function.
+   *
+   * @type {State | undefined}
+   */
+  let state = initialize.tokenize.call(context, effects)
+
+  /**
+   * Track which character we expect to be consumed, to catch bugs.
+   *
+   * @type {Code}
+   */
+  let expectedCode
+  if (initialize.resolveAll) {
+    resolveAllConstructs.push(initialize)
+  }
+  return context
+
+  /** @type {TokenizeContext['write']} */
+  function write(slice) {
+    chunks = push(chunks, slice)
+    main()
+
+    // Exit if we’re not done, resolve might change stuff.
+    if (chunks[chunks.length - 1] !== null) {
+      return []
+    }
+    addResult(initialize, 0)
+
+    // Otherwise, resolve, and exit.
+    context.events = resolveAll(resolveAllConstructs, context.events, context)
+    return context.events
+  }
+
+  //
+  // Tools.
+  //
+
+  /** @type {TokenizeContext['sliceSerialize']} */
+  function sliceSerialize(token, expandTabs) {
+    return serializeChunks(sliceStream(token), expandTabs)
+  }
+
+  /** @type {TokenizeContext['sliceStream']} */
+  function sliceStream(token) {
+    return sliceChunks(chunks, token)
+  }
+
+  /** @type {TokenizeContext['now']} */
+  function now() {
+    // This is a hot path, so we clone manually instead of `Object.assign({}, point)`
+    const {line, column, offset, _index, _bufferIndex} = point
+    return {
+      line,
+      column,
+      offset,
+      _index,
+      _bufferIndex
+    }
+  }
+
+  /** @type {TokenizeContext['defineSkip']} */
+  function defineSkip(value) {
+    columnStart[value.line] = value.column
+    accountForPotentialSkip()
+  }
+
+  //
+  // State management.
+  //
+
+  /**
+   * Main loop (note that `_index` and `_bufferIndex` in `point` are modified by
+   * `consume`).
+   * Here is where we walk through the chunks, which either include strings of
+   * several characters, or numerical character codes.
+   * The reason to do this in a loop instead of a call is so the stack can
+   * drain.
+   *
+   * @returns {undefined}
+   */
+  function main() {
+    /** @type {number} */
+    let chunkIndex
+    while (point._index < chunks.length) {
+      const chunk = chunks[point._index]
+
+      // If we’re in a buffer chunk, loop through it.
+      if (typeof chunk === 'string') {
+        chunkIndex = point._index
+        if (point._bufferIndex < 0) {
+          point._bufferIndex = 0
+        }
+        while (
+          point._index === chunkIndex &&
+          point._bufferIndex < chunk.length
+        ) {
+          go(chunk.charCodeAt(point._bufferIndex))
+        }
+      } else {
+        go(chunk)
+      }
+    }
+  }
+
+  /**
+   * Deal with one code.
+   *
+   * @param {Code} code
+   * @returns {undefined}
+   */
+  function go(code) {
+    consumed = undefined
+    expectedCode = code
+    state = state(code)
+  }
+
+  /** @type {Effects['consume']} */
+  function consume(code) {
+    if (markdownLineEnding(code)) {
+      point.line++
+      point.column = 1
+      point.offset += code === -3 ? 2 : 1
+      accountForPotentialSkip()
+    } else if (code !== -1) {
+      point.column++
+      point.offset++
+    }
+
+    // Not in a string chunk.
+    if (point._bufferIndex < 0) {
+      point._index++
+    } else {
+      point._bufferIndex++
+
+      // At end of string chunk.
+      // @ts-expect-error Points w/ non-negative `_bufferIndex` reference
+      // strings.
+      if (point._bufferIndex === chunks[point._index].length) {
+        point._bufferIndex = -1
+        point._index++
+      }
+    }
+
+    // Expose the previous character.
+    context.previous = code
+
+    // Mark as consumed.
+    consumed = true
+  }
+
+  /** @type {Effects['enter']} */
+  function enter(type, fields) {
+    /** @type {Token} */
+    // @ts-expect-error Patch instead of assign required fields to help GC.
+    const token = fields || {}
+    token.type = type
+    token.start = now()
+    context.events.push(['enter', token, context])
+    stack.push(token)
+    return token
+  }
+
+  /** @type {Effects['exit']} */
+  function exit(type) {
+    const token = stack.pop()
+    token.end = now()
+    context.events.push(['exit', token, context])
+    return token
+  }
+
+  /**
+   * Use results.
+   *
+   * @type {ReturnHandle}
+   */
+  function onsuccessfulconstruct(construct, info) {
+    addResult(construct, info.from)
+  }
+
+  /**
+   * Discard results.
+   *
+   * @type {ReturnHandle}
+   */
+  function onsuccessfulcheck(_, info) {
+    info.restore()
+  }
+
+  /**
+   * Factory to attempt/check/interrupt.
+   *
+   * @param {ReturnHandle} onreturn
+   * @param {{interrupt?: boolean | undefined} | undefined} [fields]
+   */
+  function constructFactory(onreturn, fields) {
+    return hook
+
+    /**
+     * Handle either an object mapping codes to constructs, a list of
+     * constructs, or a single construct.
+     *
+     * @param {Array<Construct> | Construct | ConstructRecord} constructs
+     * @param {State} returnState
+     * @param {State | undefined} [bogusState]
+     * @returns {State}
+     */
+    function hook(constructs, returnState, bogusState) {
+      /** @type {Array<Construct>} */
+      let listOfConstructs
+      /** @type {number} */
+      let constructIndex
+      /** @type {Construct} */
+      let currentConstruct
+      /** @type {Info} */
+      let info
+      return Array.isArray(constructs) /* c8 ignore next 1 */
+        ? handleListOfConstructs(constructs)
+        : 'tokenize' in constructs
+        ? // @ts-expect-error Looks like a construct.
+          handleListOfConstructs([constructs])
+        : handleMapOfConstructs(constructs)
+
+      /**
+       * Handle a list of construct.
+       *
+       * @param {ConstructRecord} map
+       * @returns {State}
+       */
+      function handleMapOfConstructs(map) {
+        return start
+
+        /** @type {State} */
+        function start(code) {
+          const def = code !== null && map[code]
+          const all = code !== null && map.null
+          const list = [
+            // To do: add more extension tests.
+            /* c8 ignore next 2 */
+            ...(Array.isArray(def) ? def : def ? [def] : []),
+            ...(Array.isArray(all) ? all : all ? [all] : [])
+          ]
+          return handleListOfConstructs(list)(code)
+        }
+      }
+
+      /**
+       * Handle a list of construct.
+       *
+       * @param {Array<Construct>} list
+       * @returns {State}
+       */
+      function handleListOfConstructs(list) {
+        listOfConstructs = list
+        constructIndex = 0
+        if (list.length === 0) {
+          return bogusState
+        }
+        return handleConstruct(list[constructIndex])
+      }
+
+      /**
+       * Handle a single construct.
+       *
+       * @param {Construct} construct
+       * @returns {State}
+       */
+      function handleConstruct(construct) {
+        return start
+
+        /** @type {State} */
+        function start(code) {
+          // To do: not needed to store if there is no bogus state, probably?
+          // Currently doesn’t work because `inspect` in document does a check
+          // w/o a bogus, which doesn’t make sense. But it does seem to help perf
+          // by not storing.
+          info = store()
+          currentConstruct = construct
+          if (!construct.partial) {
+            context.currentConstruct = construct
+          }
+
+          // Always populated by defaults.
+
+          if (
+            construct.name &&
+            context.parser.constructs.disable.null.includes(construct.name)
+          ) {
+            return nok(code)
+          }
+          return construct.tokenize.call(
+            // If we do have fields, create an object w/ `context` as its
+            // prototype.
+            // This allows a “live binding”, which is needed for `interrupt`.
+            fields ? Object.assign(Object.create(context), fields) : context,
+            effects,
+            ok,
+            nok
+          )(code)
+        }
+      }
+
+      /** @type {State} */
+      function ok(code) {
+        consumed = true
+        onreturn(currentConstruct, info)
+        return returnState
+      }
+
+      /** @type {State} */
+      function nok(code) {
+        consumed = true
+        info.restore()
+        if (++constructIndex < listOfConstructs.length) {
+          return handleConstruct(listOfConstructs[constructIndex])
+        }
+        return bogusState
+      }
+    }
+  }
+
+  /**
+   * @param {Construct} construct
+   * @param {number} from
+   * @returns {undefined}
+   */
+  function addResult(construct, from) {
+    if (construct.resolveAll && !resolveAllConstructs.includes(construct)) {
+      resolveAllConstructs.push(construct)
+    }
+    if (construct.resolve) {
+      splice(
+        context.events,
+        from,
+        context.events.length - from,
+        construct.resolve(context.events.slice(from), context)
+      )
+    }
+    if (construct.resolveTo) {
+      context.events = construct.resolveTo(context.events, context)
+    }
+  }
+
+  /**
+   * Store state.
+   *
+   * @returns {Info}
+   */
+  function store() {
+    const startPoint = now()
+    const startPrevious = context.previous
+    const startCurrentConstruct = context.currentConstruct
+    const startEventsIndex = context.events.length
+    const startStack = Array.from(stack)
+    return {
+      restore,
+      from: startEventsIndex
+    }
+
+    /**
+     * Restore state.
+     *
+     * @returns {undefined}
+     */
+    function restore() {
+      point = startPoint
+      context.previous = startPrevious
+      context.currentConstruct = startCurrentConstruct
+      context.events.length = startEventsIndex
+      stack = startStack
+      accountForPotentialSkip()
+    }
+  }
+
+  /**
+   * Move the current point a bit forward in the line when it’s on a column
+   * skip.
+   *
+   * @returns {undefined}
+   */
+  function accountForPotentialSkip() {
+    if (point.line in columnStart && point.column < 2) {
+      point.column = columnStart[point.line]
+      point.offset += columnStart[point.line] - 1
+    }
+  }
+}
+
+/**
+ * Get the chunks from a slice of chunks in the range of a token.
+ *
+ * @param {Array<Chunk>} chunks
+ * @param {Pick<Token, 'end' | 'start'>} token
+ * @returns {Array<Chunk>}
+ */
+function sliceChunks(chunks, token) {
+  const startIndex = token.start._index
+  const startBufferIndex = token.start._bufferIndex
+  const endIndex = token.end._index
+  const endBufferIndex = token.end._bufferIndex
+  /** @type {Array<Chunk>} */
+  let view
+  if (startIndex === endIndex) {
+    // @ts-expect-error `_bufferIndex` is used on string chunks.
+    view = [chunks[startIndex].slice(startBufferIndex, endBufferIndex)]
+  } else {
+    view = chunks.slice(startIndex, endIndex)
+    if (startBufferIndex > -1) {
+      const head = view[0]
+      if (typeof head === 'string') {
+        view[0] = head.slice(startBufferIndex)
+      } else {
+        view.shift()
+      }
+    }
+    if (endBufferIndex > 0) {
+      // @ts-expect-error `_bufferIndex` is used on string chunks.
+      view.push(chunks[endIndex].slice(0, endBufferIndex))
+    }
+  }
+  return view
+}
+
+/**
+ * Get the string value of a slice of chunks.
+ *
+ * @param {Array<Chunk>} chunks
+ * @param {boolean | undefined} [expandTabs=false]
+ * @returns {string}
+ */
+function serializeChunks(chunks, expandTabs) {
+  let index = -1
+  /** @type {Array<string>} */
+  const result = []
+  /** @type {boolean | undefined} */
+  let atTab
+  while (++index < chunks.length) {
+    const chunk = chunks[index]
+    /** @type {string} */
+    let value
+    if (typeof chunk === 'string') {
+      value = chunk
+    } else
+      switch (chunk) {
+        case -5: {
+          value = '\r'
+          break
+        }
+        case -4: {
+          value = '\n'
+          break
+        }
+        case -3: {
+          value = '\r' + '\n'
+          break
+        }
+        case -2: {
+          value = expandTabs ? ' ' : '\t'
+          break
+        }
+        case -1: {
+          if (!expandTabs && atTab) continue
+          value = ' '
+          break
+        }
+        default: {
+          // Currently only replacement character.
+          value = String.fromCharCode(chunk)
+        }
+      }
+    atTab = chunk === -2
+    result.push(value)
+  }
+  return result.join('')
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/thematic-break.js
+/**
+ * @import {
+ *   Code,
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const thematicBreak = {
+  name: 'thematicBreak',
+  tokenize: tokenizeThematicBreak
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeThematicBreak(effects, ok, nok) {
+  let size = 0;
+  /** @type {NonNullable<Code>} */
+  let marker;
+  return start;
+
+  /**
+   * Start of thematic break.
+   *
+   * ```markdown
+   * > | ***
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("thematicBreak");
+    // To do: parse indent like `markdown-rs`.
+    return before(code);
+  }
+
+  /**
+   * After optional whitespace, at marker.
+   *
+   * ```markdown
+   * > | ***
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function before(code) {
+    marker = code;
+    return atBreak(code);
+  }
+
+  /**
+   * After something, before something else.
+   *
+   * ```markdown
+   * > | ***
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function atBreak(code) {
+    if (code === marker) {
+      effects.enter("thematicBreakSequence");
+      return sequence(code);
+    }
+    if (size >= 3 && (code === null || markdownLineEnding(code))) {
+      effects.exit("thematicBreak");
+      return ok(code);
+    }
+    return nok(code);
+  }
+
+  /**
+   * In sequence.
+   *
+   * ```markdown
+   * > | ***
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function sequence(code) {
+    if (code === marker) {
+      effects.consume(code);
+      size++;
+      return sequence;
+    }
+    effects.exit("thematicBreakSequence");
+    return markdownSpace(code) ? factorySpace(effects, atBreak, "whitespace")(code) : atBreak(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/list.js
+/**
+ * @import {
+ *   Code,
+ *   Construct,
+ *   Exiter,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+
+
+
+/** @type {Construct} */
+const list = {
+  continuation: {
+    tokenize: tokenizeListContinuation
+  },
+  exit: tokenizeListEnd,
+  name: 'list',
+  tokenize: tokenizeListStart
+};
+
+/** @type {Construct} */
+const listItemPrefixWhitespaceConstruct = {
+  partial: true,
+  tokenize: tokenizeListItemPrefixWhitespace
+};
+
+/** @type {Construct} */
+const indentConstruct = {
+  partial: true,
+  tokenize: list_tokenizeIndent
+};
+
+// To do: `markdown-rs` parses list items on their own and later stitches them
+// together.
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeListStart(effects, ok, nok) {
+  const self = this;
+  const tail = self.events[self.events.length - 1];
+  let initialSize = tail && tail[1].type === "linePrefix" ? tail[2].sliceSerialize(tail[1], true).length : 0;
+  let size = 0;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    const kind = self.containerState.type || (code === 42 || code === 43 || code === 45 ? "listUnordered" : "listOrdered");
+    if (kind === "listUnordered" ? !self.containerState.marker || code === self.containerState.marker : asciiDigit(code)) {
+      if (!self.containerState.type) {
+        self.containerState.type = kind;
+        effects.enter(kind, {
+          _container: true
+        });
+      }
+      if (kind === "listUnordered") {
+        effects.enter("listItemPrefix");
+        return code === 42 || code === 45 ? effects.check(thematicBreak, nok, atMarker)(code) : atMarker(code);
+      }
+      if (!self.interrupt || code === 49) {
+        effects.enter("listItemPrefix");
+        effects.enter("listItemValue");
+        return inside(code);
+      }
+    }
+    return nok(code);
+  }
+
+  /** @type {State} */
+  function inside(code) {
+    if (asciiDigit(code) && ++size < 10) {
+      effects.consume(code);
+      return inside;
+    }
+    if ((!self.interrupt || size < 2) && (self.containerState.marker ? code === self.containerState.marker : code === 41 || code === 46)) {
+      effects.exit("listItemValue");
+      return atMarker(code);
+    }
+    return nok(code);
+  }
+
+  /**
+   * @type {State}
+   **/
+  function atMarker(code) {
+    effects.enter("listItemMarker");
+    effects.consume(code);
+    effects.exit("listItemMarker");
+    self.containerState.marker = self.containerState.marker || code;
+    return effects.check(blankLine,
+    // Can’t be empty when interrupting.
+    self.interrupt ? nok : onBlank, effects.attempt(listItemPrefixWhitespaceConstruct, endOfPrefix, otherPrefix));
+  }
+
+  /** @type {State} */
+  function onBlank(code) {
+    self.containerState.initialBlankLine = true;
+    initialSize++;
+    return endOfPrefix(code);
+  }
+
+  /** @type {State} */
+  function otherPrefix(code) {
+    if (markdownSpace(code)) {
+      effects.enter("listItemPrefixWhitespace");
+      effects.consume(code);
+      effects.exit("listItemPrefixWhitespace");
+      return endOfPrefix;
+    }
+    return nok(code);
+  }
+
+  /** @type {State} */
+  function endOfPrefix(code) {
+    self.containerState.size = initialSize + self.sliceSerialize(effects.exit("listItemPrefix"), true).length;
+    return ok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeListContinuation(effects, ok, nok) {
+  const self = this;
+  self.containerState._closeFlow = undefined;
+  return effects.check(blankLine, onBlank, notBlank);
+
+  /** @type {State} */
+  function onBlank(code) {
+    self.containerState.furtherBlankLines = self.containerState.furtherBlankLines || self.containerState.initialBlankLine;
+
+    // We have a blank line.
+    // Still, try to consume at most the items size.
+    return factorySpace(effects, ok, "listItemIndent", self.containerState.size + 1)(code);
+  }
+
+  /** @type {State} */
+  function notBlank(code) {
+    if (self.containerState.furtherBlankLines || !markdownSpace(code)) {
+      self.containerState.furtherBlankLines = undefined;
+      self.containerState.initialBlankLine = undefined;
+      return notInCurrentItem(code);
+    }
+    self.containerState.furtherBlankLines = undefined;
+    self.containerState.initialBlankLine = undefined;
+    return effects.attempt(indentConstruct, ok, notInCurrentItem)(code);
+  }
+
+  /** @type {State} */
+  function notInCurrentItem(code) {
+    // While we do continue, we signal that the flow should be closed.
+    self.containerState._closeFlow = true;
+    // As we’re closing flow, we’re no longer interrupting.
+    self.interrupt = undefined;
+    // Always populated by defaults.
+
+    return factorySpace(effects, effects.attempt(list, ok, nok), "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function list_tokenizeIndent(effects, ok, nok) {
+  const self = this;
+  return factorySpace(effects, afterPrefix, "listItemIndent", self.containerState.size + 1);
+
+  /** @type {State} */
+  function afterPrefix(code) {
+    const tail = self.events[self.events.length - 1];
+    return tail && tail[1].type === "listItemIndent" && tail[2].sliceSerialize(tail[1], true).length === self.containerState.size ? ok(code) : nok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Exiter}
+ */
+function tokenizeListEnd(effects) {
+  effects.exit(this.containerState.type);
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeListItemPrefixWhitespace(effects, ok, nok) {
+  const self = this;
+
+  // Always populated by defaults.
+
+  return factorySpace(effects, afterPrefix, "listItemPrefixWhitespace", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4 + 1);
+
+  /** @type {State} */
+  function afterPrefix(code) {
+    const tail = self.events[self.events.length - 1];
+    return !markdownSpace(code) && tail && tail[1].type === "listItemPrefixWhitespace" ? ok(code) : nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/block-quote.js
+/**
+ * @import {
+ *   Construct,
+ *   Exiter,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const blockQuote = {
+  continuation: {
+    tokenize: tokenizeBlockQuoteContinuation
+  },
+  exit,
+  name: 'blockQuote',
+  tokenize: tokenizeBlockQuoteStart
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeBlockQuoteStart(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /**
+   * Start of block quote.
+   *
+   * ```markdown
+   * > | > a
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    if (code === 62) {
+      const state = self.containerState;
+      if (!state.open) {
+        effects.enter("blockQuote", {
+          _container: true
+        });
+        state.open = true;
+      }
+      effects.enter("blockQuotePrefix");
+      effects.enter("blockQuoteMarker");
+      effects.consume(code);
+      effects.exit("blockQuoteMarker");
+      return after;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `>`, before optional whitespace.
+   *
+   * ```markdown
+   * > | > a
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    if (markdownSpace(code)) {
+      effects.enter("blockQuotePrefixWhitespace");
+      effects.consume(code);
+      effects.exit("blockQuotePrefixWhitespace");
+      effects.exit("blockQuotePrefix");
+      return ok;
+    }
+    effects.exit("blockQuotePrefix");
+    return ok(code);
+  }
+}
+
+/**
+ * Start of block quote continuation.
+ *
+ * ```markdown
+ *   | > a
+ * > | > b
+ *     ^
+ * ```
+ *
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeBlockQuoteContinuation(effects, ok, nok) {
+  const self = this;
+  return contStart;
+
+  /**
+   * Start of block quote continuation.
+   *
+   * Also used to parse the first block quote opening.
+   *
+   * ```markdown
+   *   | > a
+   * > | > b
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function contStart(code) {
+    if (markdownSpace(code)) {
+      // Always populated by defaults.
+
+      return factorySpace(effects, contBefore, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code);
+    }
+    return contBefore(code);
+  }
+
+  /**
+   * At `>`, after optional whitespace.
+   *
+   * Also used to parse the first block quote opening.
+   *
+   * ```markdown
+   *   | > a
+   * > | > b
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function contBefore(code) {
+    return effects.attempt(blockQuote, ok, nok)(code);
+  }
+}
+
+/** @type {Exiter} */
+function exit(effects) {
+  effects.exit("blockQuote");
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-factory-destination/index.js
+/**
+ * @import {Effects, State, TokenType} from 'micromark-util-types'
+ */
+
+
+/**
+ * Parse destinations.
+ *
+ * ###### Examples
+ *
+ * ```markdown
+ * <a>
+ * <a\>b>
+ * <a b>
+ * <a)>
+ * a
+ * a\)b
+ * a(b)c
+ * a(b)
+ * ```
+ *
+ * @param {Effects} effects
+ *   Context.
+ * @param {State} ok
+ *   State switched to when successful.
+ * @param {State} nok
+ *   State switched to when unsuccessful.
+ * @param {TokenType} type
+ *   Type for whole (`<a>` or `b`).
+ * @param {TokenType} literalType
+ *   Type when enclosed (`<a>`).
+ * @param {TokenType} literalMarkerType
+ *   Type for enclosing (`<` and `>`).
+ * @param {TokenType} rawType
+ *   Type when not enclosed (`b`).
+ * @param {TokenType} stringType
+ *   Type for the value (`a` or `b`).
+ * @param {number | undefined} [max=Infinity]
+ *   Depth of nested parens (inclusive).
+ * @returns {State}
+ *   Start state.
+ */
+function factoryDestination(effects, ok, nok, type, literalType, literalMarkerType, rawType, stringType, max) {
+  const limit = max || Number.POSITIVE_INFINITY;
+  let balance = 0;
+  return start;
+
+  /**
+   * Start of destination.
+   *
+   * ```markdown
+   * > | <aa>
+   *     ^
+   * > | aa
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    if (code === 60) {
+      effects.enter(type);
+      effects.enter(literalType);
+      effects.enter(literalMarkerType);
+      effects.consume(code);
+      effects.exit(literalMarkerType);
+      return enclosedBefore;
+    }
+
+    // ASCII control, space, closing paren.
+    if (code === null || code === 32 || code === 41 || asciiControl(code)) {
+      return nok(code);
+    }
+    effects.enter(type);
+    effects.enter(rawType);
+    effects.enter(stringType);
+    effects.enter("chunkString", {
+      contentType: "string"
+    });
+    return raw(code);
+  }
+
+  /**
+   * After `<`, at an enclosed destination.
+   *
+   * ```markdown
+   * > | <aa>
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function enclosedBefore(code) {
+    if (code === 62) {
+      effects.enter(literalMarkerType);
+      effects.consume(code);
+      effects.exit(literalMarkerType);
+      effects.exit(literalType);
+      effects.exit(type);
+      return ok;
+    }
+    effects.enter(stringType);
+    effects.enter("chunkString", {
+      contentType: "string"
+    });
+    return enclosed(code);
+  }
+
+  /**
+   * In enclosed destination.
+   *
+   * ```markdown
+   * > | <aa>
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function enclosed(code) {
+    if (code === 62) {
+      effects.exit("chunkString");
+      effects.exit(stringType);
+      return enclosedBefore(code);
+    }
+    if (code === null || code === 60 || markdownLineEnding(code)) {
+      return nok(code);
+    }
+    effects.consume(code);
+    return code === 92 ? enclosedEscape : enclosed;
+  }
+
+  /**
+   * After `\`, at a special character.
+   *
+   * ```markdown
+   * > | <a\*a>
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function enclosedEscape(code) {
+    if (code === 60 || code === 62 || code === 92) {
+      effects.consume(code);
+      return enclosed;
+    }
+    return enclosed(code);
+  }
+
+  /**
+   * In raw destination.
+   *
+   * ```markdown
+   * > | aa
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function raw(code) {
+    if (!balance && (code === null || code === 41 || markdownLineEndingOrSpace(code))) {
+      effects.exit("chunkString");
+      effects.exit(stringType);
+      effects.exit(rawType);
+      effects.exit(type);
+      return ok(code);
+    }
+    if (balance < limit && code === 40) {
+      effects.consume(code);
+      balance++;
+      return raw;
+    }
+    if (code === 41) {
+      effects.consume(code);
+      balance--;
+      return raw;
+    }
+
+    // ASCII control (but *not* `\0`) and space and `(`.
+    // Note: in `markdown-rs`, `\0` exists in codes, in `micromark-js` it
+    // doesn’t.
+    if (code === null || code === 32 || code === 40 || asciiControl(code)) {
+      return nok(code);
+    }
+    effects.consume(code);
+    return code === 92 ? rawEscape : raw;
+  }
+
+  /**
+   * After `\`, at special character.
+   *
+   * ```markdown
+   * > | a\*a
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function rawEscape(code) {
+    if (code === 40 || code === 41 || code === 92) {
+      effects.consume(code);
+      return raw;
+    }
+    return raw(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-factory-label/index.js
+/**
+ * @import {
+ *   Effects,
+ *   State,
+ *   TokenizeContext,
+ *   TokenType
+ * } from 'micromark-util-types'
+ */
+
+
+/**
+ * Parse labels.
+ *
+ * > 👉 **Note**: labels in markdown are capped at 999 characters in the string.
+ *
+ * ###### Examples
+ *
+ * ```markdown
+ * [a]
+ * [a
+ * b]
+ * [a\]b]
+ * ```
+ *
+ * @this {TokenizeContext}
+ *   Tokenize context.
+ * @param {Effects} effects
+ *   Context.
+ * @param {State} ok
+ *   State switched to when successful.
+ * @param {State} nok
+ *   State switched to when unsuccessful.
+ * @param {TokenType} type
+ *   Type of the whole label (`[a]`).
+ * @param {TokenType} markerType
+ *   Type for the markers (`[` and `]`).
+ * @param {TokenType} stringType
+ *   Type for the identifier (`a`).
+ * @returns {State}
+ *   Start state.
+ */
+function micromark_factory_label_factoryLabel(effects, ok, nok, type, markerType, stringType) {
+  const self = this;
+  let size = 0;
+  /** @type {boolean} */
+  let seen;
+  return start;
+
+  /**
+   * Start of label.
+   *
+   * ```markdown
+   * > | [a]
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter(type);
+    effects.enter(markerType);
+    effects.consume(code);
+    effects.exit(markerType);
+    effects.enter(stringType);
+    return atBreak;
+  }
+
+  /**
+   * In label, at something, before something else.
+   *
+   * ```markdown
+   * > | [a]
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function atBreak(code) {
+    if (size > 999 || code === null || code === 91 || code === 93 && !seen ||
+    // To do: remove in the future once we’ve switched from
+    // `micromark-extension-footnote` to `micromark-extension-gfm-footnote`,
+    // which doesn’t need this.
+    // Hidden footnotes hook.
+    /* c8 ignore next 3 */
+    code === 94 && !size && '_hiddenFootnoteSupport' in self.parser.constructs) {
+      return nok(code);
+    }
+    if (code === 93) {
+      effects.exit(stringType);
+      effects.enter(markerType);
+      effects.consume(code);
+      effects.exit(markerType);
+      effects.exit(type);
+      return ok;
+    }
+
+    // To do: indent? Link chunks and EOLs together?
+    if (markdownLineEnding(code)) {
+      effects.enter("lineEnding");
+      effects.consume(code);
+      effects.exit("lineEnding");
+      return atBreak;
+    }
+    effects.enter("chunkString", {
+      contentType: "string"
+    });
+    return labelInside(code);
+  }
+
+  /**
+   * In label, in text.
+   *
+   * ```markdown
+   * > | [a]
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelInside(code) {
+    if (code === null || code === 91 || code === 93 || markdownLineEnding(code) || size++ > 999) {
+      effects.exit("chunkString");
+      return atBreak(code);
+    }
+    effects.consume(code);
+    if (!seen) seen = !markdownSpace(code);
+    return code === 92 ? labelEscape : labelInside;
+  }
+
+  /**
+   * After `\`, at a special character.
+   *
+   * ```markdown
+   * > | [a\*a]
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelEscape(code) {
+    if (code === 91 || code === 92 || code === 93) {
+      effects.consume(code);
+      size++;
+      return labelInside;
+    }
+    return labelInside(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-factory-title/index.js
+/**
+ * @import {
+ *   Code,
+ *   Effects,
+ *   State,
+ *   TokenType
+ * } from 'micromark-util-types'
+ */
+
+
+
+/**
+ * Parse titles.
+ *
+ * ###### Examples
+ *
+ * ```markdown
+ * "a"
+ * 'b'
+ * (c)
+ * "a
+ * b"
+ * 'a
+ *     b'
+ * (a\)b)
+ * ```
+ *
+ * @param {Effects} effects
+ *   Context.
+ * @param {State} ok
+ *   State switched to when successful.
+ * @param {State} nok
+ *   State switched to when unsuccessful.
+ * @param {TokenType} type
+ *   Type of the whole title (`"a"`, `'b'`, `(c)`).
+ * @param {TokenType} markerType
+ *   Type for the markers (`"`, `'`, `(`, and `)`).
+ * @param {TokenType} stringType
+ *   Type for the value (`a`).
+ * @returns {State}
+ *   Start state.
+ */
+function factoryTitle(effects, ok, nok, type, markerType, stringType) {
+  /** @type {NonNullable<Code>} */
+  let marker;
+  return start;
+
+  /**
+   * Start of title.
+   *
+   * ```markdown
+   * > | "a"
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    if (code === 34 || code === 39 || code === 40) {
+      effects.enter(type);
+      effects.enter(markerType);
+      effects.consume(code);
+      effects.exit(markerType);
+      marker = code === 40 ? 41 : code;
+      return begin;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After opening marker.
+   *
+   * This is also used at the closing marker.
+   *
+   * ```markdown
+   * > | "a"
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function begin(code) {
+    if (code === marker) {
+      effects.enter(markerType);
+      effects.consume(code);
+      effects.exit(markerType);
+      effects.exit(type);
+      return ok;
+    }
+    effects.enter(stringType);
+    return atBreak(code);
+  }
+
+  /**
+   * At something, before something else.
+   *
+   * ```markdown
+   * > | "a"
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function atBreak(code) {
+    if (code === marker) {
+      effects.exit(stringType);
+      return begin(marker);
+    }
+    if (code === null) {
+      return nok(code);
+    }
+
+    // Note: blank lines can’t exist in content.
+    if (markdownLineEnding(code)) {
+      // To do: use `space_or_tab_eol_with_options`, connect.
+      effects.enter("lineEnding");
+      effects.consume(code);
+      effects.exit("lineEnding");
+      return factorySpace(effects, atBreak, "linePrefix");
+    }
+    effects.enter("chunkString", {
+      contentType: "string"
+    });
+    return inside(code);
+  }
+
+  /**
+   *
+   *
+   * @type {State}
+   */
+  function inside(code) {
+    if (code === marker || code === null || markdownLineEnding(code)) {
+      effects.exit("chunkString");
+      return atBreak(code);
+    }
+    effects.consume(code);
+    return code === 92 ? escape : inside;
+  }
+
+  /**
+   * After `\`, at a special character.
+   *
+   * ```markdown
+   * > | "a\*b"
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function escape(code) {
+    if (code === marker || code === 92) {
+      effects.consume(code);
+      return inside;
+    }
+    return inside(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/definition.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+
+
+
+
+
+/** @type {Construct} */
+const definition = {
+  name: 'definition',
+  tokenize: tokenizeDefinition
+};
+
+/** @type {Construct} */
+const titleBefore = {
+  partial: true,
+  tokenize: tokenizeTitleBefore
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeDefinition(effects, ok, nok) {
+  const self = this;
+  /** @type {string} */
+  let identifier;
+  return start;
+
+  /**
+   * At start of a definition.
+   *
+   * ```markdown
+   * > | [a]: b "c"
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    // Do not interrupt paragraphs (but do follow definitions).
+    // To do: do `interrupt` the way `markdown-rs` does.
+    // To do: parse whitespace the way `markdown-rs` does.
+    effects.enter("definition");
+    return before(code);
+  }
+
+  /**
+   * After optional whitespace, at `[`.
+   *
+   * ```markdown
+   * > | [a]: b "c"
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function before(code) {
+    // To do: parse whitespace the way `markdown-rs` does.
+
+    return micromark_factory_label_factoryLabel.call(self, effects, labelAfter,
+    // Note: we don’t need to reset the way `markdown-rs` does.
+    nok, "definitionLabel", "definitionLabelMarker", "definitionLabelString")(code);
+  }
+
+  /**
+   * After label.
+   *
+   * ```markdown
+   * > | [a]: b "c"
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelAfter(code) {
+    identifier = normalizeIdentifier(self.sliceSerialize(self.events[self.events.length - 1][1]).slice(1, -1));
+    if (code === 58) {
+      effects.enter("definitionMarker");
+      effects.consume(code);
+      effects.exit("definitionMarker");
+      return markerAfter;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After marker.
+   *
+   * ```markdown
+   * > | [a]: b "c"
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function markerAfter(code) {
+    // Note: whitespace is optional.
+    return markdownLineEndingOrSpace(code) ? factoryWhitespace(effects, destinationBefore)(code) : destinationBefore(code);
+  }
+
+  /**
+   * Before destination.
+   *
+   * ```markdown
+   * > | [a]: b "c"
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function destinationBefore(code) {
+    return factoryDestination(effects, destinationAfter,
+    // Note: we don’t need to reset the way `markdown-rs` does.
+    nok, "definitionDestination", "definitionDestinationLiteral", "definitionDestinationLiteralMarker", "definitionDestinationRaw", "definitionDestinationString")(code);
+  }
+
+  /**
+   * After destination.
+   *
+   * ```markdown
+   * > | [a]: b "c"
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function destinationAfter(code) {
+    return effects.attempt(titleBefore, after, after)(code);
+  }
+
+  /**
+   * After definition.
+   *
+   * ```markdown
+   * > | [a]: b
+   *           ^
+   * > | [a]: b "c"
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    return markdownSpace(code) ? factorySpace(effects, afterWhitespace, "whitespace")(code) : afterWhitespace(code);
+  }
+
+  /**
+   * After definition, after optional whitespace.
+   *
+   * ```markdown
+   * > | [a]: b
+   *           ^
+   * > | [a]: b "c"
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function afterWhitespace(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("definition");
+
+      // Note: we don’t care about uniqueness.
+      // It’s likely that that doesn’t happen very frequently.
+      // It is more likely that it wastes precious time.
+      self.parser.defined.push(identifier);
+
+      // To do: `markdown-rs` interrupt.
+      // // You’d be interrupting.
+      // tokenizer.interrupt = true
+      return ok(code);
+    }
+    return nok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeTitleBefore(effects, ok, nok) {
+  return titleBefore;
+
+  /**
+   * After destination, at whitespace.
+   *
+   * ```markdown
+   * > | [a]: b
+   *           ^
+   * > | [a]: b "c"
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function titleBefore(code) {
+    return markdownLineEndingOrSpace(code) ? factoryWhitespace(effects, beforeMarker)(code) : nok(code);
+  }
+
+  /**
+   * At title.
+   *
+   * ```markdown
+   *   | [a]: b
+   * > | "c"
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function beforeMarker(code) {
+    return factoryTitle(effects, titleAfter, nok, "definitionTitle", "definitionTitleMarker", "definitionTitleString")(code);
+  }
+
+  /**
+   * After title.
+   *
+   * ```markdown
+   * > | [a]: b "c"
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function titleAfter(code) {
+    return markdownSpace(code) ? factorySpace(effects, titleAfterOptionalWhitespace, "whitespace")(code) : titleAfterOptionalWhitespace(code);
+  }
+
+  /**
+   * After title, after optional whitespace.
+   *
+   * ```markdown
+   * > | [a]: b "c"
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function titleAfterOptionalWhitespace(code) {
+    return code === null || markdownLineEnding(code) ? ok(code) : nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/code-indented.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const codeIndented = {
+  name: 'codeIndented',
+  tokenize: tokenizeCodeIndented
+};
+
+/** @type {Construct} */
+const furtherStart = {
+  partial: true,
+  tokenize: tokenizeFurtherStart
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeCodeIndented(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /**
+   * Start of code (indented).
+   *
+   * > **Parsing note**: it is not needed to check if this first line is a
+   * > filled line (that it has a non-whitespace character), because blank lines
+   * > are parsed already, so we never run into that.
+   *
+   * ```markdown
+   * > |     aaa
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    // To do: manually check if interrupting like `markdown-rs`.
+
+    effects.enter("codeIndented");
+    // To do: use an improved `space_or_tab` function like `markdown-rs`,
+    // so that we can drop the next state.
+    return factorySpace(effects, afterPrefix, "linePrefix", 4 + 1)(code);
+  }
+
+  /**
+   * At start, after 1 or 4 spaces.
+   *
+   * ```markdown
+   * > |     aaa
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function afterPrefix(code) {
+    const tail = self.events[self.events.length - 1];
+    return tail && tail[1].type === "linePrefix" && tail[2].sliceSerialize(tail[1], true).length >= 4 ? atBreak(code) : nok(code);
+  }
+
+  /**
+   * At a break.
+   *
+   * ```markdown
+   * > |     aaa
+   *         ^  ^
+   * ```
+   *
+   * @type {State}
+   */
+  function atBreak(code) {
+    if (code === null) {
+      return after(code);
+    }
+    if (markdownLineEnding(code)) {
+      return effects.attempt(furtherStart, atBreak, after)(code);
+    }
+    effects.enter("codeFlowValue");
+    return inside(code);
+  }
+
+  /**
+   * In code content.
+   *
+   * ```markdown
+   * > |     aaa
+   *         ^^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function inside(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("codeFlowValue");
+      return atBreak(code);
+    }
+    effects.consume(code);
+    return inside;
+  }
+
+  /** @type {State} */
+  function after(code) {
+    effects.exit("codeIndented");
+    // To do: allow interrupting like `markdown-rs`.
+    // Feel free to interrupt.
+    // tokenizer.interrupt = false
+    return ok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeFurtherStart(effects, ok, nok) {
+  const self = this;
+  return furtherStart;
+
+  /**
+   * At eol, trying to parse another indent.
+   *
+   * ```markdown
+   * > |     aaa
+   *            ^
+   *   |     bbb
+   * ```
+   *
+   * @type {State}
+   */
+  function furtherStart(code) {
+    // To do: improve `lazy` / `pierce` handling.
+    // If this is a lazy line, it can’t be code.
+    if (self.parser.lazy[self.now().line]) {
+      return nok(code);
+    }
+    if (markdownLineEnding(code)) {
+      effects.enter("lineEnding");
+      effects.consume(code);
+      effects.exit("lineEnding");
+      return furtherStart;
+    }
+
+    // To do: the code here in `micromark-js` is a bit different from
+    // `markdown-rs` because there it can attempt spaces.
+    // We can’t yet.
+    //
+    // To do: use an improved `space_or_tab` function like `markdown-rs`,
+    // so that we can drop the next state.
+    return factorySpace(effects, afterPrefix, "linePrefix", 4 + 1)(code);
+  }
+
+  /**
+   * At start, after 1 or 4 spaces.
+   *
+   * ```markdown
+   * > |     aaa
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function afterPrefix(code) {
+    const tail = self.events[self.events.length - 1];
+    return tail && tail[1].type === "linePrefix" && tail[2].sliceSerialize(tail[1], true).length >= 4 ? ok(code) : markdownLineEnding(code) ? furtherStart(code) : nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/heading-atx.js
+/**
+ * @import {
+ *   Construct,
+ *   Resolver,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer,
+ *   Token
+ * } from 'micromark-util-types'
+ */
+
+
+
+
+/** @type {Construct} */
+const headingAtx = {
+  name: 'headingAtx',
+  resolve: resolveHeadingAtx,
+  tokenize: tokenizeHeadingAtx
+};
+
+/** @type {Resolver} */
+function resolveHeadingAtx(events, context) {
+  let contentEnd = events.length - 2;
+  let contentStart = 3;
+  /** @type {Token} */
+  let content;
+  /** @type {Token} */
+  let text;
+
+  // Prefix whitespace, part of the opening.
+  if (events[contentStart][1].type === "whitespace") {
+    contentStart += 2;
+  }
+
+  // Suffix whitespace, part of the closing.
+  if (contentEnd - 2 > contentStart && events[contentEnd][1].type === "whitespace") {
+    contentEnd -= 2;
+  }
+  if (events[contentEnd][1].type === "atxHeadingSequence" && (contentStart === contentEnd - 1 || contentEnd - 4 > contentStart && events[contentEnd - 2][1].type === "whitespace")) {
+    contentEnd -= contentStart + 1 === contentEnd ? 2 : 4;
+  }
+  if (contentEnd > contentStart) {
+    content = {
+      type: "atxHeadingText",
+      start: events[contentStart][1].start,
+      end: events[contentEnd][1].end
+    };
+    text = {
+      type: "chunkText",
+      start: events[contentStart][1].start,
+      end: events[contentEnd][1].end,
+      contentType: "text"
+    };
+    splice(events, contentStart, contentEnd - contentStart + 1, [['enter', content, context], ['enter', text, context], ['exit', text, context], ['exit', content, context]]);
+  }
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeHeadingAtx(effects, ok, nok) {
+  let size = 0;
+  return start;
+
+  /**
+   * Start of a heading (atx).
+   *
+   * ```markdown
+   * > | ## aa
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    // To do: parse indent like `markdown-rs`.
+    effects.enter("atxHeading");
+    return before(code);
+  }
+
+  /**
+   * After optional whitespace, at `#`.
+   *
+   * ```markdown
+   * > | ## aa
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function before(code) {
+    effects.enter("atxHeadingSequence");
+    return sequenceOpen(code);
+  }
+
+  /**
+   * In opening sequence.
+   *
+   * ```markdown
+   * > | ## aa
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function sequenceOpen(code) {
+    if (code === 35 && size++ < 6) {
+      effects.consume(code);
+      return sequenceOpen;
+    }
+
+    // Always at least one `#`.
+    if (code === null || markdownLineEndingOrSpace(code)) {
+      effects.exit("atxHeadingSequence");
+      return atBreak(code);
+    }
+    return nok(code);
+  }
+
+  /**
+   * After something, before something else.
+   *
+   * ```markdown
+   * > | ## aa
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function atBreak(code) {
+    if (code === 35) {
+      effects.enter("atxHeadingSequence");
+      return sequenceFurther(code);
+    }
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("atxHeading");
+      // To do: interrupt like `markdown-rs`.
+      // // Feel free to interrupt.
+      // tokenizer.interrupt = false
+      return ok(code);
+    }
+    if (markdownSpace(code)) {
+      return factorySpace(effects, atBreak, "whitespace")(code);
+    }
+
+    // To do: generate `data` tokens, add the `text` token later.
+    // Needs edit map, see: `markdown.rs`.
+    effects.enter("atxHeadingText");
+    return data(code);
+  }
+
+  /**
+   * In further sequence (after whitespace).
+   *
+   * Could be normal “visible” hashes in the heading or a final sequence.
+   *
+   * ```markdown
+   * > | ## aa ##
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function sequenceFurther(code) {
+    if (code === 35) {
+      effects.consume(code);
+      return sequenceFurther;
+    }
+    effects.exit("atxHeadingSequence");
+    return atBreak(code);
+  }
+
+  /**
+   * In text.
+   *
+   * ```markdown
+   * > | ## aa
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function data(code) {
+    if (code === null || code === 35 || markdownLineEndingOrSpace(code)) {
+      effects.exit("atxHeadingText");
+      return atBreak(code);
+    }
+    effects.consume(code);
+    return data;
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/setext-underline.js
+/**
+ * @import {
+ *   Code,
+ *   Construct,
+ *   Resolver,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const setextUnderline = {
+  name: 'setextUnderline',
+  resolveTo: resolveToSetextUnderline,
+  tokenize: tokenizeSetextUnderline
+};
+
+/** @type {Resolver} */
+function resolveToSetextUnderline(events, context) {
+  // To do: resolve like `markdown-rs`.
+  let index = events.length;
+  /** @type {number | undefined} */
+  let content;
+  /** @type {number | undefined} */
+  let text;
+  /** @type {number | undefined} */
+  let definition;
+
+  // Find the opening of the content.
+  // It’ll always exist: we don’t tokenize if it isn’t there.
+  while (index--) {
+    if (events[index][0] === 'enter') {
+      if (events[index][1].type === "content") {
+        content = index;
+        break;
+      }
+      if (events[index][1].type === "paragraph") {
+        text = index;
+      }
+    }
+    // Exit
+    else {
+      if (events[index][1].type === "content") {
+        // Remove the content end (if needed we’ll add it later)
+        events.splice(index, 1);
+      }
+      if (!definition && events[index][1].type === "definition") {
+        definition = index;
+      }
+    }
+  }
+  const heading = {
+    type: "setextHeading",
+    start: {
+      ...events[text][1].start
+    },
+    end: {
+      ...events[events.length - 1][1].end
+    }
+  };
+
+  // Change the paragraph to setext heading text.
+  events[text][1].type = "setextHeadingText";
+
+  // If we have definitions in the content, we’ll keep on having content,
+  // but we need move it.
+  if (definition) {
+    events.splice(text, 0, ['enter', heading, context]);
+    events.splice(definition + 1, 0, ['exit', events[content][1], context]);
+    events[content][1].end = {
+      ...events[definition][1].end
+    };
+  } else {
+    events[content][1] = heading;
+  }
+
+  // Add the heading exit at the end.
+  events.push(['exit', heading, context]);
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeSetextUnderline(effects, ok, nok) {
+  const self = this;
+  /** @type {NonNullable<Code>} */
+  let marker;
+  return start;
+
+  /**
+   * At start of heading (setext) underline.
+   *
+   * ```markdown
+   *   | aa
+   * > | ==
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    let index = self.events.length;
+    /** @type {boolean | undefined} */
+    let paragraph;
+    // Find an opening.
+    while (index--) {
+      // Skip enter/exit of line ending, line prefix, and content.
+      // We can now either have a definition or a paragraph.
+      if (self.events[index][1].type !== "lineEnding" && self.events[index][1].type !== "linePrefix" && self.events[index][1].type !== "content") {
+        paragraph = self.events[index][1].type === "paragraph";
+        break;
+      }
+    }
+
+    // To do: handle lazy/pierce like `markdown-rs`.
+    // To do: parse indent like `markdown-rs`.
+    if (!self.parser.lazy[self.now().line] && (self.interrupt || paragraph)) {
+      effects.enter("setextHeadingLine");
+      marker = code;
+      return before(code);
+    }
+    return nok(code);
+  }
+
+  /**
+   * After optional whitespace, at `-` or `=`.
+   *
+   * ```markdown
+   *   | aa
+   * > | ==
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function before(code) {
+    effects.enter("setextHeadingLineSequence");
+    return inside(code);
+  }
+
+  /**
+   * In sequence.
+   *
+   * ```markdown
+   *   | aa
+   * > | ==
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function inside(code) {
+    if (code === marker) {
+      effects.consume(code);
+      return inside;
+    }
+    effects.exit("setextHeadingLineSequence");
+    return markdownSpace(code) ? factorySpace(effects, after, "lineSuffix")(code) : after(code);
+  }
+
+  /**
+   * After sequence, after optional whitespace.
+   *
+   * ```markdown
+   *   | aa
+   * > | ==
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("setextHeadingLine");
+      return ok(code);
+    }
+    return nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-util-html-tag-name/index.js
+/**
+ * List of lowercase HTML “block” tag names.
+ *
+ * The list, when parsing HTML (flow), results in more relaxed rules (condition
+ * 6).
+ * Because they are known blocks, the HTML-like syntax doesn’t have to be
+ * strictly parsed.
+ * For tag names not in this list, a more strict algorithm (condition 7) is used
+ * to detect whether the HTML-like syntax is seen as HTML (flow) or not.
+ *
+ * This is copied from:
+ * <https://spec.commonmark.org/0.30/#html-blocks>.
+ *
+ * > 👉 **Note**: `search` was added in `CommonMark@0.31`.
+ */
+const htmlBlockNames = [
+  'address',
+  'article',
+  'aside',
+  'base',
+  'basefont',
+  'blockquote',
+  'body',
+  'caption',
+  'center',
+  'col',
+  'colgroup',
+  'dd',
+  'details',
+  'dialog',
+  'dir',
+  'div',
+  'dl',
+  'dt',
+  'fieldset',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'frame',
+  'frameset',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'head',
+  'header',
+  'hr',
+  'html',
+  'iframe',
+  'legend',
+  'li',
+  'link',
+  'main',
+  'menu',
+  'menuitem',
+  'nav',
+  'noframes',
+  'ol',
+  'optgroup',
+  'option',
+  'p',
+  'param',
+  'search',
+  'section',
+  'summary',
+  'table',
+  'tbody',
+  'td',
+  'tfoot',
+  'th',
+  'thead',
+  'title',
+  'tr',
+  'track',
+  'ul'
+]
+
+/**
+ * List of lowercase HTML “raw” tag names.
+ *
+ * The list, when parsing HTML (flow), results in HTML that can include lines
+ * without exiting, until a closing tag also in this list is found (condition
+ * 1).
+ *
+ * This module is copied from:
+ * <https://spec.commonmark.org/0.30/#html-blocks>.
+ *
+ * > 👉 **Note**: `textarea` was added in `CommonMark@0.30`.
+ */
+const htmlRawNames = ['pre', 'script', 'style', 'textarea']
+
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/html-flow.js
+/**
+ * @import {
+ *   Code,
+ *   Construct,
+ *   Resolver,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+
+
+/** @type {Construct} */
+const htmlFlow = {
+  concrete: true,
+  name: 'htmlFlow',
+  resolveTo: resolveToHtmlFlow,
+  tokenize: tokenizeHtmlFlow
+};
+
+/** @type {Construct} */
+const blankLineBefore = {
+  partial: true,
+  tokenize: tokenizeBlankLineBefore
+};
+const nonLazyContinuationStart = {
+  partial: true,
+  tokenize: tokenizeNonLazyContinuationStart
+};
+
+/** @type {Resolver} */
+function resolveToHtmlFlow(events) {
+  let index = events.length;
+  while (index--) {
+    if (events[index][0] === 'enter' && events[index][1].type === "htmlFlow") {
+      break;
+    }
+  }
+  if (index > 1 && events[index - 2][1].type === "linePrefix") {
+    // Add the prefix start to the HTML token.
+    events[index][1].start = events[index - 2][1].start;
+    // Add the prefix start to the HTML line token.
+    events[index + 1][1].start = events[index - 2][1].start;
+    // Remove the line prefix.
+    events.splice(index - 2, 2);
+  }
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeHtmlFlow(effects, ok, nok) {
+  const self = this;
+  /** @type {number} */
+  let marker;
+  /** @type {boolean} */
+  let closingTag;
+  /** @type {string} */
+  let buffer;
+  /** @type {number} */
+  let index;
+  /** @type {Code} */
+  let markerB;
+  return start;
+
+  /**
+   * Start of HTML (flow).
+   *
+   * ```markdown
+   * > | <x />
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    // To do: parse indent like `markdown-rs`.
+    return before(code);
+  }
+
+  /**
+   * At `<`, after optional whitespace.
+   *
+   * ```markdown
+   * > | <x />
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function before(code) {
+    effects.enter("htmlFlow");
+    effects.enter("htmlFlowData");
+    effects.consume(code);
+    return open;
+  }
+
+  /**
+   * After `<`, at tag name or other stuff.
+   *
+   * ```markdown
+   * > | <x />
+   *      ^
+   * > | <!doctype>
+   *      ^
+   * > | <!--xxx-->
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function open(code) {
+    if (code === 33) {
+      effects.consume(code);
+      return declarationOpen;
+    }
+    if (code === 47) {
+      effects.consume(code);
+      closingTag = true;
+      return tagCloseStart;
+    }
+    if (code === 63) {
+      effects.consume(code);
+      marker = 3;
+      // To do:
+      // tokenizer.concrete = true
+      // To do: use `markdown-rs` style interrupt.
+      // While we’re in an instruction instead of a declaration, we’re on a `?`
+      // right now, so we do need to search for `>`, similar to declarations.
+      return self.interrupt ? ok : continuationDeclarationInside;
+    }
+
+    // ASCII alphabetical.
+    if (asciiAlpha(code)) {
+      // Always the case.
+      effects.consume(code);
+      buffer = String.fromCharCode(code);
+      return tagName;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `<!`, at declaration, comment, or CDATA.
+   *
+   * ```markdown
+   * > | <!doctype>
+   *       ^
+   * > | <!--xxx-->
+   *       ^
+   * > | <![CDATA[>&<]]>
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function declarationOpen(code) {
+    if (code === 45) {
+      effects.consume(code);
+      marker = 2;
+      return commentOpenInside;
+    }
+    if (code === 91) {
+      effects.consume(code);
+      marker = 5;
+      index = 0;
+      return cdataOpenInside;
+    }
+
+    // ASCII alphabetical.
+    if (asciiAlpha(code)) {
+      effects.consume(code);
+      marker = 4;
+      // // Do not form containers.
+      // tokenizer.concrete = true
+      return self.interrupt ? ok : continuationDeclarationInside;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `<!-`, inside a comment, at another `-`.
+   *
+   * ```markdown
+   * > | <!--xxx-->
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function commentOpenInside(code) {
+    if (code === 45) {
+      effects.consume(code);
+      // // Do not form containers.
+      // tokenizer.concrete = true
+      return self.interrupt ? ok : continuationDeclarationInside;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `<![`, inside CDATA, expecting `CDATA[`.
+   *
+   * ```markdown
+   * > | <![CDATA[>&<]]>
+   *        ^^^^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function cdataOpenInside(code) {
+    const value = "CDATA[";
+    if (code === value.charCodeAt(index++)) {
+      effects.consume(code);
+      if (index === value.length) {
+        // // Do not form containers.
+        // tokenizer.concrete = true
+        return self.interrupt ? ok : continuation;
+      }
+      return cdataOpenInside;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `</`, in closing tag, at tag name.
+   *
+   * ```markdown
+   * > | </x>
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagCloseStart(code) {
+    if (asciiAlpha(code)) {
+      // Always the case.
+      effects.consume(code);
+      buffer = String.fromCharCode(code);
+      return tagName;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In tag name.
+   *
+   * ```markdown
+   * > | <ab>
+   *      ^^
+   * > | </ab>
+   *       ^^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagName(code) {
+    if (code === null || code === 47 || code === 62 || markdownLineEndingOrSpace(code)) {
+      const slash = code === 47;
+      const name = buffer.toLowerCase();
+      if (!slash && !closingTag && htmlRawNames.includes(name)) {
+        marker = 1;
+        // // Do not form containers.
+        // tokenizer.concrete = true
+        return self.interrupt ? ok(code) : continuation(code);
+      }
+      if (htmlBlockNames.includes(buffer.toLowerCase())) {
+        marker = 6;
+        if (slash) {
+          effects.consume(code);
+          return basicSelfClosing;
+        }
+
+        // // Do not form containers.
+        // tokenizer.concrete = true
+        return self.interrupt ? ok(code) : continuation(code);
+      }
+      marker = 7;
+      // Do not support complete HTML when interrupting.
+      return self.interrupt && !self.parser.lazy[self.now().line] ? nok(code) : closingTag ? completeClosingTagAfter(code) : completeAttributeNameBefore(code);
+    }
+
+    // ASCII alphanumerical and `-`.
+    if (code === 45 || asciiAlphanumeric(code)) {
+      effects.consume(code);
+      buffer += String.fromCharCode(code);
+      return tagName;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After closing slash of a basic tag name.
+   *
+   * ```markdown
+   * > | <div/>
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function basicSelfClosing(code) {
+    if (code === 62) {
+      effects.consume(code);
+      // // Do not form containers.
+      // tokenizer.concrete = true
+      return self.interrupt ? ok : continuation;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After closing slash of a complete tag name.
+   *
+   * ```markdown
+   * > | <x/>
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeClosingTagAfter(code) {
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return completeClosingTagAfter;
+    }
+    return completeEnd(code);
+  }
+
+  /**
+   * At an attribute name.
+   *
+   * At first, this state is used after a complete tag name, after whitespace,
+   * where it expects optional attributes or the end of the tag.
+   * It is also reused after attributes, when expecting more optional
+   * attributes.
+   *
+   * ```markdown
+   * > | <a />
+   *        ^
+   * > | <a :b>
+   *        ^
+   * > | <a _b>
+   *        ^
+   * > | <a b>
+   *        ^
+   * > | <a >
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeAttributeNameBefore(code) {
+    if (code === 47) {
+      effects.consume(code);
+      return completeEnd;
+    }
+
+    // ASCII alphanumerical and `:` and `_`.
+    if (code === 58 || code === 95 || asciiAlpha(code)) {
+      effects.consume(code);
+      return completeAttributeName;
+    }
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return completeAttributeNameBefore;
+    }
+    return completeEnd(code);
+  }
+
+  /**
+   * In attribute name.
+   *
+   * ```markdown
+   * > | <a :b>
+   *         ^
+   * > | <a _b>
+   *         ^
+   * > | <a b>
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeAttributeName(code) {
+    // ASCII alphanumerical and `-`, `.`, `:`, and `_`.
+    if (code === 45 || code === 46 || code === 58 || code === 95 || asciiAlphanumeric(code)) {
+      effects.consume(code);
+      return completeAttributeName;
+    }
+    return completeAttributeNameAfter(code);
+  }
+
+  /**
+   * After attribute name, at an optional initializer, the end of the tag, or
+   * whitespace.
+   *
+   * ```markdown
+   * > | <a b>
+   *         ^
+   * > | <a b=c>
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeAttributeNameAfter(code) {
+    if (code === 61) {
+      effects.consume(code);
+      return completeAttributeValueBefore;
+    }
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return completeAttributeNameAfter;
+    }
+    return completeAttributeNameBefore(code);
+  }
+
+  /**
+   * Before unquoted, double quoted, or single quoted attribute value, allowing
+   * whitespace.
+   *
+   * ```markdown
+   * > | <a b=c>
+   *          ^
+   * > | <a b="c">
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeAttributeValueBefore(code) {
+    if (code === null || code === 60 || code === 61 || code === 62 || code === 96) {
+      return nok(code);
+    }
+    if (code === 34 || code === 39) {
+      effects.consume(code);
+      markerB = code;
+      return completeAttributeValueQuoted;
+    }
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return completeAttributeValueBefore;
+    }
+    return completeAttributeValueUnquoted(code);
+  }
+
+  /**
+   * In double or single quoted attribute value.
+   *
+   * ```markdown
+   * > | <a b="c">
+   *           ^
+   * > | <a b='c'>
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeAttributeValueQuoted(code) {
+    if (code === markerB) {
+      effects.consume(code);
+      markerB = null;
+      return completeAttributeValueQuotedAfter;
+    }
+    if (code === null || markdownLineEnding(code)) {
+      return nok(code);
+    }
+    effects.consume(code);
+    return completeAttributeValueQuoted;
+  }
+
+  /**
+   * In unquoted attribute value.
+   *
+   * ```markdown
+   * > | <a b=c>
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeAttributeValueUnquoted(code) {
+    if (code === null || code === 34 || code === 39 || code === 47 || code === 60 || code === 61 || code === 62 || code === 96 || markdownLineEndingOrSpace(code)) {
+      return completeAttributeNameAfter(code);
+    }
+    effects.consume(code);
+    return completeAttributeValueUnquoted;
+  }
+
+  /**
+   * After double or single quoted attribute value, before whitespace or the
+   * end of the tag.
+   *
+   * ```markdown
+   * > | <a b="c">
+   *            ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeAttributeValueQuotedAfter(code) {
+    if (code === 47 || code === 62 || markdownSpace(code)) {
+      return completeAttributeNameBefore(code);
+    }
+    return nok(code);
+  }
+
+  /**
+   * In certain circumstances of a complete tag where only an `>` is allowed.
+   *
+   * ```markdown
+   * > | <a b="c">
+   *             ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeEnd(code) {
+    if (code === 62) {
+      effects.consume(code);
+      return completeAfter;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `>` in a complete tag.
+   *
+   * ```markdown
+   * > | <x>
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function completeAfter(code) {
+    if (code === null || markdownLineEnding(code)) {
+      // // Do not form containers.
+      // tokenizer.concrete = true
+      return continuation(code);
+    }
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return completeAfter;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In continuation of any HTML kind.
+   *
+   * ```markdown
+   * > | <!--xxx-->
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuation(code) {
+    if (code === 45 && marker === 2) {
+      effects.consume(code);
+      return continuationCommentInside;
+    }
+    if (code === 60 && marker === 1) {
+      effects.consume(code);
+      return continuationRawTagOpen;
+    }
+    if (code === 62 && marker === 4) {
+      effects.consume(code);
+      return continuationClose;
+    }
+    if (code === 63 && marker === 3) {
+      effects.consume(code);
+      return continuationDeclarationInside;
+    }
+    if (code === 93 && marker === 5) {
+      effects.consume(code);
+      return continuationCdataInside;
+    }
+    if (markdownLineEnding(code) && (marker === 6 || marker === 7)) {
+      effects.exit("htmlFlowData");
+      return effects.check(blankLineBefore, continuationAfter, continuationStart)(code);
+    }
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("htmlFlowData");
+      return continuationStart(code);
+    }
+    effects.consume(code);
+    return continuation;
+  }
+
+  /**
+   * In continuation, at eol.
+   *
+   * ```markdown
+   * > | <x>
+   *        ^
+   *   | asd
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationStart(code) {
+    return effects.check(nonLazyContinuationStart, continuationStartNonLazy, continuationAfter)(code);
+  }
+
+  /**
+   * In continuation, at eol, before non-lazy content.
+   *
+   * ```markdown
+   * > | <x>
+   *        ^
+   *   | asd
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationStartNonLazy(code) {
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return continuationBefore;
+  }
+
+  /**
+   * In continuation, before non-lazy content.
+   *
+   * ```markdown
+   *   | <x>
+   * > | asd
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationBefore(code) {
+    if (code === null || markdownLineEnding(code)) {
+      return continuationStart(code);
+    }
+    effects.enter("htmlFlowData");
+    return continuation(code);
+  }
+
+  /**
+   * In comment continuation, after one `-`, expecting another.
+   *
+   * ```markdown
+   * > | <!--xxx-->
+   *             ^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationCommentInside(code) {
+    if (code === 45) {
+      effects.consume(code);
+      return continuationDeclarationInside;
+    }
+    return continuation(code);
+  }
+
+  /**
+   * In raw continuation, after `<`, at `/`.
+   *
+   * ```markdown
+   * > | <script>console.log(1)</script>
+   *                            ^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationRawTagOpen(code) {
+    if (code === 47) {
+      effects.consume(code);
+      buffer = '';
+      return continuationRawEndTag;
+    }
+    return continuation(code);
+  }
+
+  /**
+   * In raw continuation, after `</`, in a raw tag name.
+   *
+   * ```markdown
+   * > | <script>console.log(1)</script>
+   *                             ^^^^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationRawEndTag(code) {
+    if (code === 62) {
+      const name = buffer.toLowerCase();
+      if (htmlRawNames.includes(name)) {
+        effects.consume(code);
+        return continuationClose;
+      }
+      return continuation(code);
+    }
+    if (asciiAlpha(code) && buffer.length < 8) {
+      // Always the case.
+      effects.consume(code);
+      buffer += String.fromCharCode(code);
+      return continuationRawEndTag;
+    }
+    return continuation(code);
+  }
+
+  /**
+   * In cdata continuation, after `]`, expecting `]>`.
+   *
+   * ```markdown
+   * > | <![CDATA[>&<]]>
+   *                  ^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationCdataInside(code) {
+    if (code === 93) {
+      effects.consume(code);
+      return continuationDeclarationInside;
+    }
+    return continuation(code);
+  }
+
+  /**
+   * In declaration or instruction continuation, at `>`.
+   *
+   * ```markdown
+   * > | <!-->
+   *         ^
+   * > | <?>
+   *       ^
+   * > | <!q>
+   *        ^
+   * > | <!--ab-->
+   *             ^
+   * > | <![CDATA[>&<]]>
+   *                   ^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationDeclarationInside(code) {
+    if (code === 62) {
+      effects.consume(code);
+      return continuationClose;
+    }
+
+    // More dashes.
+    if (code === 45 && marker === 2) {
+      effects.consume(code);
+      return continuationDeclarationInside;
+    }
+    return continuation(code);
+  }
+
+  /**
+   * In closed continuation: everything we get until the eol/eof is part of it.
+   *
+   * ```markdown
+   * > | <!doctype>
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationClose(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("htmlFlowData");
+      return continuationAfter(code);
+    }
+    effects.consume(code);
+    return continuationClose;
+  }
+
+  /**
+   * Done.
+   *
+   * ```markdown
+   * > | <!doctype>
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function continuationAfter(code) {
+    effects.exit("htmlFlow");
+    // // Feel free to interrupt.
+    // tokenizer.interrupt = false
+    // // No longer concrete.
+    // tokenizer.concrete = false
+    return ok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeNonLazyContinuationStart(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /**
+   * At eol, before continuation.
+   *
+   * ```markdown
+   * > | * ```js
+   *            ^
+   *   | b
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    if (markdownLineEnding(code)) {
+      effects.enter("lineEnding");
+      effects.consume(code);
+      effects.exit("lineEnding");
+      return after;
+    }
+    return nok(code);
+  }
+
+  /**
+   * A continuation.
+   *
+   * ```markdown
+   *   | * ```js
+   * > | b
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    return self.parser.lazy[self.now().line] ? nok(code) : ok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeBlankLineBefore(effects, ok, nok) {
+  return start;
+
+  /**
+   * Before eol, expecting blank line.
+   *
+   * ```markdown
+   * > | <div>
+   *          ^
+   *   |
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return effects.attempt(blankLine, ok, nok);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/code-fenced.js
+/**
+ * @import {
+ *   Code,
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const code_fenced_nonLazyContinuation = {
+  partial: true,
+  tokenize: code_fenced_tokenizeNonLazyContinuation
+};
+
+/** @type {Construct} */
+const codeFenced = {
+  concrete: true,
+  name: 'codeFenced',
+  tokenize: tokenizeCodeFenced
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeCodeFenced(effects, ok, nok) {
+  const self = this;
+  /** @type {Construct} */
+  const closeStart = {
+    partial: true,
+    tokenize: tokenizeCloseStart
+  };
+  let initialPrefix = 0;
+  let sizeOpen = 0;
+  /** @type {NonNullable<Code>} */
+  let marker;
+  return start;
+
+  /**
+   * Start of code.
+   *
+   * ```markdown
+   * > | ~~~js
+   *     ^
+   *   | alert(1)
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    // To do: parse whitespace like `markdown-rs`.
+    return beforeSequenceOpen(code);
+  }
+
+  /**
+   * In opening fence, after prefix, at sequence.
+   *
+   * ```markdown
+   * > | ~~~js
+   *     ^
+   *   | alert(1)
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function beforeSequenceOpen(code) {
+    const tail = self.events[self.events.length - 1];
+    initialPrefix = tail && tail[1].type === "linePrefix" ? tail[2].sliceSerialize(tail[1], true).length : 0;
+    marker = code;
+    effects.enter("codeFenced");
+    effects.enter("codeFencedFence");
+    effects.enter("codeFencedFenceSequence");
+    return sequenceOpen(code);
+  }
+
+  /**
+   * In opening fence sequence.
+   *
+   * ```markdown
+   * > | ~~~js
+   *      ^
+   *   | alert(1)
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function sequenceOpen(code) {
+    if (code === marker) {
+      sizeOpen++;
+      effects.consume(code);
+      return sequenceOpen;
+    }
+    if (sizeOpen < 3) {
+      return nok(code);
+    }
+    effects.exit("codeFencedFenceSequence");
+    return markdownSpace(code) ? factorySpace(effects, infoBefore, "whitespace")(code) : infoBefore(code);
+  }
+
+  /**
+   * In opening fence, after the sequence (and optional whitespace), before info.
+   *
+   * ```markdown
+   * > | ~~~js
+   *        ^
+   *   | alert(1)
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function infoBefore(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("codeFencedFence");
+      return self.interrupt ? ok(code) : effects.check(code_fenced_nonLazyContinuation, atNonLazyBreak, after)(code);
+    }
+    effects.enter("codeFencedFenceInfo");
+    effects.enter("chunkString", {
+      contentType: "string"
+    });
+    return info(code);
+  }
+
+  /**
+   * In info.
+   *
+   * ```markdown
+   * > | ~~~js
+   *        ^
+   *   | alert(1)
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function info(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("chunkString");
+      effects.exit("codeFencedFenceInfo");
+      return infoBefore(code);
+    }
+    if (markdownSpace(code)) {
+      effects.exit("chunkString");
+      effects.exit("codeFencedFenceInfo");
+      return factorySpace(effects, metaBefore, "whitespace")(code);
+    }
+    if (code === 96 && code === marker) {
+      return nok(code);
+    }
+    effects.consume(code);
+    return info;
+  }
+
+  /**
+   * In opening fence, after info and whitespace, before meta.
+   *
+   * ```markdown
+   * > | ~~~js eval
+   *           ^
+   *   | alert(1)
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function metaBefore(code) {
+    if (code === null || markdownLineEnding(code)) {
+      return infoBefore(code);
+    }
+    effects.enter("codeFencedFenceMeta");
+    effects.enter("chunkString", {
+      contentType: "string"
+    });
+    return meta(code);
+  }
+
+  /**
+   * In meta.
+   *
+   * ```markdown
+   * > | ~~~js eval
+   *           ^
+   *   | alert(1)
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function meta(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("chunkString");
+      effects.exit("codeFencedFenceMeta");
+      return infoBefore(code);
+    }
+    if (code === 96 && code === marker) {
+      return nok(code);
+    }
+    effects.consume(code);
+    return meta;
+  }
+
+  /**
+   * At eol/eof in code, before a non-lazy closing fence or content.
+   *
+   * ```markdown
+   * > | ~~~js
+   *          ^
+   * > | alert(1)
+   *             ^
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function atNonLazyBreak(code) {
+    return effects.attempt(closeStart, after, contentBefore)(code);
+  }
+
+  /**
+   * Before code content, not a closing fence, at eol.
+   *
+   * ```markdown
+   *   | ~~~js
+   * > | alert(1)
+   *             ^
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function contentBefore(code) {
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return contentStart;
+  }
+
+  /**
+   * Before code content, not a closing fence.
+   *
+   * ```markdown
+   *   | ~~~js
+   * > | alert(1)
+   *     ^
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function contentStart(code) {
+    return initialPrefix > 0 && markdownSpace(code) ? factorySpace(effects, beforeContentChunk, "linePrefix", initialPrefix + 1)(code) : beforeContentChunk(code);
+  }
+
+  /**
+   * Before code content, after optional prefix.
+   *
+   * ```markdown
+   *   | ~~~js
+   * > | alert(1)
+   *     ^
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function beforeContentChunk(code) {
+    if (code === null || markdownLineEnding(code)) {
+      return effects.check(code_fenced_nonLazyContinuation, atNonLazyBreak, after)(code);
+    }
+    effects.enter("codeFlowValue");
+    return contentChunk(code);
+  }
+
+  /**
+   * In code content.
+   *
+   * ```markdown
+   *   | ~~~js
+   * > | alert(1)
+   *     ^^^^^^^^
+   *   | ~~~
+   * ```
+   *
+   * @type {State}
+   */
+  function contentChunk(code) {
+    if (code === null || markdownLineEnding(code)) {
+      effects.exit("codeFlowValue");
+      return beforeContentChunk(code);
+    }
+    effects.consume(code);
+    return contentChunk;
+  }
+
+  /**
+   * After code.
+   *
+   * ```markdown
+   *   | ~~~js
+   *   | alert(1)
+   * > | ~~~
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    effects.exit("codeFenced");
+    return ok(code);
+  }
+
+  /**
+   * @this {TokenizeContext}
+   *   Context.
+   * @type {Tokenizer}
+   */
+  function tokenizeCloseStart(effects, ok, nok) {
+    let size = 0;
+    return startBefore;
+
+    /**
+     *
+     *
+     * @type {State}
+     */
+    function startBefore(code) {
+      effects.enter("lineEnding");
+      effects.consume(code);
+      effects.exit("lineEnding");
+      return start;
+    }
+
+    /**
+     * Before closing fence, at optional whitespace.
+     *
+     * ```markdown
+     *   | ~~~js
+     *   | alert(1)
+     * > | ~~~
+     *     ^
+     * ```
+     *
+     * @type {State}
+     */
+    function start(code) {
+      // Always populated by defaults.
+
+      // To do: `enter` here or in next state?
+      effects.enter("codeFencedFence");
+      return markdownSpace(code) ? factorySpace(effects, beforeSequenceClose, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code) : beforeSequenceClose(code);
+    }
+
+    /**
+     * In closing fence, after optional whitespace, at sequence.
+     *
+     * ```markdown
+     *   | ~~~js
+     *   | alert(1)
+     * > | ~~~
+     *     ^
+     * ```
+     *
+     * @type {State}
+     */
+    function beforeSequenceClose(code) {
+      if (code === marker) {
+        effects.enter("codeFencedFenceSequence");
+        return sequenceClose(code);
+      }
+      return nok(code);
+    }
+
+    /**
+     * In closing fence sequence.
+     *
+     * ```markdown
+     *   | ~~~js
+     *   | alert(1)
+     * > | ~~~
+     *     ^
+     * ```
+     *
+     * @type {State}
+     */
+    function sequenceClose(code) {
+      if (code === marker) {
+        size++;
+        effects.consume(code);
+        return sequenceClose;
+      }
+      if (size >= sizeOpen) {
+        effects.exit("codeFencedFenceSequence");
+        return markdownSpace(code) ? factorySpace(effects, sequenceCloseAfter, "whitespace")(code) : sequenceCloseAfter(code);
+      }
+      return nok(code);
+    }
+
+    /**
+     * After closing fence sequence, after optional whitespace.
+     *
+     * ```markdown
+     *   | ~~~js
+     *   | alert(1)
+     * > | ~~~
+     *        ^
+     * ```
+     *
+     * @type {State}
+     */
+    function sequenceCloseAfter(code) {
+      if (code === null || markdownLineEnding(code)) {
+        effects.exit("codeFencedFence");
+        return ok(code);
+      }
+      return nok(code);
+    }
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function code_fenced_tokenizeNonLazyContinuation(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /**
+   *
+   *
+   * @type {State}
+   */
+  function start(code) {
+    if (code === null) {
+      return nok(code);
+    }
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return lineStart;
+  }
+
+  /**
+   *
+   *
+   * @type {State}
+   */
+  function lineStart(code) {
+    return self.parser.lazy[self.now().line] ? nok(code) : ok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/character-entities/index.js
+/**
+ * Map of named character references.
+ *
+ * @type {Record<string, string>}
+ */
+const characterEntities = {
+  AElig: 'Æ',
+  AMP: '&',
+  Aacute: 'Á',
+  Abreve: 'Ă',
+  Acirc: 'Â',
+  Acy: 'А',
+  Afr: '𝔄',
+  Agrave: 'À',
+  Alpha: 'Α',
+  Amacr: 'Ā',
+  And: '⩓',
+  Aogon: 'Ą',
+  Aopf: '𝔸',
+  ApplyFunction: '⁡',
+  Aring: 'Å',
+  Ascr: '𝒜',
+  Assign: '≔',
+  Atilde: 'Ã',
+  Auml: 'Ä',
+  Backslash: '∖',
+  Barv: '⫧',
+  Barwed: '⌆',
+  Bcy: 'Б',
+  Because: '∵',
+  Bernoullis: 'ℬ',
+  Beta: 'Β',
+  Bfr: '𝔅',
+  Bopf: '𝔹',
+  Breve: '˘',
+  Bscr: 'ℬ',
+  Bumpeq: '≎',
+  CHcy: 'Ч',
+  COPY: '©',
+  Cacute: 'Ć',
+  Cap: '⋒',
+  CapitalDifferentialD: 'ⅅ',
+  Cayleys: 'ℭ',
+  Ccaron: 'Č',
+  Ccedil: 'Ç',
+  Ccirc: 'Ĉ',
+  Cconint: '∰',
+  Cdot: 'Ċ',
+  Cedilla: '¸',
+  CenterDot: '·',
+  Cfr: 'ℭ',
+  Chi: 'Χ',
+  CircleDot: '⊙',
+  CircleMinus: '⊖',
+  CirclePlus: '⊕',
+  CircleTimes: '⊗',
+  ClockwiseContourIntegral: '∲',
+  CloseCurlyDoubleQuote: '”',
+  CloseCurlyQuote: '’',
+  Colon: '∷',
+  Colone: '⩴',
+  Congruent: '≡',
+  Conint: '∯',
+  ContourIntegral: '∮',
+  Copf: 'ℂ',
+  Coproduct: '∐',
+  CounterClockwiseContourIntegral: '∳',
+  Cross: '⨯',
+  Cscr: '𝒞',
+  Cup: '⋓',
+  CupCap: '≍',
+  DD: 'ⅅ',
+  DDotrahd: '⤑',
+  DJcy: 'Ђ',
+  DScy: 'Ѕ',
+  DZcy: 'Џ',
+  Dagger: '‡',
+  Darr: '↡',
+  Dashv: '⫤',
+  Dcaron: 'Ď',
+  Dcy: 'Д',
+  Del: '∇',
+  Delta: 'Δ',
+  Dfr: '𝔇',
+  DiacriticalAcute: '´',
+  DiacriticalDot: '˙',
+  DiacriticalDoubleAcute: '˝',
+  DiacriticalGrave: '`',
+  DiacriticalTilde: '˜',
+  Diamond: '⋄',
+  DifferentialD: 'ⅆ',
+  Dopf: '𝔻',
+  Dot: '¨',
+  DotDot: '⃜',
+  DotEqual: '≐',
+  DoubleContourIntegral: '∯',
+  DoubleDot: '¨',
+  DoubleDownArrow: '⇓',
+  DoubleLeftArrow: '⇐',
+  DoubleLeftRightArrow: '⇔',
+  DoubleLeftTee: '⫤',
+  DoubleLongLeftArrow: '⟸',
+  DoubleLongLeftRightArrow: '⟺',
+  DoubleLongRightArrow: '⟹',
+  DoubleRightArrow: '⇒',
+  DoubleRightTee: '⊨',
+  DoubleUpArrow: '⇑',
+  DoubleUpDownArrow: '⇕',
+  DoubleVerticalBar: '∥',
+  DownArrow: '↓',
+  DownArrowBar: '⤓',
+  DownArrowUpArrow: '⇵',
+  DownBreve: '̑',
+  DownLeftRightVector: '⥐',
+  DownLeftTeeVector: '⥞',
+  DownLeftVector: '↽',
+  DownLeftVectorBar: '⥖',
+  DownRightTeeVector: '⥟',
+  DownRightVector: '⇁',
+  DownRightVectorBar: '⥗',
+  DownTee: '⊤',
+  DownTeeArrow: '↧',
+  Downarrow: '⇓',
+  Dscr: '𝒟',
+  Dstrok: 'Đ',
+  ENG: 'Ŋ',
+  ETH: 'Ð',
+  Eacute: 'É',
+  Ecaron: 'Ě',
+  Ecirc: 'Ê',
+  Ecy: 'Э',
+  Edot: 'Ė',
+  Efr: '𝔈',
+  Egrave: 'È',
+  Element: '∈',
+  Emacr: 'Ē',
+  EmptySmallSquare: '◻',
+  EmptyVerySmallSquare: '▫',
+  Eogon: 'Ę',
+  Eopf: '𝔼',
+  Epsilon: 'Ε',
+  Equal: '⩵',
+  EqualTilde: '≂',
+  Equilibrium: '⇌',
+  Escr: 'ℰ',
+  Esim: '⩳',
+  Eta: 'Η',
+  Euml: 'Ë',
+  Exists: '∃',
+  ExponentialE: 'ⅇ',
+  Fcy: 'Ф',
+  Ffr: '𝔉',
+  FilledSmallSquare: '◼',
+  FilledVerySmallSquare: '▪',
+  Fopf: '𝔽',
+  ForAll: '∀',
+  Fouriertrf: 'ℱ',
+  Fscr: 'ℱ',
+  GJcy: 'Ѓ',
+  GT: '>',
+  Gamma: 'Γ',
+  Gammad: 'Ϝ',
+  Gbreve: 'Ğ',
+  Gcedil: 'Ģ',
+  Gcirc: 'Ĝ',
+  Gcy: 'Г',
+  Gdot: 'Ġ',
+  Gfr: '𝔊',
+  Gg: '⋙',
+  Gopf: '𝔾',
+  GreaterEqual: '≥',
+  GreaterEqualLess: '⋛',
+  GreaterFullEqual: '≧',
+  GreaterGreater: '⪢',
+  GreaterLess: '≷',
+  GreaterSlantEqual: '⩾',
+  GreaterTilde: '≳',
+  Gscr: '𝒢',
+  Gt: '≫',
+  HARDcy: 'Ъ',
+  Hacek: 'ˇ',
+  Hat: '^',
+  Hcirc: 'Ĥ',
+  Hfr: 'ℌ',
+  HilbertSpace: 'ℋ',
+  Hopf: 'ℍ',
+  HorizontalLine: '─',
+  Hscr: 'ℋ',
+  Hstrok: 'Ħ',
+  HumpDownHump: '≎',
+  HumpEqual: '≏',
+  IEcy: 'Е',
+  IJlig: 'Ĳ',
+  IOcy: 'Ё',
+  Iacute: 'Í',
+  Icirc: 'Î',
+  Icy: 'И',
+  Idot: 'İ',
+  Ifr: 'ℑ',
+  Igrave: 'Ì',
+  Im: 'ℑ',
+  Imacr: 'Ī',
+  ImaginaryI: 'ⅈ',
+  Implies: '⇒',
+  Int: '∬',
+  Integral: '∫',
+  Intersection: '⋂',
+  InvisibleComma: '⁣',
+  InvisibleTimes: '⁢',
+  Iogon: 'Į',
+  Iopf: '𝕀',
+  Iota: 'Ι',
+  Iscr: 'ℐ',
+  Itilde: 'Ĩ',
+  Iukcy: 'І',
+  Iuml: 'Ï',
+  Jcirc: 'Ĵ',
+  Jcy: 'Й',
+  Jfr: '𝔍',
+  Jopf: '𝕁',
+  Jscr: '𝒥',
+  Jsercy: 'Ј',
+  Jukcy: 'Є',
+  KHcy: 'Х',
+  KJcy: 'Ќ',
+  Kappa: 'Κ',
+  Kcedil: 'Ķ',
+  Kcy: 'К',
+  Kfr: '𝔎',
+  Kopf: '𝕂',
+  Kscr: '𝒦',
+  LJcy: 'Љ',
+  LT: '<',
+  Lacute: 'Ĺ',
+  Lambda: 'Λ',
+  Lang: '⟪',
+  Laplacetrf: 'ℒ',
+  Larr: '↞',
+  Lcaron: 'Ľ',
+  Lcedil: 'Ļ',
+  Lcy: 'Л',
+  LeftAngleBracket: '⟨',
+  LeftArrow: '←',
+  LeftArrowBar: '⇤',
+  LeftArrowRightArrow: '⇆',
+  LeftCeiling: '⌈',
+  LeftDoubleBracket: '⟦',
+  LeftDownTeeVector: '⥡',
+  LeftDownVector: '⇃',
+  LeftDownVectorBar: '⥙',
+  LeftFloor: '⌊',
+  LeftRightArrow: '↔',
+  LeftRightVector: '⥎',
+  LeftTee: '⊣',
+  LeftTeeArrow: '↤',
+  LeftTeeVector: '⥚',
+  LeftTriangle: '⊲',
+  LeftTriangleBar: '⧏',
+  LeftTriangleEqual: '⊴',
+  LeftUpDownVector: '⥑',
+  LeftUpTeeVector: '⥠',
+  LeftUpVector: '↿',
+  LeftUpVectorBar: '⥘',
+  LeftVector: '↼',
+  LeftVectorBar: '⥒',
+  Leftarrow: '⇐',
+  Leftrightarrow: '⇔',
+  LessEqualGreater: '⋚',
+  LessFullEqual: '≦',
+  LessGreater: '≶',
+  LessLess: '⪡',
+  LessSlantEqual: '⩽',
+  LessTilde: '≲',
+  Lfr: '𝔏',
+  Ll: '⋘',
+  Lleftarrow: '⇚',
+  Lmidot: 'Ŀ',
+  LongLeftArrow: '⟵',
+  LongLeftRightArrow: '⟷',
+  LongRightArrow: '⟶',
+  Longleftarrow: '⟸',
+  Longleftrightarrow: '⟺',
+  Longrightarrow: '⟹',
+  Lopf: '𝕃',
+  LowerLeftArrow: '↙',
+  LowerRightArrow: '↘',
+  Lscr: 'ℒ',
+  Lsh: '↰',
+  Lstrok: 'Ł',
+  Lt: '≪',
+  Map: '⤅',
+  Mcy: 'М',
+  MediumSpace: ' ',
+  Mellintrf: 'ℳ',
+  Mfr: '𝔐',
+  MinusPlus: '∓',
+  Mopf: '𝕄',
+  Mscr: 'ℳ',
+  Mu: 'Μ',
+  NJcy: 'Њ',
+  Nacute: 'Ń',
+  Ncaron: 'Ň',
+  Ncedil: 'Ņ',
+  Ncy: 'Н',
+  NegativeMediumSpace: '​',
+  NegativeThickSpace: '​',
+  NegativeThinSpace: '​',
+  NegativeVeryThinSpace: '​',
+  NestedGreaterGreater: '≫',
+  NestedLessLess: '≪',
+  NewLine: '\n',
+  Nfr: '𝔑',
+  NoBreak: '⁠',
+  NonBreakingSpace: ' ',
+  Nopf: 'ℕ',
+  Not: '⫬',
+  NotCongruent: '≢',
+  NotCupCap: '≭',
+  NotDoubleVerticalBar: '∦',
+  NotElement: '∉',
+  NotEqual: '≠',
+  NotEqualTilde: '≂̸',
+  NotExists: '∄',
+  NotGreater: '≯',
+  NotGreaterEqual: '≱',
+  NotGreaterFullEqual: '≧̸',
+  NotGreaterGreater: '≫̸',
+  NotGreaterLess: '≹',
+  NotGreaterSlantEqual: '⩾̸',
+  NotGreaterTilde: '≵',
+  NotHumpDownHump: '≎̸',
+  NotHumpEqual: '≏̸',
+  NotLeftTriangle: '⋪',
+  NotLeftTriangleBar: '⧏̸',
+  NotLeftTriangleEqual: '⋬',
+  NotLess: '≮',
+  NotLessEqual: '≰',
+  NotLessGreater: '≸',
+  NotLessLess: '≪̸',
+  NotLessSlantEqual: '⩽̸',
+  NotLessTilde: '≴',
+  NotNestedGreaterGreater: '⪢̸',
+  NotNestedLessLess: '⪡̸',
+  NotPrecedes: '⊀',
+  NotPrecedesEqual: '⪯̸',
+  NotPrecedesSlantEqual: '⋠',
+  NotReverseElement: '∌',
+  NotRightTriangle: '⋫',
+  NotRightTriangleBar: '⧐̸',
+  NotRightTriangleEqual: '⋭',
+  NotSquareSubset: '⊏̸',
+  NotSquareSubsetEqual: '⋢',
+  NotSquareSuperset: '⊐̸',
+  NotSquareSupersetEqual: '⋣',
+  NotSubset: '⊂⃒',
+  NotSubsetEqual: '⊈',
+  NotSucceeds: '⊁',
+  NotSucceedsEqual: '⪰̸',
+  NotSucceedsSlantEqual: '⋡',
+  NotSucceedsTilde: '≿̸',
+  NotSuperset: '⊃⃒',
+  NotSupersetEqual: '⊉',
+  NotTilde: '≁',
+  NotTildeEqual: '≄',
+  NotTildeFullEqual: '≇',
+  NotTildeTilde: '≉',
+  NotVerticalBar: '∤',
+  Nscr: '𝒩',
+  Ntilde: 'Ñ',
+  Nu: 'Ν',
+  OElig: 'Œ',
+  Oacute: 'Ó',
+  Ocirc: 'Ô',
+  Ocy: 'О',
+  Odblac: 'Ő',
+  Ofr: '𝔒',
+  Ograve: 'Ò',
+  Omacr: 'Ō',
+  Omega: 'Ω',
+  Omicron: 'Ο',
+  Oopf: '𝕆',
+  OpenCurlyDoubleQuote: '“',
+  OpenCurlyQuote: '‘',
+  Or: '⩔',
+  Oscr: '𝒪',
+  Oslash: 'Ø',
+  Otilde: 'Õ',
+  Otimes: '⨷',
+  Ouml: 'Ö',
+  OverBar: '‾',
+  OverBrace: '⏞',
+  OverBracket: '⎴',
+  OverParenthesis: '⏜',
+  PartialD: '∂',
+  Pcy: 'П',
+  Pfr: '𝔓',
+  Phi: 'Φ',
+  Pi: 'Π',
+  PlusMinus: '±',
+  Poincareplane: 'ℌ',
+  Popf: 'ℙ',
+  Pr: '⪻',
+  Precedes: '≺',
+  PrecedesEqual: '⪯',
+  PrecedesSlantEqual: '≼',
+  PrecedesTilde: '≾',
+  Prime: '″',
+  Product: '∏',
+  Proportion: '∷',
+  Proportional: '∝',
+  Pscr: '𝒫',
+  Psi: 'Ψ',
+  QUOT: '"',
+  Qfr: '𝔔',
+  Qopf: 'ℚ',
+  Qscr: '𝒬',
+  RBarr: '⤐',
+  REG: '®',
+  Racute: 'Ŕ',
+  Rang: '⟫',
+  Rarr: '↠',
+  Rarrtl: '⤖',
+  Rcaron: 'Ř',
+  Rcedil: 'Ŗ',
+  Rcy: 'Р',
+  Re: 'ℜ',
+  ReverseElement: '∋',
+  ReverseEquilibrium: '⇋',
+  ReverseUpEquilibrium: '⥯',
+  Rfr: 'ℜ',
+  Rho: 'Ρ',
+  RightAngleBracket: '⟩',
+  RightArrow: '→',
+  RightArrowBar: '⇥',
+  RightArrowLeftArrow: '⇄',
+  RightCeiling: '⌉',
+  RightDoubleBracket: '⟧',
+  RightDownTeeVector: '⥝',
+  RightDownVector: '⇂',
+  RightDownVectorBar: '⥕',
+  RightFloor: '⌋',
+  RightTee: '⊢',
+  RightTeeArrow: '↦',
+  RightTeeVector: '⥛',
+  RightTriangle: '⊳',
+  RightTriangleBar: '⧐',
+  RightTriangleEqual: '⊵',
+  RightUpDownVector: '⥏',
+  RightUpTeeVector: '⥜',
+  RightUpVector: '↾',
+  RightUpVectorBar: '⥔',
+  RightVector: '⇀',
+  RightVectorBar: '⥓',
+  Rightarrow: '⇒',
+  Ropf: 'ℝ',
+  RoundImplies: '⥰',
+  Rrightarrow: '⇛',
+  Rscr: 'ℛ',
+  Rsh: '↱',
+  RuleDelayed: '⧴',
+  SHCHcy: 'Щ',
+  SHcy: 'Ш',
+  SOFTcy: 'Ь',
+  Sacute: 'Ś',
+  Sc: '⪼',
+  Scaron: 'Š',
+  Scedil: 'Ş',
+  Scirc: 'Ŝ',
+  Scy: 'С',
+  Sfr: '𝔖',
+  ShortDownArrow: '↓',
+  ShortLeftArrow: '←',
+  ShortRightArrow: '→',
+  ShortUpArrow: '↑',
+  Sigma: 'Σ',
+  SmallCircle: '∘',
+  Sopf: '𝕊',
+  Sqrt: '√',
+  Square: '□',
+  SquareIntersection: '⊓',
+  SquareSubset: '⊏',
+  SquareSubsetEqual: '⊑',
+  SquareSuperset: '⊐',
+  SquareSupersetEqual: '⊒',
+  SquareUnion: '⊔',
+  Sscr: '𝒮',
+  Star: '⋆',
+  Sub: '⋐',
+  Subset: '⋐',
+  SubsetEqual: '⊆',
+  Succeeds: '≻',
+  SucceedsEqual: '⪰',
+  SucceedsSlantEqual: '≽',
+  SucceedsTilde: '≿',
+  SuchThat: '∋',
+  Sum: '∑',
+  Sup: '⋑',
+  Superset: '⊃',
+  SupersetEqual: '⊇',
+  Supset: '⋑',
+  THORN: 'Þ',
+  TRADE: '™',
+  TSHcy: 'Ћ',
+  TScy: 'Ц',
+  Tab: '\t',
+  Tau: 'Τ',
+  Tcaron: 'Ť',
+  Tcedil: 'Ţ',
+  Tcy: 'Т',
+  Tfr: '𝔗',
+  Therefore: '∴',
+  Theta: 'Θ',
+  ThickSpace: '  ',
+  ThinSpace: ' ',
+  Tilde: '∼',
+  TildeEqual: '≃',
+  TildeFullEqual: '≅',
+  TildeTilde: '≈',
+  Topf: '𝕋',
+  TripleDot: '⃛',
+  Tscr: '𝒯',
+  Tstrok: 'Ŧ',
+  Uacute: 'Ú',
+  Uarr: '↟',
+  Uarrocir: '⥉',
+  Ubrcy: 'Ў',
+  Ubreve: 'Ŭ',
+  Ucirc: 'Û',
+  Ucy: 'У',
+  Udblac: 'Ű',
+  Ufr: '𝔘',
+  Ugrave: 'Ù',
+  Umacr: 'Ū',
+  UnderBar: '_',
+  UnderBrace: '⏟',
+  UnderBracket: '⎵',
+  UnderParenthesis: '⏝',
+  Union: '⋃',
+  UnionPlus: '⊎',
+  Uogon: 'Ų',
+  Uopf: '𝕌',
+  UpArrow: '↑',
+  UpArrowBar: '⤒',
+  UpArrowDownArrow: '⇅',
+  UpDownArrow: '↕',
+  UpEquilibrium: '⥮',
+  UpTee: '⊥',
+  UpTeeArrow: '↥',
+  Uparrow: '⇑',
+  Updownarrow: '⇕',
+  UpperLeftArrow: '↖',
+  UpperRightArrow: '↗',
+  Upsi: 'ϒ',
+  Upsilon: 'Υ',
+  Uring: 'Ů',
+  Uscr: '𝒰',
+  Utilde: 'Ũ',
+  Uuml: 'Ü',
+  VDash: '⊫',
+  Vbar: '⫫',
+  Vcy: 'В',
+  Vdash: '⊩',
+  Vdashl: '⫦',
+  Vee: '⋁',
+  Verbar: '‖',
+  Vert: '‖',
+  VerticalBar: '∣',
+  VerticalLine: '|',
+  VerticalSeparator: '❘',
+  VerticalTilde: '≀',
+  VeryThinSpace: ' ',
+  Vfr: '𝔙',
+  Vopf: '𝕍',
+  Vscr: '𝒱',
+  Vvdash: '⊪',
+  Wcirc: 'Ŵ',
+  Wedge: '⋀',
+  Wfr: '𝔚',
+  Wopf: '𝕎',
+  Wscr: '𝒲',
+  Xfr: '𝔛',
+  Xi: 'Ξ',
+  Xopf: '𝕏',
+  Xscr: '𝒳',
+  YAcy: 'Я',
+  YIcy: 'Ї',
+  YUcy: 'Ю',
+  Yacute: 'Ý',
+  Ycirc: 'Ŷ',
+  Ycy: 'Ы',
+  Yfr: '𝔜',
+  Yopf: '𝕐',
+  Yscr: '𝒴',
+  Yuml: 'Ÿ',
+  ZHcy: 'Ж',
+  Zacute: 'Ź',
+  Zcaron: 'Ž',
+  Zcy: 'З',
+  Zdot: 'Ż',
+  ZeroWidthSpace: '​',
+  Zeta: 'Ζ',
+  Zfr: 'ℨ',
+  Zopf: 'ℤ',
+  Zscr: '𝒵',
+  aacute: 'á',
+  abreve: 'ă',
+  ac: '∾',
+  acE: '∾̳',
+  acd: '∿',
+  acirc: 'â',
+  acute: '´',
+  acy: 'а',
+  aelig: 'æ',
+  af: '⁡',
+  afr: '𝔞',
+  agrave: 'à',
+  alefsym: 'ℵ',
+  aleph: 'ℵ',
+  alpha: 'α',
+  amacr: 'ā',
+  amalg: '⨿',
+  amp: '&',
+  and: '∧',
+  andand: '⩕',
+  andd: '⩜',
+  andslope: '⩘',
+  andv: '⩚',
+  ang: '∠',
+  ange: '⦤',
+  angle: '∠',
+  angmsd: '∡',
+  angmsdaa: '⦨',
+  angmsdab: '⦩',
+  angmsdac: '⦪',
+  angmsdad: '⦫',
+  angmsdae: '⦬',
+  angmsdaf: '⦭',
+  angmsdag: '⦮',
+  angmsdah: '⦯',
+  angrt: '∟',
+  angrtvb: '⊾',
+  angrtvbd: '⦝',
+  angsph: '∢',
+  angst: 'Å',
+  angzarr: '⍼',
+  aogon: 'ą',
+  aopf: '𝕒',
+  ap: '≈',
+  apE: '⩰',
+  apacir: '⩯',
+  ape: '≊',
+  apid: '≋',
+  apos: "'",
+  approx: '≈',
+  approxeq: '≊',
+  aring: 'å',
+  ascr: '𝒶',
+  ast: '*',
+  asymp: '≈',
+  asympeq: '≍',
+  atilde: 'ã',
+  auml: 'ä',
+  awconint: '∳',
+  awint: '⨑',
+  bNot: '⫭',
+  backcong: '≌',
+  backepsilon: '϶',
+  backprime: '‵',
+  backsim: '∽',
+  backsimeq: '⋍',
+  barvee: '⊽',
+  barwed: '⌅',
+  barwedge: '⌅',
+  bbrk: '⎵',
+  bbrktbrk: '⎶',
+  bcong: '≌',
+  bcy: 'б',
+  bdquo: '„',
+  becaus: '∵',
+  because: '∵',
+  bemptyv: '⦰',
+  bepsi: '϶',
+  bernou: 'ℬ',
+  beta: 'β',
+  beth: 'ℶ',
+  between: '≬',
+  bfr: '𝔟',
+  bigcap: '⋂',
+  bigcirc: '◯',
+  bigcup: '⋃',
+  bigodot: '⨀',
+  bigoplus: '⨁',
+  bigotimes: '⨂',
+  bigsqcup: '⨆',
+  bigstar: '★',
+  bigtriangledown: '▽',
+  bigtriangleup: '△',
+  biguplus: '⨄',
+  bigvee: '⋁',
+  bigwedge: '⋀',
+  bkarow: '⤍',
+  blacklozenge: '⧫',
+  blacksquare: '▪',
+  blacktriangle: '▴',
+  blacktriangledown: '▾',
+  blacktriangleleft: '◂',
+  blacktriangleright: '▸',
+  blank: '␣',
+  blk12: '▒',
+  blk14: '░',
+  blk34: '▓',
+  block: '█',
+  bne: '=⃥',
+  bnequiv: '≡⃥',
+  bnot: '⌐',
+  bopf: '𝕓',
+  bot: '⊥',
+  bottom: '⊥',
+  bowtie: '⋈',
+  boxDL: '╗',
+  boxDR: '╔',
+  boxDl: '╖',
+  boxDr: '╓',
+  boxH: '═',
+  boxHD: '╦',
+  boxHU: '╩',
+  boxHd: '╤',
+  boxHu: '╧',
+  boxUL: '╝',
+  boxUR: '╚',
+  boxUl: '╜',
+  boxUr: '╙',
+  boxV: '║',
+  boxVH: '╬',
+  boxVL: '╣',
+  boxVR: '╠',
+  boxVh: '╫',
+  boxVl: '╢',
+  boxVr: '╟',
+  boxbox: '⧉',
+  boxdL: '╕',
+  boxdR: '╒',
+  boxdl: '┐',
+  boxdr: '┌',
+  boxh: '─',
+  boxhD: '╥',
+  boxhU: '╨',
+  boxhd: '┬',
+  boxhu: '┴',
+  boxminus: '⊟',
+  boxplus: '⊞',
+  boxtimes: '⊠',
+  boxuL: '╛',
+  boxuR: '╘',
+  boxul: '┘',
+  boxur: '└',
+  boxv: '│',
+  boxvH: '╪',
+  boxvL: '╡',
+  boxvR: '╞',
+  boxvh: '┼',
+  boxvl: '┤',
+  boxvr: '├',
+  bprime: '‵',
+  breve: '˘',
+  brvbar: '¦',
+  bscr: '𝒷',
+  bsemi: '⁏',
+  bsim: '∽',
+  bsime: '⋍',
+  bsol: '\\',
+  bsolb: '⧅',
+  bsolhsub: '⟈',
+  bull: '•',
+  bullet: '•',
+  bump: '≎',
+  bumpE: '⪮',
+  bumpe: '≏',
+  bumpeq: '≏',
+  cacute: 'ć',
+  cap: '∩',
+  capand: '⩄',
+  capbrcup: '⩉',
+  capcap: '⩋',
+  capcup: '⩇',
+  capdot: '⩀',
+  caps: '∩︀',
+  caret: '⁁',
+  caron: 'ˇ',
+  ccaps: '⩍',
+  ccaron: 'č',
+  ccedil: 'ç',
+  ccirc: 'ĉ',
+  ccups: '⩌',
+  ccupssm: '⩐',
+  cdot: 'ċ',
+  cedil: '¸',
+  cemptyv: '⦲',
+  cent: '¢',
+  centerdot: '·',
+  cfr: '𝔠',
+  chcy: 'ч',
+  check: '✓',
+  checkmark: '✓',
+  chi: 'χ',
+  cir: '○',
+  cirE: '⧃',
+  circ: 'ˆ',
+  circeq: '≗',
+  circlearrowleft: '↺',
+  circlearrowright: '↻',
+  circledR: '®',
+  circledS: 'Ⓢ',
+  circledast: '⊛',
+  circledcirc: '⊚',
+  circleddash: '⊝',
+  cire: '≗',
+  cirfnint: '⨐',
+  cirmid: '⫯',
+  cirscir: '⧂',
+  clubs: '♣',
+  clubsuit: '♣',
+  colon: ':',
+  colone: '≔',
+  coloneq: '≔',
+  comma: ',',
+  commat: '@',
+  comp: '∁',
+  compfn: '∘',
+  complement: '∁',
+  complexes: 'ℂ',
+  cong: '≅',
+  congdot: '⩭',
+  conint: '∮',
+  copf: '𝕔',
+  coprod: '∐',
+  copy: '©',
+  copysr: '℗',
+  crarr: '↵',
+  cross: '✗',
+  cscr: '𝒸',
+  csub: '⫏',
+  csube: '⫑',
+  csup: '⫐',
+  csupe: '⫒',
+  ctdot: '⋯',
+  cudarrl: '⤸',
+  cudarrr: '⤵',
+  cuepr: '⋞',
+  cuesc: '⋟',
+  cularr: '↶',
+  cularrp: '⤽',
+  cup: '∪',
+  cupbrcap: '⩈',
+  cupcap: '⩆',
+  cupcup: '⩊',
+  cupdot: '⊍',
+  cupor: '⩅',
+  cups: '∪︀',
+  curarr: '↷',
+  curarrm: '⤼',
+  curlyeqprec: '⋞',
+  curlyeqsucc: '⋟',
+  curlyvee: '⋎',
+  curlywedge: '⋏',
+  curren: '¤',
+  curvearrowleft: '↶',
+  curvearrowright: '↷',
+  cuvee: '⋎',
+  cuwed: '⋏',
+  cwconint: '∲',
+  cwint: '∱',
+  cylcty: '⌭',
+  dArr: '⇓',
+  dHar: '⥥',
+  dagger: '†',
+  daleth: 'ℸ',
+  darr: '↓',
+  dash: '‐',
+  dashv: '⊣',
+  dbkarow: '⤏',
+  dblac: '˝',
+  dcaron: 'ď',
+  dcy: 'д',
+  dd: 'ⅆ',
+  ddagger: '‡',
+  ddarr: '⇊',
+  ddotseq: '⩷',
+  deg: '°',
+  delta: 'δ',
+  demptyv: '⦱',
+  dfisht: '⥿',
+  dfr: '𝔡',
+  dharl: '⇃',
+  dharr: '⇂',
+  diam: '⋄',
+  diamond: '⋄',
+  diamondsuit: '♦',
+  diams: '♦',
+  die: '¨',
+  digamma: 'ϝ',
+  disin: '⋲',
+  div: '÷',
+  divide: '÷',
+  divideontimes: '⋇',
+  divonx: '⋇',
+  djcy: 'ђ',
+  dlcorn: '⌞',
+  dlcrop: '⌍',
+  dollar: '$',
+  dopf: '𝕕',
+  dot: '˙',
+  doteq: '≐',
+  doteqdot: '≑',
+  dotminus: '∸',
+  dotplus: '∔',
+  dotsquare: '⊡',
+  doublebarwedge: '⌆',
+  downarrow: '↓',
+  downdownarrows: '⇊',
+  downharpoonleft: '⇃',
+  downharpoonright: '⇂',
+  drbkarow: '⤐',
+  drcorn: '⌟',
+  drcrop: '⌌',
+  dscr: '𝒹',
+  dscy: 'ѕ',
+  dsol: '⧶',
+  dstrok: 'đ',
+  dtdot: '⋱',
+  dtri: '▿',
+  dtrif: '▾',
+  duarr: '⇵',
+  duhar: '⥯',
+  dwangle: '⦦',
+  dzcy: 'џ',
+  dzigrarr: '⟿',
+  eDDot: '⩷',
+  eDot: '≑',
+  eacute: 'é',
+  easter: '⩮',
+  ecaron: 'ě',
+  ecir: '≖',
+  ecirc: 'ê',
+  ecolon: '≕',
+  ecy: 'э',
+  edot: 'ė',
+  ee: 'ⅇ',
+  efDot: '≒',
+  efr: '𝔢',
+  eg: '⪚',
+  egrave: 'è',
+  egs: '⪖',
+  egsdot: '⪘',
+  el: '⪙',
+  elinters: '⏧',
+  ell: 'ℓ',
+  els: '⪕',
+  elsdot: '⪗',
+  emacr: 'ē',
+  empty: '∅',
+  emptyset: '∅',
+  emptyv: '∅',
+  emsp13: ' ',
+  emsp14: ' ',
+  emsp: ' ',
+  eng: 'ŋ',
+  ensp: ' ',
+  eogon: 'ę',
+  eopf: '𝕖',
+  epar: '⋕',
+  eparsl: '⧣',
+  eplus: '⩱',
+  epsi: 'ε',
+  epsilon: 'ε',
+  epsiv: 'ϵ',
+  eqcirc: '≖',
+  eqcolon: '≕',
+  eqsim: '≂',
+  eqslantgtr: '⪖',
+  eqslantless: '⪕',
+  equals: '=',
+  equest: '≟',
+  equiv: '≡',
+  equivDD: '⩸',
+  eqvparsl: '⧥',
+  erDot: '≓',
+  erarr: '⥱',
+  escr: 'ℯ',
+  esdot: '≐',
+  esim: '≂',
+  eta: 'η',
+  eth: 'ð',
+  euml: 'ë',
+  euro: '€',
+  excl: '!',
+  exist: '∃',
+  expectation: 'ℰ',
+  exponentiale: 'ⅇ',
+  fallingdotseq: '≒',
+  fcy: 'ф',
+  female: '♀',
+  ffilig: 'ﬃ',
+  fflig: 'ﬀ',
+  ffllig: 'ﬄ',
+  ffr: '𝔣',
+  filig: 'ﬁ',
+  fjlig: 'fj',
+  flat: '♭',
+  fllig: 'ﬂ',
+  fltns: '▱',
+  fnof: 'ƒ',
+  fopf: '𝕗',
+  forall: '∀',
+  fork: '⋔',
+  forkv: '⫙',
+  fpartint: '⨍',
+  frac12: '½',
+  frac13: '⅓',
+  frac14: '¼',
+  frac15: '⅕',
+  frac16: '⅙',
+  frac18: '⅛',
+  frac23: '⅔',
+  frac25: '⅖',
+  frac34: '¾',
+  frac35: '⅗',
+  frac38: '⅜',
+  frac45: '⅘',
+  frac56: '⅚',
+  frac58: '⅝',
+  frac78: '⅞',
+  frasl: '⁄',
+  frown: '⌢',
+  fscr: '𝒻',
+  gE: '≧',
+  gEl: '⪌',
+  gacute: 'ǵ',
+  gamma: 'γ',
+  gammad: 'ϝ',
+  gap: '⪆',
+  gbreve: 'ğ',
+  gcirc: 'ĝ',
+  gcy: 'г',
+  gdot: 'ġ',
+  ge: '≥',
+  gel: '⋛',
+  geq: '≥',
+  geqq: '≧',
+  geqslant: '⩾',
+  ges: '⩾',
+  gescc: '⪩',
+  gesdot: '⪀',
+  gesdoto: '⪂',
+  gesdotol: '⪄',
+  gesl: '⋛︀',
+  gesles: '⪔',
+  gfr: '𝔤',
+  gg: '≫',
+  ggg: '⋙',
+  gimel: 'ℷ',
+  gjcy: 'ѓ',
+  gl: '≷',
+  glE: '⪒',
+  gla: '⪥',
+  glj: '⪤',
+  gnE: '≩',
+  gnap: '⪊',
+  gnapprox: '⪊',
+  gne: '⪈',
+  gneq: '⪈',
+  gneqq: '≩',
+  gnsim: '⋧',
+  gopf: '𝕘',
+  grave: '`',
+  gscr: 'ℊ',
+  gsim: '≳',
+  gsime: '⪎',
+  gsiml: '⪐',
+  gt: '>',
+  gtcc: '⪧',
+  gtcir: '⩺',
+  gtdot: '⋗',
+  gtlPar: '⦕',
+  gtquest: '⩼',
+  gtrapprox: '⪆',
+  gtrarr: '⥸',
+  gtrdot: '⋗',
+  gtreqless: '⋛',
+  gtreqqless: '⪌',
+  gtrless: '≷',
+  gtrsim: '≳',
+  gvertneqq: '≩︀',
+  gvnE: '≩︀',
+  hArr: '⇔',
+  hairsp: ' ',
+  half: '½',
+  hamilt: 'ℋ',
+  hardcy: 'ъ',
+  harr: '↔',
+  harrcir: '⥈',
+  harrw: '↭',
+  hbar: 'ℏ',
+  hcirc: 'ĥ',
+  hearts: '♥',
+  heartsuit: '♥',
+  hellip: '…',
+  hercon: '⊹',
+  hfr: '𝔥',
+  hksearow: '⤥',
+  hkswarow: '⤦',
+  hoarr: '⇿',
+  homtht: '∻',
+  hookleftarrow: '↩',
+  hookrightarrow: '↪',
+  hopf: '𝕙',
+  horbar: '―',
+  hscr: '𝒽',
+  hslash: 'ℏ',
+  hstrok: 'ħ',
+  hybull: '⁃',
+  hyphen: '‐',
+  iacute: 'í',
+  ic: '⁣',
+  icirc: 'î',
+  icy: 'и',
+  iecy: 'е',
+  iexcl: '¡',
+  iff: '⇔',
+  ifr: '𝔦',
+  igrave: 'ì',
+  ii: 'ⅈ',
+  iiiint: '⨌',
+  iiint: '∭',
+  iinfin: '⧜',
+  iiota: '℩',
+  ijlig: 'ĳ',
+  imacr: 'ī',
+  image: 'ℑ',
+  imagline: 'ℐ',
+  imagpart: 'ℑ',
+  imath: 'ı',
+  imof: '⊷',
+  imped: 'Ƶ',
+  in: '∈',
+  incare: '℅',
+  infin: '∞',
+  infintie: '⧝',
+  inodot: 'ı',
+  int: '∫',
+  intcal: '⊺',
+  integers: 'ℤ',
+  intercal: '⊺',
+  intlarhk: '⨗',
+  intprod: '⨼',
+  iocy: 'ё',
+  iogon: 'į',
+  iopf: '𝕚',
+  iota: 'ι',
+  iprod: '⨼',
+  iquest: '¿',
+  iscr: '𝒾',
+  isin: '∈',
+  isinE: '⋹',
+  isindot: '⋵',
+  isins: '⋴',
+  isinsv: '⋳',
+  isinv: '∈',
+  it: '⁢',
+  itilde: 'ĩ',
+  iukcy: 'і',
+  iuml: 'ï',
+  jcirc: 'ĵ',
+  jcy: 'й',
+  jfr: '𝔧',
+  jmath: 'ȷ',
+  jopf: '𝕛',
+  jscr: '𝒿',
+  jsercy: 'ј',
+  jukcy: 'є',
+  kappa: 'κ',
+  kappav: 'ϰ',
+  kcedil: 'ķ',
+  kcy: 'к',
+  kfr: '𝔨',
+  kgreen: 'ĸ',
+  khcy: 'х',
+  kjcy: 'ќ',
+  kopf: '𝕜',
+  kscr: '𝓀',
+  lAarr: '⇚',
+  lArr: '⇐',
+  lAtail: '⤛',
+  lBarr: '⤎',
+  lE: '≦',
+  lEg: '⪋',
+  lHar: '⥢',
+  lacute: 'ĺ',
+  laemptyv: '⦴',
+  lagran: 'ℒ',
+  lambda: 'λ',
+  lang: '⟨',
+  langd: '⦑',
+  langle: '⟨',
+  lap: '⪅',
+  laquo: '«',
+  larr: '←',
+  larrb: '⇤',
+  larrbfs: '⤟',
+  larrfs: '⤝',
+  larrhk: '↩',
+  larrlp: '↫',
+  larrpl: '⤹',
+  larrsim: '⥳',
+  larrtl: '↢',
+  lat: '⪫',
+  latail: '⤙',
+  late: '⪭',
+  lates: '⪭︀',
+  lbarr: '⤌',
+  lbbrk: '❲',
+  lbrace: '{',
+  lbrack: '[',
+  lbrke: '⦋',
+  lbrksld: '⦏',
+  lbrkslu: '⦍',
+  lcaron: 'ľ',
+  lcedil: 'ļ',
+  lceil: '⌈',
+  lcub: '{',
+  lcy: 'л',
+  ldca: '⤶',
+  ldquo: '“',
+  ldquor: '„',
+  ldrdhar: '⥧',
+  ldrushar: '⥋',
+  ldsh: '↲',
+  le: '≤',
+  leftarrow: '←',
+  leftarrowtail: '↢',
+  leftharpoondown: '↽',
+  leftharpoonup: '↼',
+  leftleftarrows: '⇇',
+  leftrightarrow: '↔',
+  leftrightarrows: '⇆',
+  leftrightharpoons: '⇋',
+  leftrightsquigarrow: '↭',
+  leftthreetimes: '⋋',
+  leg: '⋚',
+  leq: '≤',
+  leqq: '≦',
+  leqslant: '⩽',
+  les: '⩽',
+  lescc: '⪨',
+  lesdot: '⩿',
+  lesdoto: '⪁',
+  lesdotor: '⪃',
+  lesg: '⋚︀',
+  lesges: '⪓',
+  lessapprox: '⪅',
+  lessdot: '⋖',
+  lesseqgtr: '⋚',
+  lesseqqgtr: '⪋',
+  lessgtr: '≶',
+  lesssim: '≲',
+  lfisht: '⥼',
+  lfloor: '⌊',
+  lfr: '𝔩',
+  lg: '≶',
+  lgE: '⪑',
+  lhard: '↽',
+  lharu: '↼',
+  lharul: '⥪',
+  lhblk: '▄',
+  ljcy: 'љ',
+  ll: '≪',
+  llarr: '⇇',
+  llcorner: '⌞',
+  llhard: '⥫',
+  lltri: '◺',
+  lmidot: 'ŀ',
+  lmoust: '⎰',
+  lmoustache: '⎰',
+  lnE: '≨',
+  lnap: '⪉',
+  lnapprox: '⪉',
+  lne: '⪇',
+  lneq: '⪇',
+  lneqq: '≨',
+  lnsim: '⋦',
+  loang: '⟬',
+  loarr: '⇽',
+  lobrk: '⟦',
+  longleftarrow: '⟵',
+  longleftrightarrow: '⟷',
+  longmapsto: '⟼',
+  longrightarrow: '⟶',
+  looparrowleft: '↫',
+  looparrowright: '↬',
+  lopar: '⦅',
+  lopf: '𝕝',
+  loplus: '⨭',
+  lotimes: '⨴',
+  lowast: '∗',
+  lowbar: '_',
+  loz: '◊',
+  lozenge: '◊',
+  lozf: '⧫',
+  lpar: '(',
+  lparlt: '⦓',
+  lrarr: '⇆',
+  lrcorner: '⌟',
+  lrhar: '⇋',
+  lrhard: '⥭',
+  lrm: '‎',
+  lrtri: '⊿',
+  lsaquo: '‹',
+  lscr: '𝓁',
+  lsh: '↰',
+  lsim: '≲',
+  lsime: '⪍',
+  lsimg: '⪏',
+  lsqb: '[',
+  lsquo: '‘',
+  lsquor: '‚',
+  lstrok: 'ł',
+  lt: '<',
+  ltcc: '⪦',
+  ltcir: '⩹',
+  ltdot: '⋖',
+  lthree: '⋋',
+  ltimes: '⋉',
+  ltlarr: '⥶',
+  ltquest: '⩻',
+  ltrPar: '⦖',
+  ltri: '◃',
+  ltrie: '⊴',
+  ltrif: '◂',
+  lurdshar: '⥊',
+  luruhar: '⥦',
+  lvertneqq: '≨︀',
+  lvnE: '≨︀',
+  mDDot: '∺',
+  macr: '¯',
+  male: '♂',
+  malt: '✠',
+  maltese: '✠',
+  map: '↦',
+  mapsto: '↦',
+  mapstodown: '↧',
+  mapstoleft: '↤',
+  mapstoup: '↥',
+  marker: '▮',
+  mcomma: '⨩',
+  mcy: 'м',
+  mdash: '—',
+  measuredangle: '∡',
+  mfr: '𝔪',
+  mho: '℧',
+  micro: 'µ',
+  mid: '∣',
+  midast: '*',
+  midcir: '⫰',
+  middot: '·',
+  minus: '−',
+  minusb: '⊟',
+  minusd: '∸',
+  minusdu: '⨪',
+  mlcp: '⫛',
+  mldr: '…',
+  mnplus: '∓',
+  models: '⊧',
+  mopf: '𝕞',
+  mp: '∓',
+  mscr: '𝓂',
+  mstpos: '∾',
+  mu: 'μ',
+  multimap: '⊸',
+  mumap: '⊸',
+  nGg: '⋙̸',
+  nGt: '≫⃒',
+  nGtv: '≫̸',
+  nLeftarrow: '⇍',
+  nLeftrightarrow: '⇎',
+  nLl: '⋘̸',
+  nLt: '≪⃒',
+  nLtv: '≪̸',
+  nRightarrow: '⇏',
+  nVDash: '⊯',
+  nVdash: '⊮',
+  nabla: '∇',
+  nacute: 'ń',
+  nang: '∠⃒',
+  nap: '≉',
+  napE: '⩰̸',
+  napid: '≋̸',
+  napos: 'ŉ',
+  napprox: '≉',
+  natur: '♮',
+  natural: '♮',
+  naturals: 'ℕ',
+  nbsp: ' ',
+  nbump: '≎̸',
+  nbumpe: '≏̸',
+  ncap: '⩃',
+  ncaron: 'ň',
+  ncedil: 'ņ',
+  ncong: '≇',
+  ncongdot: '⩭̸',
+  ncup: '⩂',
+  ncy: 'н',
+  ndash: '–',
+  ne: '≠',
+  neArr: '⇗',
+  nearhk: '⤤',
+  nearr: '↗',
+  nearrow: '↗',
+  nedot: '≐̸',
+  nequiv: '≢',
+  nesear: '⤨',
+  nesim: '≂̸',
+  nexist: '∄',
+  nexists: '∄',
+  nfr: '𝔫',
+  ngE: '≧̸',
+  nge: '≱',
+  ngeq: '≱',
+  ngeqq: '≧̸',
+  ngeqslant: '⩾̸',
+  nges: '⩾̸',
+  ngsim: '≵',
+  ngt: '≯',
+  ngtr: '≯',
+  nhArr: '⇎',
+  nharr: '↮',
+  nhpar: '⫲',
+  ni: '∋',
+  nis: '⋼',
+  nisd: '⋺',
+  niv: '∋',
+  njcy: 'њ',
+  nlArr: '⇍',
+  nlE: '≦̸',
+  nlarr: '↚',
+  nldr: '‥',
+  nle: '≰',
+  nleftarrow: '↚',
+  nleftrightarrow: '↮',
+  nleq: '≰',
+  nleqq: '≦̸',
+  nleqslant: '⩽̸',
+  nles: '⩽̸',
+  nless: '≮',
+  nlsim: '≴',
+  nlt: '≮',
+  nltri: '⋪',
+  nltrie: '⋬',
+  nmid: '∤',
+  nopf: '𝕟',
+  not: '¬',
+  notin: '∉',
+  notinE: '⋹̸',
+  notindot: '⋵̸',
+  notinva: '∉',
+  notinvb: '⋷',
+  notinvc: '⋶',
+  notni: '∌',
+  notniva: '∌',
+  notnivb: '⋾',
+  notnivc: '⋽',
+  npar: '∦',
+  nparallel: '∦',
+  nparsl: '⫽⃥',
+  npart: '∂̸',
+  npolint: '⨔',
+  npr: '⊀',
+  nprcue: '⋠',
+  npre: '⪯̸',
+  nprec: '⊀',
+  npreceq: '⪯̸',
+  nrArr: '⇏',
+  nrarr: '↛',
+  nrarrc: '⤳̸',
+  nrarrw: '↝̸',
+  nrightarrow: '↛',
+  nrtri: '⋫',
+  nrtrie: '⋭',
+  nsc: '⊁',
+  nsccue: '⋡',
+  nsce: '⪰̸',
+  nscr: '𝓃',
+  nshortmid: '∤',
+  nshortparallel: '∦',
+  nsim: '≁',
+  nsime: '≄',
+  nsimeq: '≄',
+  nsmid: '∤',
+  nspar: '∦',
+  nsqsube: '⋢',
+  nsqsupe: '⋣',
+  nsub: '⊄',
+  nsubE: '⫅̸',
+  nsube: '⊈',
+  nsubset: '⊂⃒',
+  nsubseteq: '⊈',
+  nsubseteqq: '⫅̸',
+  nsucc: '⊁',
+  nsucceq: '⪰̸',
+  nsup: '⊅',
+  nsupE: '⫆̸',
+  nsupe: '⊉',
+  nsupset: '⊃⃒',
+  nsupseteq: '⊉',
+  nsupseteqq: '⫆̸',
+  ntgl: '≹',
+  ntilde: 'ñ',
+  ntlg: '≸',
+  ntriangleleft: '⋪',
+  ntrianglelefteq: '⋬',
+  ntriangleright: '⋫',
+  ntrianglerighteq: '⋭',
+  nu: 'ν',
+  num: '#',
+  numero: '№',
+  numsp: ' ',
+  nvDash: '⊭',
+  nvHarr: '⤄',
+  nvap: '≍⃒',
+  nvdash: '⊬',
+  nvge: '≥⃒',
+  nvgt: '>⃒',
+  nvinfin: '⧞',
+  nvlArr: '⤂',
+  nvle: '≤⃒',
+  nvlt: '<⃒',
+  nvltrie: '⊴⃒',
+  nvrArr: '⤃',
+  nvrtrie: '⊵⃒',
+  nvsim: '∼⃒',
+  nwArr: '⇖',
+  nwarhk: '⤣',
+  nwarr: '↖',
+  nwarrow: '↖',
+  nwnear: '⤧',
+  oS: 'Ⓢ',
+  oacute: 'ó',
+  oast: '⊛',
+  ocir: '⊚',
+  ocirc: 'ô',
+  ocy: 'о',
+  odash: '⊝',
+  odblac: 'ő',
+  odiv: '⨸',
+  odot: '⊙',
+  odsold: '⦼',
+  oelig: 'œ',
+  ofcir: '⦿',
+  ofr: '𝔬',
+  ogon: '˛',
+  ograve: 'ò',
+  ogt: '⧁',
+  ohbar: '⦵',
+  ohm: 'Ω',
+  oint: '∮',
+  olarr: '↺',
+  olcir: '⦾',
+  olcross: '⦻',
+  oline: '‾',
+  olt: '⧀',
+  omacr: 'ō',
+  omega: 'ω',
+  omicron: 'ο',
+  omid: '⦶',
+  ominus: '⊖',
+  oopf: '𝕠',
+  opar: '⦷',
+  operp: '⦹',
+  oplus: '⊕',
+  or: '∨',
+  orarr: '↻',
+  ord: '⩝',
+  order: 'ℴ',
+  orderof: 'ℴ',
+  ordf: 'ª',
+  ordm: 'º',
+  origof: '⊶',
+  oror: '⩖',
+  orslope: '⩗',
+  orv: '⩛',
+  oscr: 'ℴ',
+  oslash: 'ø',
+  osol: '⊘',
+  otilde: 'õ',
+  otimes: '⊗',
+  otimesas: '⨶',
+  ouml: 'ö',
+  ovbar: '⌽',
+  par: '∥',
+  para: '¶',
+  parallel: '∥',
+  parsim: '⫳',
+  parsl: '⫽',
+  part: '∂',
+  pcy: 'п',
+  percnt: '%',
+  period: '.',
+  permil: '‰',
+  perp: '⊥',
+  pertenk: '‱',
+  pfr: '𝔭',
+  phi: 'φ',
+  phiv: 'ϕ',
+  phmmat: 'ℳ',
+  phone: '☎',
+  pi: 'π',
+  pitchfork: '⋔',
+  piv: 'ϖ',
+  planck: 'ℏ',
+  planckh: 'ℎ',
+  plankv: 'ℏ',
+  plus: '+',
+  plusacir: '⨣',
+  plusb: '⊞',
+  pluscir: '⨢',
+  plusdo: '∔',
+  plusdu: '⨥',
+  pluse: '⩲',
+  plusmn: '±',
+  plussim: '⨦',
+  plustwo: '⨧',
+  pm: '±',
+  pointint: '⨕',
+  popf: '𝕡',
+  pound: '£',
+  pr: '≺',
+  prE: '⪳',
+  prap: '⪷',
+  prcue: '≼',
+  pre: '⪯',
+  prec: '≺',
+  precapprox: '⪷',
+  preccurlyeq: '≼',
+  preceq: '⪯',
+  precnapprox: '⪹',
+  precneqq: '⪵',
+  precnsim: '⋨',
+  precsim: '≾',
+  prime: '′',
+  primes: 'ℙ',
+  prnE: '⪵',
+  prnap: '⪹',
+  prnsim: '⋨',
+  prod: '∏',
+  profalar: '⌮',
+  profline: '⌒',
+  profsurf: '⌓',
+  prop: '∝',
+  propto: '∝',
+  prsim: '≾',
+  prurel: '⊰',
+  pscr: '𝓅',
+  psi: 'ψ',
+  puncsp: ' ',
+  qfr: '𝔮',
+  qint: '⨌',
+  qopf: '𝕢',
+  qprime: '⁗',
+  qscr: '𝓆',
+  quaternions: 'ℍ',
+  quatint: '⨖',
+  quest: '?',
+  questeq: '≟',
+  quot: '"',
+  rAarr: '⇛',
+  rArr: '⇒',
+  rAtail: '⤜',
+  rBarr: '⤏',
+  rHar: '⥤',
+  race: '∽̱',
+  racute: 'ŕ',
+  radic: '√',
+  raemptyv: '⦳',
+  rang: '⟩',
+  rangd: '⦒',
+  range: '⦥',
+  rangle: '⟩',
+  raquo: '»',
+  rarr: '→',
+  rarrap: '⥵',
+  rarrb: '⇥',
+  rarrbfs: '⤠',
+  rarrc: '⤳',
+  rarrfs: '⤞',
+  rarrhk: '↪',
+  rarrlp: '↬',
+  rarrpl: '⥅',
+  rarrsim: '⥴',
+  rarrtl: '↣',
+  rarrw: '↝',
+  ratail: '⤚',
+  ratio: '∶',
+  rationals: 'ℚ',
+  rbarr: '⤍',
+  rbbrk: '❳',
+  rbrace: '}',
+  rbrack: ']',
+  rbrke: '⦌',
+  rbrksld: '⦎',
+  rbrkslu: '⦐',
+  rcaron: 'ř',
+  rcedil: 'ŗ',
+  rceil: '⌉',
+  rcub: '}',
+  rcy: 'р',
+  rdca: '⤷',
+  rdldhar: '⥩',
+  rdquo: '”',
+  rdquor: '”',
+  rdsh: '↳',
+  real: 'ℜ',
+  realine: 'ℛ',
+  realpart: 'ℜ',
+  reals: 'ℝ',
+  rect: '▭',
+  reg: '®',
+  rfisht: '⥽',
+  rfloor: '⌋',
+  rfr: '𝔯',
+  rhard: '⇁',
+  rharu: '⇀',
+  rharul: '⥬',
+  rho: 'ρ',
+  rhov: 'ϱ',
+  rightarrow: '→',
+  rightarrowtail: '↣',
+  rightharpoondown: '⇁',
+  rightharpoonup: '⇀',
+  rightleftarrows: '⇄',
+  rightleftharpoons: '⇌',
+  rightrightarrows: '⇉',
+  rightsquigarrow: '↝',
+  rightthreetimes: '⋌',
+  ring: '˚',
+  risingdotseq: '≓',
+  rlarr: '⇄',
+  rlhar: '⇌',
+  rlm: '‏',
+  rmoust: '⎱',
+  rmoustache: '⎱',
+  rnmid: '⫮',
+  roang: '⟭',
+  roarr: '⇾',
+  robrk: '⟧',
+  ropar: '⦆',
+  ropf: '𝕣',
+  roplus: '⨮',
+  rotimes: '⨵',
+  rpar: ')',
+  rpargt: '⦔',
+  rppolint: '⨒',
+  rrarr: '⇉',
+  rsaquo: '›',
+  rscr: '𝓇',
+  rsh: '↱',
+  rsqb: ']',
+  rsquo: '’',
+  rsquor: '’',
+  rthree: '⋌',
+  rtimes: '⋊',
+  rtri: '▹',
+  rtrie: '⊵',
+  rtrif: '▸',
+  rtriltri: '⧎',
+  ruluhar: '⥨',
+  rx: '℞',
+  sacute: 'ś',
+  sbquo: '‚',
+  sc: '≻',
+  scE: '⪴',
+  scap: '⪸',
+  scaron: 'š',
+  sccue: '≽',
+  sce: '⪰',
+  scedil: 'ş',
+  scirc: 'ŝ',
+  scnE: '⪶',
+  scnap: '⪺',
+  scnsim: '⋩',
+  scpolint: '⨓',
+  scsim: '≿',
+  scy: 'с',
+  sdot: '⋅',
+  sdotb: '⊡',
+  sdote: '⩦',
+  seArr: '⇘',
+  searhk: '⤥',
+  searr: '↘',
+  searrow: '↘',
+  sect: '§',
+  semi: ';',
+  seswar: '⤩',
+  setminus: '∖',
+  setmn: '∖',
+  sext: '✶',
+  sfr: '𝔰',
+  sfrown: '⌢',
+  sharp: '♯',
+  shchcy: 'щ',
+  shcy: 'ш',
+  shortmid: '∣',
+  shortparallel: '∥',
+  shy: '­',
+  sigma: 'σ',
+  sigmaf: 'ς',
+  sigmav: 'ς',
+  sim: '∼',
+  simdot: '⩪',
+  sime: '≃',
+  simeq: '≃',
+  simg: '⪞',
+  simgE: '⪠',
+  siml: '⪝',
+  simlE: '⪟',
+  simne: '≆',
+  simplus: '⨤',
+  simrarr: '⥲',
+  slarr: '←',
+  smallsetminus: '∖',
+  smashp: '⨳',
+  smeparsl: '⧤',
+  smid: '∣',
+  smile: '⌣',
+  smt: '⪪',
+  smte: '⪬',
+  smtes: '⪬︀',
+  softcy: 'ь',
+  sol: '/',
+  solb: '⧄',
+  solbar: '⌿',
+  sopf: '𝕤',
+  spades: '♠',
+  spadesuit: '♠',
+  spar: '∥',
+  sqcap: '⊓',
+  sqcaps: '⊓︀',
+  sqcup: '⊔',
+  sqcups: '⊔︀',
+  sqsub: '⊏',
+  sqsube: '⊑',
+  sqsubset: '⊏',
+  sqsubseteq: '⊑',
+  sqsup: '⊐',
+  sqsupe: '⊒',
+  sqsupset: '⊐',
+  sqsupseteq: '⊒',
+  squ: '□',
+  square: '□',
+  squarf: '▪',
+  squf: '▪',
+  srarr: '→',
+  sscr: '𝓈',
+  ssetmn: '∖',
+  ssmile: '⌣',
+  sstarf: '⋆',
+  star: '☆',
+  starf: '★',
+  straightepsilon: 'ϵ',
+  straightphi: 'ϕ',
+  strns: '¯',
+  sub: '⊂',
+  subE: '⫅',
+  subdot: '⪽',
+  sube: '⊆',
+  subedot: '⫃',
+  submult: '⫁',
+  subnE: '⫋',
+  subne: '⊊',
+  subplus: '⪿',
+  subrarr: '⥹',
+  subset: '⊂',
+  subseteq: '⊆',
+  subseteqq: '⫅',
+  subsetneq: '⊊',
+  subsetneqq: '⫋',
+  subsim: '⫇',
+  subsub: '⫕',
+  subsup: '⫓',
+  succ: '≻',
+  succapprox: '⪸',
+  succcurlyeq: '≽',
+  succeq: '⪰',
+  succnapprox: '⪺',
+  succneqq: '⪶',
+  succnsim: '⋩',
+  succsim: '≿',
+  sum: '∑',
+  sung: '♪',
+  sup1: '¹',
+  sup2: '²',
+  sup3: '³',
+  sup: '⊃',
+  supE: '⫆',
+  supdot: '⪾',
+  supdsub: '⫘',
+  supe: '⊇',
+  supedot: '⫄',
+  suphsol: '⟉',
+  suphsub: '⫗',
+  suplarr: '⥻',
+  supmult: '⫂',
+  supnE: '⫌',
+  supne: '⊋',
+  supplus: '⫀',
+  supset: '⊃',
+  supseteq: '⊇',
+  supseteqq: '⫆',
+  supsetneq: '⊋',
+  supsetneqq: '⫌',
+  supsim: '⫈',
+  supsub: '⫔',
+  supsup: '⫖',
+  swArr: '⇙',
+  swarhk: '⤦',
+  swarr: '↙',
+  swarrow: '↙',
+  swnwar: '⤪',
+  szlig: 'ß',
+  target: '⌖',
+  tau: 'τ',
+  tbrk: '⎴',
+  tcaron: 'ť',
+  tcedil: 'ţ',
+  tcy: 'т',
+  tdot: '⃛',
+  telrec: '⌕',
+  tfr: '𝔱',
+  there4: '∴',
+  therefore: '∴',
+  theta: 'θ',
+  thetasym: 'ϑ',
+  thetav: 'ϑ',
+  thickapprox: '≈',
+  thicksim: '∼',
+  thinsp: ' ',
+  thkap: '≈',
+  thksim: '∼',
+  thorn: 'þ',
+  tilde: '˜',
+  times: '×',
+  timesb: '⊠',
+  timesbar: '⨱',
+  timesd: '⨰',
+  tint: '∭',
+  toea: '⤨',
+  top: '⊤',
+  topbot: '⌶',
+  topcir: '⫱',
+  topf: '𝕥',
+  topfork: '⫚',
+  tosa: '⤩',
+  tprime: '‴',
+  trade: '™',
+  triangle: '▵',
+  triangledown: '▿',
+  triangleleft: '◃',
+  trianglelefteq: '⊴',
+  triangleq: '≜',
+  triangleright: '▹',
+  trianglerighteq: '⊵',
+  tridot: '◬',
+  trie: '≜',
+  triminus: '⨺',
+  triplus: '⨹',
+  trisb: '⧍',
+  tritime: '⨻',
+  trpezium: '⏢',
+  tscr: '𝓉',
+  tscy: 'ц',
+  tshcy: 'ћ',
+  tstrok: 'ŧ',
+  twixt: '≬',
+  twoheadleftarrow: '↞',
+  twoheadrightarrow: '↠',
+  uArr: '⇑',
+  uHar: '⥣',
+  uacute: 'ú',
+  uarr: '↑',
+  ubrcy: 'ў',
+  ubreve: 'ŭ',
+  ucirc: 'û',
+  ucy: 'у',
+  udarr: '⇅',
+  udblac: 'ű',
+  udhar: '⥮',
+  ufisht: '⥾',
+  ufr: '𝔲',
+  ugrave: 'ù',
+  uharl: '↿',
+  uharr: '↾',
+  uhblk: '▀',
+  ulcorn: '⌜',
+  ulcorner: '⌜',
+  ulcrop: '⌏',
+  ultri: '◸',
+  umacr: 'ū',
+  uml: '¨',
+  uogon: 'ų',
+  uopf: '𝕦',
+  uparrow: '↑',
+  updownarrow: '↕',
+  upharpoonleft: '↿',
+  upharpoonright: '↾',
+  uplus: '⊎',
+  upsi: 'υ',
+  upsih: 'ϒ',
+  upsilon: 'υ',
+  upuparrows: '⇈',
+  urcorn: '⌝',
+  urcorner: '⌝',
+  urcrop: '⌎',
+  uring: 'ů',
+  urtri: '◹',
+  uscr: '𝓊',
+  utdot: '⋰',
+  utilde: 'ũ',
+  utri: '▵',
+  utrif: '▴',
+  uuarr: '⇈',
+  uuml: 'ü',
+  uwangle: '⦧',
+  vArr: '⇕',
+  vBar: '⫨',
+  vBarv: '⫩',
+  vDash: '⊨',
+  vangrt: '⦜',
+  varepsilon: 'ϵ',
+  varkappa: 'ϰ',
+  varnothing: '∅',
+  varphi: 'ϕ',
+  varpi: 'ϖ',
+  varpropto: '∝',
+  varr: '↕',
+  varrho: 'ϱ',
+  varsigma: 'ς',
+  varsubsetneq: '⊊︀',
+  varsubsetneqq: '⫋︀',
+  varsupsetneq: '⊋︀',
+  varsupsetneqq: '⫌︀',
+  vartheta: 'ϑ',
+  vartriangleleft: '⊲',
+  vartriangleright: '⊳',
+  vcy: 'в',
+  vdash: '⊢',
+  vee: '∨',
+  veebar: '⊻',
+  veeeq: '≚',
+  vellip: '⋮',
+  verbar: '|',
+  vert: '|',
+  vfr: '𝔳',
+  vltri: '⊲',
+  vnsub: '⊂⃒',
+  vnsup: '⊃⃒',
+  vopf: '𝕧',
+  vprop: '∝',
+  vrtri: '⊳',
+  vscr: '𝓋',
+  vsubnE: '⫋︀',
+  vsubne: '⊊︀',
+  vsupnE: '⫌︀',
+  vsupne: '⊋︀',
+  vzigzag: '⦚',
+  wcirc: 'ŵ',
+  wedbar: '⩟',
+  wedge: '∧',
+  wedgeq: '≙',
+  weierp: '℘',
+  wfr: '𝔴',
+  wopf: '𝕨',
+  wp: '℘',
+  wr: '≀',
+  wreath: '≀',
+  wscr: '𝓌',
+  xcap: '⋂',
+  xcirc: '◯',
+  xcup: '⋃',
+  xdtri: '▽',
+  xfr: '𝔵',
+  xhArr: '⟺',
+  xharr: '⟷',
+  xi: 'ξ',
+  xlArr: '⟸',
+  xlarr: '⟵',
+  xmap: '⟼',
+  xnis: '⋻',
+  xodot: '⨀',
+  xopf: '𝕩',
+  xoplus: '⨁',
+  xotime: '⨂',
+  xrArr: '⟹',
+  xrarr: '⟶',
+  xscr: '𝓍',
+  xsqcup: '⨆',
+  xuplus: '⨄',
+  xutri: '△',
+  xvee: '⋁',
+  xwedge: '⋀',
+  yacute: 'ý',
+  yacy: 'я',
+  ycirc: 'ŷ',
+  ycy: 'ы',
+  yen: '¥',
+  yfr: '𝔶',
+  yicy: 'ї',
+  yopf: '𝕪',
+  yscr: '𝓎',
+  yucy: 'ю',
+  yuml: 'ÿ',
+  zacute: 'ź',
+  zcaron: 'ž',
+  zcy: 'з',
+  zdot: 'ż',
+  zeetrf: 'ℨ',
+  zeta: 'ζ',
+  zfr: '𝔷',
+  zhcy: 'ж',
+  zigrarr: '⇝',
+  zopf: '𝕫',
+  zscr: '𝓏',
+  zwj: '‍',
+  zwnj: '‌'
+}
+
+;// CONCATENATED MODULE: ./node_modules/decode-named-character-reference/index.js
+
+
+const own = {}.hasOwnProperty
+
+/**
+ * Decode a single character reference (without the `&` or `;`).
+ * You probably only need this when you’re building parsers yourself that follow
+ * different rules compared to HTML.
+ * This is optimized to be tiny in browsers.
+ *
+ * @param {string} value
+ *   `notin` (named), `#123` (deci), `#x123` (hexa).
+ * @returns {string|false}
+ *   Decoded reference.
+ */
+function decodeNamedCharacterReference(value) {
+  return own.call(characterEntities, value) ? characterEntities[value] : false
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/character-reference.js
+/**
+ * @import {
+ *   Code,
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const characterReference = {
+  name: 'characterReference',
+  tokenize: tokenizeCharacterReference
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeCharacterReference(effects, ok, nok) {
+  const self = this;
+  let size = 0;
+  /** @type {number} */
+  let max;
+  /** @type {(code: Code) => boolean} */
+  let test;
+  return start;
+
+  /**
+   * Start of character reference.
+   *
+   * ```markdown
+   * > | a&amp;b
+   *      ^
+   * > | a&#123;b
+   *      ^
+   * > | a&#x9;b
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("characterReference");
+    effects.enter("characterReferenceMarker");
+    effects.consume(code);
+    effects.exit("characterReferenceMarker");
+    return open;
+  }
+
+  /**
+   * After `&`, at `#` for numeric references or alphanumeric for named
+   * references.
+   *
+   * ```markdown
+   * > | a&amp;b
+   *       ^
+   * > | a&#123;b
+   *       ^
+   * > | a&#x9;b
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function open(code) {
+    if (code === 35) {
+      effects.enter("characterReferenceMarkerNumeric");
+      effects.consume(code);
+      effects.exit("characterReferenceMarkerNumeric");
+      return numeric;
+    }
+    effects.enter("characterReferenceValue");
+    max = 31;
+    test = asciiAlphanumeric;
+    return value(code);
+  }
+
+  /**
+   * After `#`, at `x` for hexadecimals or digit for decimals.
+   *
+   * ```markdown
+   * > | a&#123;b
+   *        ^
+   * > | a&#x9;b
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function numeric(code) {
+    if (code === 88 || code === 120) {
+      effects.enter("characterReferenceMarkerHexadecimal");
+      effects.consume(code);
+      effects.exit("characterReferenceMarkerHexadecimal");
+      effects.enter("characterReferenceValue");
+      max = 6;
+      test = asciiHexDigit;
+      return value;
+    }
+    effects.enter("characterReferenceValue");
+    max = 7;
+    test = asciiDigit;
+    return value(code);
+  }
+
+  /**
+   * After markers (`&#x`, `&#`, or `&`), in value, before `;`.
+   *
+   * The character reference kind defines what and how many characters are
+   * allowed.
+   *
+   * ```markdown
+   * > | a&amp;b
+   *       ^^^
+   * > | a&#123;b
+   *        ^^^
+   * > | a&#x9;b
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function value(code) {
+    if (code === 59 && size) {
+      const token = effects.exit("characterReferenceValue");
+      if (test === asciiAlphanumeric && !decodeNamedCharacterReference(self.sliceSerialize(token))) {
+        return nok(code);
+      }
+
+      // To do: `markdown-rs` uses a different name:
+      // `CharacterReferenceMarkerSemi`.
+      effects.enter("characterReferenceMarker");
+      effects.consume(code);
+      effects.exit("characterReferenceMarker");
+      effects.exit("characterReference");
+      return ok;
+    }
+    if (test(code) && size++ < max) {
+      effects.consume(code);
+      return value;
+    }
+    return nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/character-escape.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+/** @type {Construct} */
+const characterEscape = {
+  name: 'characterEscape',
+  tokenize: tokenizeCharacterEscape
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeCharacterEscape(effects, ok, nok) {
+  return start;
+
+  /**
+   * Start of character escape.
+   *
+   * ```markdown
+   * > | a\*b
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("characterEscape");
+    effects.enter("escapeMarker");
+    effects.consume(code);
+    effects.exit("escapeMarker");
+    return inside;
+  }
+
+  /**
+   * After `\`, at punctuation.
+   *
+   * ```markdown
+   * > | a\*b
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function inside(code) {
+    // ASCII punctuation.
+    if (asciiPunctuation(code)) {
+      effects.enter("characterEscapeValue");
+      effects.consume(code);
+      effects.exit("characterEscapeValue");
+      effects.exit("characterEscape");
+      return ok;
+    }
+    return nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/line-ending.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const lineEnding = {
+  name: 'lineEnding',
+  tokenize: tokenizeLineEnding
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeLineEnding(effects, ok) {
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return factorySpace(effects, ok, "linePrefix");
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/label-end.js
+/**
+ * @import {
+ *   Construct,
+ *   Event,
+ *   Resolver,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer,
+ *   Token
+ * } from 'micromark-util-types'
+ */
+
+
+
+
+
+
+
+
+
+/** @type {Construct} */
+const labelEnd = {
+  name: 'labelEnd',
+  resolveAll: resolveAllLabelEnd,
+  resolveTo: resolveToLabelEnd,
+  tokenize: tokenizeLabelEnd
+};
+
+/** @type {Construct} */
+const resourceConstruct = {
+  tokenize: tokenizeResource
+};
+/** @type {Construct} */
+const referenceFullConstruct = {
+  tokenize: tokenizeReferenceFull
+};
+/** @type {Construct} */
+const referenceCollapsedConstruct = {
+  tokenize: tokenizeReferenceCollapsed
+};
+
+/** @type {Resolver} */
+function resolveAllLabelEnd(events) {
+  let index = -1;
+  /** @type {Array<Event>} */
+  const newEvents = [];
+  while (++index < events.length) {
+    const token = events[index][1];
+    newEvents.push(events[index]);
+    if (token.type === "labelImage" || token.type === "labelLink" || token.type === "labelEnd") {
+      // Remove the marker.
+      const offset = token.type === "labelImage" ? 4 : 2;
+      token.type = "data";
+      index += offset;
+    }
+  }
+
+  // If the events are equal, we don't have to copy newEvents to events
+  if (events.length !== newEvents.length) {
+    splice(events, 0, events.length, newEvents);
+  }
+  return events;
+}
+
+/** @type {Resolver} */
+function resolveToLabelEnd(events, context) {
+  let index = events.length;
+  let offset = 0;
+  /** @type {Token} */
+  let token;
+  /** @type {number | undefined} */
+  let open;
+  /** @type {number | undefined} */
+  let close;
+  /** @type {Array<Event>} */
+  let media;
+
+  // Find an opening.
+  while (index--) {
+    token = events[index][1];
+    if (open) {
+      // If we see another link, or inactive link label, we’ve been here before.
+      if (token.type === "link" || token.type === "labelLink" && token._inactive) {
+        break;
+      }
+
+      // Mark other link openings as inactive, as we can’t have links in
+      // links.
+      if (events[index][0] === 'enter' && token.type === "labelLink") {
+        token._inactive = true;
+      }
+    } else if (close) {
+      if (events[index][0] === 'enter' && (token.type === "labelImage" || token.type === "labelLink") && !token._balanced) {
+        open = index;
+        if (token.type !== "labelLink") {
+          offset = 2;
+          break;
+        }
+      }
+    } else if (token.type === "labelEnd") {
+      close = index;
+    }
+  }
+  const group = {
+    type: events[open][1].type === "labelLink" ? "link" : "image",
+    start: {
+      ...events[open][1].start
+    },
+    end: {
+      ...events[events.length - 1][1].end
+    }
+  };
+  const label = {
+    type: "label",
+    start: {
+      ...events[open][1].start
+    },
+    end: {
+      ...events[close][1].end
+    }
+  };
+  const text = {
+    type: "labelText",
+    start: {
+      ...events[open + offset + 2][1].end
+    },
+    end: {
+      ...events[close - 2][1].start
+    }
+  };
+  media = [['enter', group, context], ['enter', label, context]];
+
+  // Opening marker.
+  media = push(media, events.slice(open + 1, open + offset + 3));
+
+  // Text open.
+  media = push(media, [['enter', text, context]]);
+
+  // Always populated by defaults.
+
+  // Between.
+  media = push(media, resolveAll(context.parser.constructs.insideSpan.null, events.slice(open + offset + 4, close - 3), context));
+
+  // Text close, marker close, label close.
+  media = push(media, [['exit', text, context], events[close - 2], events[close - 1], ['exit', label, context]]);
+
+  // Reference, resource, or so.
+  media = push(media, events.slice(close + 1));
+
+  // Media close.
+  media = push(media, [['exit', group, context]]);
+  splice(events, open, events.length, media);
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeLabelEnd(effects, ok, nok) {
+  const self = this;
+  let index = self.events.length;
+  /** @type {Token} */
+  let labelStart;
+  /** @type {boolean} */
+  let defined;
+
+  // Find an opening.
+  while (index--) {
+    if ((self.events[index][1].type === "labelImage" || self.events[index][1].type === "labelLink") && !self.events[index][1]._balanced) {
+      labelStart = self.events[index][1];
+      break;
+    }
+  }
+  return start;
+
+  /**
+   * Start of label end.
+   *
+   * ```markdown
+   * > | [a](b) c
+   *       ^
+   * > | [a][b] c
+   *       ^
+   * > | [a][] b
+   *       ^
+   * > | [a] b
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    // If there is not an okay opening.
+    if (!labelStart) {
+      return nok(code);
+    }
+
+    // If the corresponding label (link) start is marked as inactive,
+    // it means we’d be wrapping a link, like this:
+    //
+    // ```markdown
+    // > | a [b [c](d) e](f) g.
+    //                  ^
+    // ```
+    //
+    // We can’t have that, so it’s just balanced brackets.
+    if (labelStart._inactive) {
+      return labelEndNok(code);
+    }
+    defined = self.parser.defined.includes(normalizeIdentifier(self.sliceSerialize({
+      start: labelStart.end,
+      end: self.now()
+    })));
+    effects.enter("labelEnd");
+    effects.enter("labelMarker");
+    effects.consume(code);
+    effects.exit("labelMarker");
+    effects.exit("labelEnd");
+    return after;
+  }
+
+  /**
+   * After `]`.
+   *
+   * ```markdown
+   * > | [a](b) c
+   *       ^
+   * > | [a][b] c
+   *       ^
+   * > | [a][] b
+   *       ^
+   * > | [a] b
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    // Note: `markdown-rs` also parses GFM footnotes here, which for us is in
+    // an extension.
+
+    // Resource (`[asd](fgh)`)?
+    if (code === 40) {
+      return effects.attempt(resourceConstruct, labelEndOk, defined ? labelEndOk : labelEndNok)(code);
+    }
+
+    // Full (`[asd][fgh]`) or collapsed (`[asd][]`) reference?
+    if (code === 91) {
+      return effects.attempt(referenceFullConstruct, labelEndOk, defined ? referenceNotFull : labelEndNok)(code);
+    }
+
+    // Shortcut (`[asd]`) reference?
+    return defined ? labelEndOk(code) : labelEndNok(code);
+  }
+
+  /**
+   * After `]`, at `[`, but not at a full reference.
+   *
+   * > 👉 **Note**: we only get here if the label is defined.
+   *
+   * ```markdown
+   * > | [a][] b
+   *        ^
+   * > | [a] b
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function referenceNotFull(code) {
+    return effects.attempt(referenceCollapsedConstruct, labelEndOk, labelEndNok)(code);
+  }
+
+  /**
+   * Done, we found something.
+   *
+   * ```markdown
+   * > | [a](b) c
+   *           ^
+   * > | [a][b] c
+   *           ^
+   * > | [a][] b
+   *          ^
+   * > | [a] b
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelEndOk(code) {
+    // Note: `markdown-rs` does a bunch of stuff here.
+    return ok(code);
+  }
+
+  /**
+   * Done, it’s nothing.
+   *
+   * There was an okay opening, but we didn’t match anything.
+   *
+   * ```markdown
+   * > | [a](b c
+   *        ^
+   * > | [a][b c
+   *        ^
+   * > | [a] b
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function labelEndNok(code) {
+    labelStart._balanced = true;
+    return nok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeResource(effects, ok, nok) {
+  return resourceStart;
+
+  /**
+   * At a resource.
+   *
+   * ```markdown
+   * > | [a](b) c
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function resourceStart(code) {
+    effects.enter("resource");
+    effects.enter("resourceMarker");
+    effects.consume(code);
+    effects.exit("resourceMarker");
+    return resourceBefore;
+  }
+
+  /**
+   * In resource, after `(`, at optional whitespace.
+   *
+   * ```markdown
+   * > | [a](b) c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function resourceBefore(code) {
+    return markdownLineEndingOrSpace(code) ? factoryWhitespace(effects, resourceOpen)(code) : resourceOpen(code);
+  }
+
+  /**
+   * In resource, after optional whitespace, at `)` or a destination.
+   *
+   * ```markdown
+   * > | [a](b) c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function resourceOpen(code) {
+    if (code === 41) {
+      return resourceEnd(code);
+    }
+    return factoryDestination(effects, resourceDestinationAfter, resourceDestinationMissing, "resourceDestination", "resourceDestinationLiteral", "resourceDestinationLiteralMarker", "resourceDestinationRaw", "resourceDestinationString", 32)(code);
+  }
+
+  /**
+   * In resource, after destination, at optional whitespace.
+   *
+   * ```markdown
+   * > | [a](b) c
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function resourceDestinationAfter(code) {
+    return markdownLineEndingOrSpace(code) ? factoryWhitespace(effects, resourceBetween)(code) : resourceEnd(code);
+  }
+
+  /**
+   * At invalid destination.
+   *
+   * ```markdown
+   * > | [a](<<) b
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function resourceDestinationMissing(code) {
+    return nok(code);
+  }
+
+  /**
+   * In resource, after destination and whitespace, at `(` or title.
+   *
+   * ```markdown
+   * > | [a](b ) c
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function resourceBetween(code) {
+    if (code === 34 || code === 39 || code === 40) {
+      return factoryTitle(effects, resourceTitleAfter, nok, "resourceTitle", "resourceTitleMarker", "resourceTitleString")(code);
+    }
+    return resourceEnd(code);
+  }
+
+  /**
+   * In resource, after title, at optional whitespace.
+   *
+   * ```markdown
+   * > | [a](b "c") d
+   *              ^
+   * ```
+   *
+   * @type {State}
+   */
+  function resourceTitleAfter(code) {
+    return markdownLineEndingOrSpace(code) ? factoryWhitespace(effects, resourceEnd)(code) : resourceEnd(code);
+  }
+
+  /**
+   * In resource, at `)`.
+   *
+   * ```markdown
+   * > | [a](b) d
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function resourceEnd(code) {
+    if (code === 41) {
+      effects.enter("resourceMarker");
+      effects.consume(code);
+      effects.exit("resourceMarker");
+      effects.exit("resource");
+      return ok;
+    }
+    return nok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeReferenceFull(effects, ok, nok) {
+  const self = this;
+  return referenceFull;
+
+  /**
+   * In a reference (full), at the `[`.
+   *
+   * ```markdown
+   * > | [a][b] d
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function referenceFull(code) {
+    return micromark_factory_label_factoryLabel.call(self, effects, referenceFullAfter, referenceFullMissing, "reference", "referenceMarker", "referenceString")(code);
+  }
+
+  /**
+   * In a reference (full), after `]`.
+   *
+   * ```markdown
+   * > | [a][b] d
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function referenceFullAfter(code) {
+    return self.parser.defined.includes(normalizeIdentifier(self.sliceSerialize(self.events[self.events.length - 1][1]).slice(1, -1))) ? ok(code) : nok(code);
+  }
+
+  /**
+   * In reference (full) that was missing.
+   *
+   * ```markdown
+   * > | [a][b d
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function referenceFullMissing(code) {
+    return nok(code);
+  }
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeReferenceCollapsed(effects, ok, nok) {
+  return referenceCollapsedStart;
+
+  /**
+   * In reference (collapsed), at `[`.
+   *
+   * > 👉 **Note**: we only get here if the label is defined.
+   *
+   * ```markdown
+   * > | [a][] d
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function referenceCollapsedStart(code) {
+    // We only attempt a collapsed label if there’s a `[`.
+
+    effects.enter("reference");
+    effects.enter("referenceMarker");
+    effects.consume(code);
+    effects.exit("referenceMarker");
+    return referenceCollapsedOpen;
+  }
+
+  /**
+   * In reference (collapsed), at `]`.
+   *
+   * > 👉 **Note**: we only get here if the label is defined.
+   *
+   * ```markdown
+   * > | [a][] d
+   *         ^
+   * ```
+   *
+   *  @type {State}
+   */
+  function referenceCollapsedOpen(code) {
+    if (code === 93) {
+      effects.enter("referenceMarker");
+      effects.consume(code);
+      effects.exit("referenceMarker");
+      effects.exit("reference");
+      return ok;
+    }
+    return nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/label-start-image.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const labelStartImage = {
+  name: 'labelStartImage',
+  resolveAll: labelEnd.resolveAll,
+  tokenize: tokenizeLabelStartImage
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeLabelStartImage(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /**
+   * Start of label (image) start.
+   *
+   * ```markdown
+   * > | a ![b] c
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("labelImage");
+    effects.enter("labelImageMarker");
+    effects.consume(code);
+    effects.exit("labelImageMarker");
+    return open;
+  }
+
+  /**
+   * After `!`, at `[`.
+   *
+   * ```markdown
+   * > | a ![b] c
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function open(code) {
+    if (code === 91) {
+      effects.enter("labelMarker");
+      effects.consume(code);
+      effects.exit("labelMarker");
+      effects.exit("labelImage");
+      return after;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `![`.
+   *
+   * ```markdown
+   * > | a ![b] c
+   *         ^
+   * ```
+   *
+   * This is needed in because, when GFM footnotes are enabled, images never
+   * form when started with a `^`.
+   * Instead, links form:
+   *
+   * ```markdown
+   * ![^a](b)
+   *
+   * ![^a][b]
+   *
+   * [b]: c
+   * ```
+   *
+   * ```html
+   * <p>!<a href=\"b\">^a</a></p>
+   * <p>!<a href=\"c\">^a</a></p>
+   * ```
+   *
+   * @type {State}
+   */
+  function after(code) {
+    // To do: use a new field to do this, this is still needed for
+    // `micromark-extension-gfm-footnote`, but the `label-start-link`
+    // behavior isn’t.
+    // Hidden footnotes hook.
+    /* c8 ignore next 3 */
+    return code === 94 && '_hiddenFootnoteSupport' in self.parser.constructs ? nok(code) : ok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-util-classify-character/index.js
+/**
+ * @import {Code} from 'micromark-util-types'
+ */
+
+
+/**
+ * Classify whether a code represents whitespace, punctuation, or something
+ * else.
+ *
+ * Used for attention (emphasis, strong), whose sequences can open or close
+ * based on the class of surrounding characters.
+ *
+ * > 👉 **Note**: eof (`null`) is seen as whitespace.
+ *
+ * @param {Code} code
+ *   Code.
+ * @returns {typeof constants.characterGroupWhitespace | typeof constants.characterGroupPunctuation | undefined}
+ *   Group.
+ */
+function classifyCharacter(code) {
+  if (code === null || markdownLineEndingOrSpace(code) || unicodeWhitespace(code)) {
+    return 1;
+  }
+  if (unicodePunctuation(code)) {
+    return 2;
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/attention.js
+/**
+ * @import {
+ *   Code,
+ *   Construct,
+ *   Event,
+ *   Point,
+ *   Resolver,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer,
+ *   Token
+ * } from 'micromark-util-types'
+ */
+
+
+
+
+/** @type {Construct} */
+const attention = {
+  name: 'attention',
+  resolveAll: resolveAllAttention,
+  tokenize: tokenizeAttention
+};
+
+/**
+ * Take all events and resolve attention to emphasis or strong.
+ *
+ * @type {Resolver}
+ */
+// eslint-disable-next-line complexity
+function resolveAllAttention(events, context) {
+  let index = -1;
+  /** @type {number} */
+  let open;
+  /** @type {Token} */
+  let group;
+  /** @type {Token} */
+  let text;
+  /** @type {Token} */
+  let openingSequence;
+  /** @type {Token} */
+  let closingSequence;
+  /** @type {number} */
+  let use;
+  /** @type {Array<Event>} */
+  let nextEvents;
+  /** @type {number} */
+  let offset;
+
+  // Walk through all events.
+  //
+  // Note: performance of this is fine on an mb of normal markdown, but it’s
+  // a bottleneck for malicious stuff.
+  while (++index < events.length) {
+    // Find a token that can close.
+    if (events[index][0] === 'enter' && events[index][1].type === 'attentionSequence' && events[index][1]._close) {
+      open = index;
+
+      // Now walk back to find an opener.
+      while (open--) {
+        // Find a token that can open the closer.
+        if (events[open][0] === 'exit' && events[open][1].type === 'attentionSequence' && events[open][1]._open &&
+        // If the markers are the same:
+        context.sliceSerialize(events[open][1]).charCodeAt(0) === context.sliceSerialize(events[index][1]).charCodeAt(0)) {
+          // If the opening can close or the closing can open,
+          // and the close size *is not* a multiple of three,
+          // but the sum of the opening and closing size *is* multiple of three,
+          // then don’t match.
+          if ((events[open][1]._close || events[index][1]._open) && (events[index][1].end.offset - events[index][1].start.offset) % 3 && !((events[open][1].end.offset - events[open][1].start.offset + events[index][1].end.offset - events[index][1].start.offset) % 3)) {
+            continue;
+          }
+
+          // Number of markers to use from the sequence.
+          use = events[open][1].end.offset - events[open][1].start.offset > 1 && events[index][1].end.offset - events[index][1].start.offset > 1 ? 2 : 1;
+          const start = {
+            ...events[open][1].end
+          };
+          const end = {
+            ...events[index][1].start
+          };
+          movePoint(start, -use);
+          movePoint(end, use);
+          openingSequence = {
+            type: use > 1 ? "strongSequence" : "emphasisSequence",
+            start,
+            end: {
+              ...events[open][1].end
+            }
+          };
+          closingSequence = {
+            type: use > 1 ? "strongSequence" : "emphasisSequence",
+            start: {
+              ...events[index][1].start
+            },
+            end
+          };
+          text = {
+            type: use > 1 ? "strongText" : "emphasisText",
+            start: {
+              ...events[open][1].end
+            },
+            end: {
+              ...events[index][1].start
+            }
+          };
+          group = {
+            type: use > 1 ? "strong" : "emphasis",
+            start: {
+              ...openingSequence.start
+            },
+            end: {
+              ...closingSequence.end
+            }
+          };
+          events[open][1].end = {
+            ...openingSequence.start
+          };
+          events[index][1].start = {
+            ...closingSequence.end
+          };
+          nextEvents = [];
+
+          // If there are more markers in the opening, add them before.
+          if (events[open][1].end.offset - events[open][1].start.offset) {
+            nextEvents = push(nextEvents, [['enter', events[open][1], context], ['exit', events[open][1], context]]);
+          }
+
+          // Opening.
+          nextEvents = push(nextEvents, [['enter', group, context], ['enter', openingSequence, context], ['exit', openingSequence, context], ['enter', text, context]]);
+
+          // Always populated by defaults.
+
+          // Between.
+          nextEvents = push(nextEvents, resolveAll(context.parser.constructs.insideSpan.null, events.slice(open + 1, index), context));
+
+          // Closing.
+          nextEvents = push(nextEvents, [['exit', text, context], ['enter', closingSequence, context], ['exit', closingSequence, context], ['exit', group, context]]);
+
+          // If there are more markers in the closing, add them after.
+          if (events[index][1].end.offset - events[index][1].start.offset) {
+            offset = 2;
+            nextEvents = push(nextEvents, [['enter', events[index][1], context], ['exit', events[index][1], context]]);
+          } else {
+            offset = 0;
+          }
+          splice(events, open - 1, index - open + 3, nextEvents);
+          index = open + nextEvents.length - offset - 2;
+          break;
+        }
+      }
+    }
+  }
+
+  // Remove remaining sequences.
+  index = -1;
+  while (++index < events.length) {
+    if (events[index][1].type === 'attentionSequence') {
+      events[index][1].type = 'data';
+    }
+  }
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeAttention(effects, ok) {
+  const attentionMarkers = this.parser.constructs.attentionMarkers.null;
+  const previous = this.previous;
+  const before = classifyCharacter(previous);
+
+  /** @type {NonNullable<Code>} */
+  let marker;
+  return start;
+
+  /**
+   * Before a sequence.
+   *
+   * ```markdown
+   * > | **
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    marker = code;
+    effects.enter('attentionSequence');
+    return inside(code);
+  }
+
+  /**
+   * In a sequence.
+   *
+   * ```markdown
+   * > | **
+   *     ^^
+   * ```
+   *
+   * @type {State}
+   */
+  function inside(code) {
+    if (code === marker) {
+      effects.consume(code);
+      return inside;
+    }
+    const token = effects.exit('attentionSequence');
+
+    // To do: next major: move this to resolver, just like `markdown-rs`.
+    const after = classifyCharacter(code);
+
+    // Always populated by defaults.
+
+    const open = !after || after === 2 && before || attentionMarkers.includes(code);
+    const close = !before || before === 2 && after || attentionMarkers.includes(previous);
+    token._open = Boolean(marker === 42 ? open : open && (before || !close));
+    token._close = Boolean(marker === 42 ? close : close && (after || !open));
+    return ok(code);
+  }
+}
+
+/**
+ * Move a point a bit.
+ *
+ * Note: `move` only works inside lines! It’s not possible to move past other
+ * chunks (replacement characters, tabs, or line endings).
+ *
+ * @param {Point} point
+ *   Point.
+ * @param {number} offset
+ *   Amount to move.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function movePoint(point, offset) {
+  point.column += offset;
+  point.offset += offset;
+  point._bufferIndex += offset;
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/autolink.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+/** @type {Construct} */
+const autolink = {
+  name: 'autolink',
+  tokenize: tokenizeAutolink
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeAutolink(effects, ok, nok) {
+  let size = 0;
+  return start;
+
+  /**
+   * Start of an autolink.
+   *
+   * ```markdown
+   * > | a<https://example.com>b
+   *      ^
+   * > | a<user@example.com>b
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("autolink");
+    effects.enter("autolinkMarker");
+    effects.consume(code);
+    effects.exit("autolinkMarker");
+    effects.enter("autolinkProtocol");
+    return open;
+  }
+
+  /**
+   * After `<`, at protocol or atext.
+   *
+   * ```markdown
+   * > | a<https://example.com>b
+   *       ^
+   * > | a<user@example.com>b
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function open(code) {
+    if (asciiAlpha(code)) {
+      effects.consume(code);
+      return schemeOrEmailAtext;
+    }
+    if (code === 64) {
+      return nok(code);
+    }
+    return emailAtext(code);
+  }
+
+  /**
+   * At second byte of protocol or atext.
+   *
+   * ```markdown
+   * > | a<https://example.com>b
+   *        ^
+   * > | a<user@example.com>b
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function schemeOrEmailAtext(code) {
+    // ASCII alphanumeric and `+`, `-`, and `.`.
+    if (code === 43 || code === 45 || code === 46 || asciiAlphanumeric(code)) {
+      // Count the previous alphabetical from `open` too.
+      size = 1;
+      return schemeInsideOrEmailAtext(code);
+    }
+    return emailAtext(code);
+  }
+
+  /**
+   * In ambiguous protocol or atext.
+   *
+   * ```markdown
+   * > | a<https://example.com>b
+   *        ^
+   * > | a<user@example.com>b
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function schemeInsideOrEmailAtext(code) {
+    if (code === 58) {
+      effects.consume(code);
+      size = 0;
+      return urlInside;
+    }
+
+    // ASCII alphanumeric and `+`, `-`, and `.`.
+    if ((code === 43 || code === 45 || code === 46 || asciiAlphanumeric(code)) && size++ < 32) {
+      effects.consume(code);
+      return schemeInsideOrEmailAtext;
+    }
+    size = 0;
+    return emailAtext(code);
+  }
+
+  /**
+   * After protocol, in URL.
+   *
+   * ```markdown
+   * > | a<https://example.com>b
+   *             ^
+   * ```
+   *
+   * @type {State}
+   */
+  function urlInside(code) {
+    if (code === 62) {
+      effects.exit("autolinkProtocol");
+      effects.enter("autolinkMarker");
+      effects.consume(code);
+      effects.exit("autolinkMarker");
+      effects.exit("autolink");
+      return ok;
+    }
+
+    // ASCII control, space, or `<`.
+    if (code === null || code === 32 || code === 60 || asciiControl(code)) {
+      return nok(code);
+    }
+    effects.consume(code);
+    return urlInside;
+  }
+
+  /**
+   * In email atext.
+   *
+   * ```markdown
+   * > | a<user.name@example.com>b
+   *              ^
+   * ```
+   *
+   * @type {State}
+   */
+  function emailAtext(code) {
+    if (code === 64) {
+      effects.consume(code);
+      return emailAtSignOrDot;
+    }
+    if (asciiAtext(code)) {
+      effects.consume(code);
+      return emailAtext;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In label, after at-sign or dot.
+   *
+   * ```markdown
+   * > | a<user.name@example.com>b
+   *                 ^       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function emailAtSignOrDot(code) {
+    return asciiAlphanumeric(code) ? emailLabel(code) : nok(code);
+  }
+
+  /**
+   * In label, where `.` and `>` are allowed.
+   *
+   * ```markdown
+   * > | a<user.name@example.com>b
+   *                   ^
+   * ```
+   *
+   * @type {State}
+   */
+  function emailLabel(code) {
+    if (code === 46) {
+      effects.consume(code);
+      size = 0;
+      return emailAtSignOrDot;
+    }
+    if (code === 62) {
+      // Exit, then change the token type.
+      effects.exit("autolinkProtocol").type = "autolinkEmail";
+      effects.enter("autolinkMarker");
+      effects.consume(code);
+      effects.exit("autolinkMarker");
+      effects.exit("autolink");
+      return ok;
+    }
+    return emailValue(code);
+  }
+
+  /**
+   * In label, where `.` and `>` are *not* allowed.
+   *
+   * Though, this is also used in `emailLabel` to parse other values.
+   *
+   * ```markdown
+   * > | a<user.name@ex-ample.com>b
+   *                    ^
+   * ```
+   *
+   * @type {State}
+   */
+  function emailValue(code) {
+    // ASCII alphanumeric or `-`.
+    if ((code === 45 || asciiAlphanumeric(code)) && size++ < 63) {
+      const next = code === 45 ? emailValue : emailLabel;
+      effects.consume(code);
+      return next;
+    }
+    return nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/html-text.js
+/**
+ * @import {
+ *   Code,
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const htmlText = {
+  name: 'htmlText',
+  tokenize: tokenizeHtmlText
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeHtmlText(effects, ok, nok) {
+  const self = this;
+  /** @type {NonNullable<Code> | undefined} */
+  let marker;
+  /** @type {number} */
+  let index;
+  /** @type {State} */
+  let returnState;
+  return start;
+
+  /**
+   * Start of HTML (text).
+   *
+   * ```markdown
+   * > | a <b> c
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("htmlText");
+    effects.enter("htmlTextData");
+    effects.consume(code);
+    return open;
+  }
+
+  /**
+   * After `<`, at tag name or other stuff.
+   *
+   * ```markdown
+   * > | a <b> c
+   *        ^
+   * > | a <!doctype> c
+   *        ^
+   * > | a <!--b--> c
+   *        ^
+   * ```
+   *
+   * @type {State}
+   */
+  function open(code) {
+    if (code === 33) {
+      effects.consume(code);
+      return declarationOpen;
+    }
+    if (code === 47) {
+      effects.consume(code);
+      return tagCloseStart;
+    }
+    if (code === 63) {
+      effects.consume(code);
+      return instruction;
+    }
+
+    // ASCII alphabetical.
+    if (asciiAlpha(code)) {
+      effects.consume(code);
+      return tagOpen;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `<!`, at declaration, comment, or CDATA.
+   *
+   * ```markdown
+   * > | a <!doctype> c
+   *         ^
+   * > | a <!--b--> c
+   *         ^
+   * > | a <![CDATA[>&<]]> c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function declarationOpen(code) {
+    if (code === 45) {
+      effects.consume(code);
+      return commentOpenInside;
+    }
+    if (code === 91) {
+      effects.consume(code);
+      index = 0;
+      return cdataOpenInside;
+    }
+    if (asciiAlpha(code)) {
+      effects.consume(code);
+      return declaration;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In a comment, after `<!-`, at another `-`.
+   *
+   * ```markdown
+   * > | a <!--b--> c
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function commentOpenInside(code) {
+    if (code === 45) {
+      effects.consume(code);
+      return commentEnd;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In comment.
+   *
+   * ```markdown
+   * > | a <!--b--> c
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function comment(code) {
+    if (code === null) {
+      return nok(code);
+    }
+    if (code === 45) {
+      effects.consume(code);
+      return commentClose;
+    }
+    if (markdownLineEnding(code)) {
+      returnState = comment;
+      return lineEndingBefore(code);
+    }
+    effects.consume(code);
+    return comment;
+  }
+
+  /**
+   * In comment, after `-`.
+   *
+   * ```markdown
+   * > | a <!--b--> c
+   *             ^
+   * ```
+   *
+   * @type {State}
+   */
+  function commentClose(code) {
+    if (code === 45) {
+      effects.consume(code);
+      return commentEnd;
+    }
+    return comment(code);
+  }
+
+  /**
+   * In comment, after `--`.
+   *
+   * ```markdown
+   * > | a <!--b--> c
+   *              ^
+   * ```
+   *
+   * @type {State}
+   */
+  function commentEnd(code) {
+    return code === 62 ? end(code) : code === 45 ? commentClose(code) : comment(code);
+  }
+
+  /**
+   * After `<![`, in CDATA, expecting `CDATA[`.
+   *
+   * ```markdown
+   * > | a <![CDATA[>&<]]> b
+   *          ^^^^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function cdataOpenInside(code) {
+    const value = "CDATA[";
+    if (code === value.charCodeAt(index++)) {
+      effects.consume(code);
+      return index === value.length ? cdata : cdataOpenInside;
+    }
+    return nok(code);
+  }
+
+  /**
+   * In CDATA.
+   *
+   * ```markdown
+   * > | a <![CDATA[>&<]]> b
+   *                ^^^
+   * ```
+   *
+   * @type {State}
+   */
+  function cdata(code) {
+    if (code === null) {
+      return nok(code);
+    }
+    if (code === 93) {
+      effects.consume(code);
+      return cdataClose;
+    }
+    if (markdownLineEnding(code)) {
+      returnState = cdata;
+      return lineEndingBefore(code);
+    }
+    effects.consume(code);
+    return cdata;
+  }
+
+  /**
+   * In CDATA, after `]`, at another `]`.
+   *
+   * ```markdown
+   * > | a <![CDATA[>&<]]> b
+   *                    ^
+   * ```
+   *
+   * @type {State}
+   */
+  function cdataClose(code) {
+    if (code === 93) {
+      effects.consume(code);
+      return cdataEnd;
+    }
+    return cdata(code);
+  }
+
+  /**
+   * In CDATA, after `]]`, at `>`.
+   *
+   * ```markdown
+   * > | a <![CDATA[>&<]]> b
+   *                     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function cdataEnd(code) {
+    if (code === 62) {
+      return end(code);
+    }
+    if (code === 93) {
+      effects.consume(code);
+      return cdataEnd;
+    }
+    return cdata(code);
+  }
+
+  /**
+   * In declaration.
+   *
+   * ```markdown
+   * > | a <!b> c
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function declaration(code) {
+    if (code === null || code === 62) {
+      return end(code);
+    }
+    if (markdownLineEnding(code)) {
+      returnState = declaration;
+      return lineEndingBefore(code);
+    }
+    effects.consume(code);
+    return declaration;
+  }
+
+  /**
+   * In instruction.
+   *
+   * ```markdown
+   * > | a <?b?> c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function instruction(code) {
+    if (code === null) {
+      return nok(code);
+    }
+    if (code === 63) {
+      effects.consume(code);
+      return instructionClose;
+    }
+    if (markdownLineEnding(code)) {
+      returnState = instruction;
+      return lineEndingBefore(code);
+    }
+    effects.consume(code);
+    return instruction;
+  }
+
+  /**
+   * In instruction, after `?`, at `>`.
+   *
+   * ```markdown
+   * > | a <?b?> c
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function instructionClose(code) {
+    return code === 62 ? end(code) : instruction(code);
+  }
+
+  /**
+   * After `</`, in closing tag, at tag name.
+   *
+   * ```markdown
+   * > | a </b> c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagCloseStart(code) {
+    // ASCII alphabetical.
+    if (asciiAlpha(code)) {
+      effects.consume(code);
+      return tagClose;
+    }
+    return nok(code);
+  }
+
+  /**
+   * After `</x`, in a tag name.
+   *
+   * ```markdown
+   * > | a </b> c
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagClose(code) {
+    // ASCII alphanumerical and `-`.
+    if (code === 45 || asciiAlphanumeric(code)) {
+      effects.consume(code);
+      return tagClose;
+    }
+    return tagCloseBetween(code);
+  }
+
+  /**
+   * In closing tag, after tag name.
+   *
+   * ```markdown
+   * > | a </b> c
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagCloseBetween(code) {
+    if (markdownLineEnding(code)) {
+      returnState = tagCloseBetween;
+      return lineEndingBefore(code);
+    }
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return tagCloseBetween;
+    }
+    return end(code);
+  }
+
+  /**
+   * After `<x`, in opening tag name.
+   *
+   * ```markdown
+   * > | a <b> c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagOpen(code) {
+    // ASCII alphanumerical and `-`.
+    if (code === 45 || asciiAlphanumeric(code)) {
+      effects.consume(code);
+      return tagOpen;
+    }
+    if (code === 47 || code === 62 || markdownLineEndingOrSpace(code)) {
+      return tagOpenBetween(code);
+    }
+    return nok(code);
+  }
+
+  /**
+   * In opening tag, after tag name.
+   *
+   * ```markdown
+   * > | a <b> c
+   *         ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagOpenBetween(code) {
+    if (code === 47) {
+      effects.consume(code);
+      return end;
+    }
+
+    // ASCII alphabetical and `:` and `_`.
+    if (code === 58 || code === 95 || asciiAlpha(code)) {
+      effects.consume(code);
+      return tagOpenAttributeName;
+    }
+    if (markdownLineEnding(code)) {
+      returnState = tagOpenBetween;
+      return lineEndingBefore(code);
+    }
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return tagOpenBetween;
+    }
+    return end(code);
+  }
+
+  /**
+   * In attribute name.
+   *
+   * ```markdown
+   * > | a <b c> d
+   *          ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagOpenAttributeName(code) {
+    // ASCII alphabetical and `-`, `.`, `:`, and `_`.
+    if (code === 45 || code === 46 || code === 58 || code === 95 || asciiAlphanumeric(code)) {
+      effects.consume(code);
+      return tagOpenAttributeName;
+    }
+    return tagOpenAttributeNameAfter(code);
+  }
+
+  /**
+   * After attribute name, before initializer, the end of the tag, or
+   * whitespace.
+   *
+   * ```markdown
+   * > | a <b c> d
+   *           ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagOpenAttributeNameAfter(code) {
+    if (code === 61) {
+      effects.consume(code);
+      return tagOpenAttributeValueBefore;
+    }
+    if (markdownLineEnding(code)) {
+      returnState = tagOpenAttributeNameAfter;
+      return lineEndingBefore(code);
+    }
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return tagOpenAttributeNameAfter;
+    }
+    return tagOpenBetween(code);
+  }
+
+  /**
+   * Before unquoted, double quoted, or single quoted attribute value, allowing
+   * whitespace.
+   *
+   * ```markdown
+   * > | a <b c=d> e
+   *            ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagOpenAttributeValueBefore(code) {
+    if (code === null || code === 60 || code === 61 || code === 62 || code === 96) {
+      return nok(code);
+    }
+    if (code === 34 || code === 39) {
+      effects.consume(code);
+      marker = code;
+      return tagOpenAttributeValueQuoted;
+    }
+    if (markdownLineEnding(code)) {
+      returnState = tagOpenAttributeValueBefore;
+      return lineEndingBefore(code);
+    }
+    if (markdownSpace(code)) {
+      effects.consume(code);
+      return tagOpenAttributeValueBefore;
+    }
+    effects.consume(code);
+    return tagOpenAttributeValueUnquoted;
+  }
+
+  /**
+   * In double or single quoted attribute value.
+   *
+   * ```markdown
+   * > | a <b c="d"> e
+   *             ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagOpenAttributeValueQuoted(code) {
+    if (code === marker) {
+      effects.consume(code);
+      marker = undefined;
+      return tagOpenAttributeValueQuotedAfter;
+    }
+    if (code === null) {
+      return nok(code);
+    }
+    if (markdownLineEnding(code)) {
+      returnState = tagOpenAttributeValueQuoted;
+      return lineEndingBefore(code);
+    }
+    effects.consume(code);
+    return tagOpenAttributeValueQuoted;
+  }
+
+  /**
+   * In unquoted attribute value.
+   *
+   * ```markdown
+   * > | a <b c=d> e
+   *            ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagOpenAttributeValueUnquoted(code) {
+    if (code === null || code === 34 || code === 39 || code === 60 || code === 61 || code === 96) {
+      return nok(code);
+    }
+    if (code === 47 || code === 62 || markdownLineEndingOrSpace(code)) {
+      return tagOpenBetween(code);
+    }
+    effects.consume(code);
+    return tagOpenAttributeValueUnquoted;
+  }
+
+  /**
+   * After double or single quoted attribute value, before whitespace or the end
+   * of the tag.
+   *
+   * ```markdown
+   * > | a <b c="d"> e
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function tagOpenAttributeValueQuotedAfter(code) {
+    if (code === 47 || code === 62 || markdownLineEndingOrSpace(code)) {
+      return tagOpenBetween(code);
+    }
+    return nok(code);
+  }
+
+  /**
+   * In certain circumstances of a tag where only an `>` is allowed.
+   *
+   * ```markdown
+   * > | a <b c="d"> e
+   *               ^
+   * ```
+   *
+   * @type {State}
+   */
+  function end(code) {
+    if (code === 62) {
+      effects.consume(code);
+      effects.exit("htmlTextData");
+      effects.exit("htmlText");
+      return ok;
+    }
+    return nok(code);
+  }
+
+  /**
+   * At eol.
+   *
+   * > 👉 **Note**: we can’t have blank lines in text, so no need to worry about
+   * > empty tokens.
+   *
+   * ```markdown
+   * > | a <!--a
+   *            ^
+   *   | b-->
+   * ```
+   *
+   * @type {State}
+   */
+  function lineEndingBefore(code) {
+    effects.exit("htmlTextData");
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return lineEndingAfter;
+  }
+
+  /**
+   * After eol, at optional whitespace.
+   *
+   * > 👉 **Note**: we can’t have blank lines in text, so no need to worry about
+   * > empty tokens.
+   *
+   * ```markdown
+   *   | a <!--a
+   * > | b-->
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function lineEndingAfter(code) {
+    // Always populated by defaults.
+
+    return markdownSpace(code) ? factorySpace(effects, lineEndingAfterPrefix, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code) : lineEndingAfterPrefix(code);
+  }
+
+  /**
+   * After eol, after optional whitespace.
+   *
+   * > 👉 **Note**: we can’t have blank lines in text, so no need to worry about
+   * > empty tokens.
+   *
+   * ```markdown
+   *   | a <!--a
+   * > | b-->
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function lineEndingAfterPrefix(code) {
+    effects.enter("htmlTextData");
+    return returnState(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/label-start-link.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+
+/** @type {Construct} */
+const labelStartLink = {
+  name: 'labelStartLink',
+  resolveAll: labelEnd.resolveAll,
+  tokenize: tokenizeLabelStartLink
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeLabelStartLink(effects, ok, nok) {
+  const self = this;
+  return start;
+
+  /**
+   * Start of label (link) start.
+   *
+   * ```markdown
+   * > | a [b] c
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("labelLink");
+    effects.enter("labelMarker");
+    effects.consume(code);
+    effects.exit("labelMarker");
+    effects.exit("labelLink");
+    return after;
+  }
+
+  /** @type {State} */
+  function after(code) {
+    // To do: this isn’t needed in `micromark-extension-gfm-footnote`,
+    // remove.
+    // Hidden footnotes hook.
+    /* c8 ignore next 3 */
+    return code === 94 && '_hiddenFootnoteSupport' in self.parser.constructs ? nok(code) : ok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/hard-break-escape.js
+/**
+ * @import {
+ *   Construct,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer
+ * } from 'micromark-util-types'
+ */
+
+
+/** @type {Construct} */
+const hardBreakEscape = {
+  name: 'hardBreakEscape',
+  tokenize: tokenizeHardBreakEscape
+};
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeHardBreakEscape(effects, ok, nok) {
+  return start;
+
+  /**
+   * Start of a hard break (escape).
+   *
+   * ```markdown
+   * > | a\
+   *      ^
+   *   | b
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("hardBreakEscape");
+    effects.consume(code);
+    return after;
+  }
+
+  /**
+   * After `\`, at eol.
+   *
+   * ```markdown
+   * > | a\
+   *       ^
+   *   | b
+   * ```
+   *
+   *  @type {State}
+   */
+  function after(code) {
+    if (markdownLineEnding(code)) {
+      effects.exit("hardBreakEscape");
+      return ok(code);
+    }
+    return nok(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/code-text.js
+/**
+ * @import {
+ *   Construct,
+ *   Previous,
+ *   Resolver,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer,
+ *   Token
+ * } from 'micromark-util-types'
+ */
+
+
+/** @type {Construct} */
+const codeText = {
+  name: 'codeText',
+  previous: code_text_previous,
+  resolve: resolveCodeText,
+  tokenize: tokenizeCodeText
+};
+
+// To do: next major: don’t resolve, like `markdown-rs`.
+/** @type {Resolver} */
+function resolveCodeText(events) {
+  let tailExitIndex = events.length - 4;
+  let headEnterIndex = 3;
+  /** @type {number} */
+  let index;
+  /** @type {number | undefined} */
+  let enter;
+
+  // If we start and end with an EOL or a space.
+  if ((events[headEnterIndex][1].type === "lineEnding" || events[headEnterIndex][1].type === 'space') && (events[tailExitIndex][1].type === "lineEnding" || events[tailExitIndex][1].type === 'space')) {
+    index = headEnterIndex;
+
+    // And we have data.
+    while (++index < tailExitIndex) {
+      if (events[index][1].type === "codeTextData") {
+        // Then we have padding.
+        events[headEnterIndex][1].type = "codeTextPadding";
+        events[tailExitIndex][1].type = "codeTextPadding";
+        headEnterIndex += 2;
+        tailExitIndex -= 2;
+        break;
+      }
+    }
+  }
+
+  // Merge adjacent spaces and data.
+  index = headEnterIndex - 1;
+  tailExitIndex++;
+  while (++index <= tailExitIndex) {
+    if (enter === undefined) {
+      if (index !== tailExitIndex && events[index][1].type !== "lineEnding") {
+        enter = index;
+      }
+    } else if (index === tailExitIndex || events[index][1].type === "lineEnding") {
+      events[enter][1].type = "codeTextData";
+      if (index !== enter + 2) {
+        events[enter][1].end = events[index - 1][1].end;
+        events.splice(enter + 2, index - enter - 2);
+        tailExitIndex -= index - enter - 2;
+        index = enter + 2;
+      }
+      enter = undefined;
+    }
+  }
+  return events;
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Previous}
+ */
+function code_text_previous(code) {
+  // If there is a previous code, there will always be a tail.
+  return code !== 96 || this.events[this.events.length - 1][1].type === "characterEscape";
+}
+
+/**
+ * @this {TokenizeContext}
+ *   Context.
+ * @type {Tokenizer}
+ */
+function tokenizeCodeText(effects, ok, nok) {
+  const self = this;
+  let sizeOpen = 0;
+  /** @type {number} */
+  let size;
+  /** @type {Token} */
+  let token;
+  return start;
+
+  /**
+   * Start of code (text).
+   *
+   * ```markdown
+   * > | `a`
+   *     ^
+   * > | \`a`
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function start(code) {
+    effects.enter("codeText");
+    effects.enter("codeTextSequence");
+    return sequenceOpen(code);
+  }
+
+  /**
+   * In opening sequence.
+   *
+   * ```markdown
+   * > | `a`
+   *     ^
+   * ```
+   *
+   * @type {State}
+   */
+  function sequenceOpen(code) {
+    if (code === 96) {
+      effects.consume(code);
+      sizeOpen++;
+      return sequenceOpen;
+    }
+    effects.exit("codeTextSequence");
+    return between(code);
+  }
+
+  /**
+   * Between something and something else.
+   *
+   * ```markdown
+   * > | `a`
+   *      ^^
+   * ```
+   *
+   * @type {State}
+   */
+  function between(code) {
+    // EOF.
+    if (code === null) {
+      return nok(code);
+    }
+
+    // To do: next major: don’t do spaces in resolve, but when compiling,
+    // like `markdown-rs`.
+    // Tabs don’t work, and virtual spaces don’t make sense.
+    if (code === 32) {
+      effects.enter('space');
+      effects.consume(code);
+      effects.exit('space');
+      return between;
+    }
+
+    // Closing fence? Could also be data.
+    if (code === 96) {
+      token = effects.enter("codeTextSequence");
+      size = 0;
+      return sequenceClose(code);
+    }
+    if (markdownLineEnding(code)) {
+      effects.enter("lineEnding");
+      effects.consume(code);
+      effects.exit("lineEnding");
+      return between;
+    }
+
+    // Data.
+    effects.enter("codeTextData");
+    return data(code);
+  }
+
+  /**
+   * In data.
+   *
+   * ```markdown
+   * > | `a`
+   *      ^
+   * ```
+   *
+   * @type {State}
+   */
+  function data(code) {
+    if (code === null || code === 32 || code === 96 || markdownLineEnding(code)) {
+      effects.exit("codeTextData");
+      return between(code);
+    }
+    effects.consume(code);
+    return data;
+  }
+
+  /**
+   * In closing sequence.
+   *
+   * ```markdown
+   * > | `a`
+   *       ^
+   * ```
+   *
+   * @type {State}
+   */
+  function sequenceClose(code) {
+    // More.
+    if (code === 96) {
+      effects.consume(code);
+      size++;
+      return sequenceClose;
+    }
+
+    // Done!
+    if (size === sizeOpen) {
+      effects.exit("codeTextSequence");
+      effects.exit("codeText");
+      return ok(code);
+    }
+
+    // More or less accents: mark as data.
+    token.type = "codeTextData";
+    return data(code);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/constructs.js
+/**
+ * @typedef {import('micromark-util-types').Extension} Extension
+ */
+
+
+
+
+/** @satisfies {Extension['document']} */
+const constructs_document = {
+  [42]: list,
+  [43]: list,
+  [45]: list,
+  [48]: list,
+  [49]: list,
+  [50]: list,
+  [51]: list,
+  [52]: list,
+  [53]: list,
+  [54]: list,
+  [55]: list,
+  [56]: list,
+  [57]: list,
+  [62]: blockQuote
+}
+
+/** @satisfies {Extension['contentInitial']} */
+const contentInitial = {
+  [91]: definition
+}
+
+/** @satisfies {Extension['flowInitial']} */
+const flowInitial = {
+  [-2]: codeIndented,
+  [-1]: codeIndented,
+  [32]: codeIndented
+}
+
+/** @satisfies {Extension['flow']} */
+const constructs_flow = {
+  [35]: headingAtx,
+  [42]: thematicBreak,
+  [45]: [setextUnderline, thematicBreak],
+  [60]: htmlFlow,
+  [61]: setextUnderline,
+  [95]: thematicBreak,
+  [96]: codeFenced,
+  [126]: codeFenced
+}
+
+/** @satisfies {Extension['string']} */
+const constructs_string = {
+  [38]: characterReference,
+  [92]: characterEscape
+}
+
+/** @satisfies {Extension['text']} */
+const constructs_text = {
+  [-5]: lineEnding,
+  [-4]: lineEnding,
+  [-3]: lineEnding,
+  [33]: labelStartImage,
+  [38]: characterReference,
+  [42]: attention,
+  [60]: [autolink, htmlText],
+  [91]: labelStartLink,
+  [92]: [hardBreakEscape, characterEscape],
+  [93]: labelEnd,
+  [95]: attention,
+  [96]: codeText
+}
+
+/** @satisfies {Extension['insideSpan']} */
+const insideSpan = {
+  null: [attention, resolver]
+}
+
+/** @satisfies {Extension['attentionMarkers']} */
+const attentionMarkers = {
+  null: [42, 95]
+}
+
+/** @satisfies {Extension['disable']} */
+const disable = {
+  null: []
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/parse.js
+/**
+ * @typedef {import('micromark-util-types').Create} Create
+ * @typedef {import('micromark-util-types').FullNormalizedExtension} FullNormalizedExtension
+ * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
+ * @typedef {import('micromark-util-types').ParseContext} ParseContext
+ * @typedef {import('micromark-util-types').ParseOptions} ParseOptions
+ */
+
+
+
+
+
+
+
+
+
+/**
+ * @param {ParseOptions | null | undefined} [options]
+ * @returns {ParseContext}
+ */
+function parse(options) {
+  const settings = options || {}
+  const constructs =
+    /** @type {FullNormalizedExtension} */
+    combineExtensions([constructs_namespaceObject, ...(settings.extensions || [])])
+
+  /** @type {ParseContext} */
+  const parser = {
+    defined: [],
+    lazy: {},
+    constructs,
+    content: create(content),
+    document: create(document_document),
+    flow: create(flow),
+    string: create(string),
+    text: create(text_text)
+  }
+  return parser
+
+  /**
+   * @param {InitialConstruct} initial
+   */
+  function create(initial) {
+    return creator
+    /** @type {Create} */
+    function creator(from) {
+      return createTokenizer(parser, initial, from)
+    }
+  }
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/preprocess.js
+/**
+ * @typedef {import('micromark-util-types').Chunk} Chunk
+ * @typedef {import('micromark-util-types').Code} Code
+ * @typedef {import('micromark-util-types').Encoding} Encoding
+ * @typedef {import('micromark-util-types').Value} Value
+ */
+
+/**
+ * @callback Preprocessor
+ * @param {Value} value
+ * @param {Encoding | null | undefined} [encoding]
+ * @param {boolean | null | undefined} [end=false]
+ * @returns {Array<Chunk>}
+ */
+
+const search = /[\0\t\n\r]/g
+
+/**
+ * @returns {Preprocessor}
+ */
+function preprocess() {
+  let column = 1
+  let buffer = ''
+  /** @type {boolean | undefined} */
+  let start = true
+  /** @type {boolean | undefined} */
+  let atCarriageReturn
+  return preprocessor
+
+  /** @type {Preprocessor} */
+  // eslint-disable-next-line complexity
+  function preprocessor(value, encoding, end) {
+    /** @type {Array<Chunk>} */
+    const chunks = []
+    /** @type {RegExpMatchArray | null} */
+    let match
+    /** @type {number} */
+    let next
+    /** @type {number} */
+    let startPosition
+    /** @type {number} */
+    let endPosition
+    /** @type {Code} */
+    let code
+    value =
+      buffer +
+      (typeof value === 'string'
+        ? value.toString()
+        : new TextDecoder(encoding || undefined).decode(value))
+    startPosition = 0
+    buffer = ''
+    if (start) {
+      // To do: `markdown-rs` actually parses BOMs (byte order mark).
+      if (value.charCodeAt(0) === 65279) {
+        startPosition++
+      }
+      start = undefined
+    }
+    while (startPosition < value.length) {
+      search.lastIndex = startPosition
+      match = search.exec(value)
+      endPosition =
+        match && match.index !== undefined ? match.index : value.length
+      code = value.charCodeAt(endPosition)
+      if (!match) {
+        buffer = value.slice(startPosition)
+        break
+      }
+      if (code === 10 && startPosition === endPosition && atCarriageReturn) {
+        chunks.push(-3)
+        atCarriageReturn = undefined
+      } else {
+        if (atCarriageReturn) {
+          chunks.push(-5)
+          atCarriageReturn = undefined
+        }
+        if (startPosition < endPosition) {
+          chunks.push(value.slice(startPosition, endPosition))
+          column += endPosition - startPosition
+        }
+        switch (code) {
+          case 0: {
+            chunks.push(65533)
+            column++
+            break
+          }
+          case 9: {
+            next = Math.ceil(column / 4) * 4
+            chunks.push(-2)
+            while (column++ < next) chunks.push(-1)
+            break
+          }
+          case 10: {
+            chunks.push(-4)
+            column = 1
+            break
+          }
+          default: {
+            atCarriageReturn = true
+            column = 1
+          }
+        }
+      }
+      startPosition = endPosition + 1
+    }
+    if (end) {
+      if (atCarriageReturn) chunks.push(-5)
+      if (buffer) chunks.push(buffer)
+      chunks.push(null)
+    }
+    return chunks
+  }
+}
+
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/postprocess.js
+/**
+ * @typedef {import('micromark-util-types').Event} Event
+ */
+
+
+
+/**
+ * @param {Array<Event>} events
+ * @returns {Array<Event>}
+ */
+function postprocess(events) {
+  while (!subtokenize(events)) {
+    // Empty
+  }
+  return events
+}
+
+// EXTERNAL MODULE: ./node_modules/markdownlint/helpers/micromark-helpers.cjs
+var micromark_helpers = __nccwpck_require__(1670);
+// EXTERNAL MODULE: ./node_modules/markdownlint/helpers/shared.cjs
+var shared = __nccwpck_require__(3408);
+;// CONCATENATED MODULE: ./node_modules/markdownlint/helpers/micromark-parse.mjs
+// @ts-check
+
+
+
+
+
+
+
+// micromark-core-commonmark is not a dependency because this instance must match what's used by micromark
+// eslint-disable-next-line n/no-extraneous-import
+
+
+
+
+/** @typedef {import("micromark-util-types").Event} Event */
+/** @typedef {import("micromark-util-types").ParseOptions} MicromarkParseOptions */
+/** @typedef {import("micromark-util-types").State} State */
+/** @typedef {import("micromark-util-types").Token} Token */
+/** @typedef {import("micromark-util-types").Tokenizer} Tokenizer */
+/** @typedef {import("./micromark-types.d.mts")} */
+/** @typedef {import("../lib/markdownlint.mjs").MicromarkToken} MicromarkToken */
+
+/**
+ * Parse options.
+ *
+ * @typedef {Object} ParseOptions
+ * @property {boolean} [freezeTokens] Whether to freeze output Tokens.
+ */
+
+/**
+ * Parses a Markdown document and returns Micromark events.
+ *
+ * @param {string} markdown Markdown document.
+ * @param {MicromarkParseOptions} [micromarkParseOptions] Options for micromark.
+ * @returns {Event[]} Micromark events.
+ */
+function getEvents(
+  markdown,
+  micromarkParseOptions = {}
+) {
+  // Customize extensions list to add useful extensions
+  const extensions = [
+    directive(),
+    gfmAutolinkLiteral(),
+    gfmFootnote(),
+    gfmTable(),
+    math(),
+    ...(micromarkParseOptions.extensions || [])
+  ];
+
+  // // Shim labelEnd to identify undefined link labels
+  /** @type {Event[][]} */
+  const artificialEventLists = [];
+  const tokenizeOriginal = labelEnd.tokenize;
+
+  /** @type {Tokenizer} */
+  function tokenizeShim(effects, okOriginal, nokOriginal) {
+    // eslint-disable-next-line consistent-this, unicorn/no-this-assignment, no-invalid-this
+    const tokenizeContext = this;
+    const events = tokenizeContext.events;
+
+    /** @type {State} */
+    const nokShim = (code) => {
+      // Find start of label (image or link)
+      let indexStart = events.length;
+      while (--indexStart >= 0) {
+        const event = events[indexStart];
+        const [ kind, token ] = event;
+        if (kind === "enter") {
+          const { type } = token;
+          if ((type === "labelImage") || (type === "labelLink")) {
+            // Found it
+            break;
+          }
+        }
+      }
+
+      // If found...
+      if (indexStart >= 0) {
+        // Create artificial enter/exit events and replicate all data/lineEnding events within
+        const eventStart = events[indexStart];
+        const [ , eventStartToken ] = eventStart;
+        const eventEnd = events[events.length - 1];
+        const [ , eventEndToken ] = eventEnd;
+        /** @type {Token} */
+        const undefinedReferenceType = {
+          "type": "undefinedReferenceShortcut",
+          "start": eventStartToken.start,
+          "end": eventEndToken.end
+        };
+        /** @type {Token} */
+        const undefinedReference = {
+          "type": "undefinedReference",
+          "start": eventStartToken.start,
+          "end": eventEndToken.end
+        };
+        const eventsToReplicate = events
+          .slice(indexStart)
+          .filter((event) => {
+            const [ , eventToken ] = event;
+            const { type } = eventToken;
+            return (type === "data") || (type === "lineEnding");
+          });
+
+        // Determine the type of the undefined reference
+        const previousUndefinedEvent = (artificialEventLists.length > 0) && artificialEventLists[artificialEventLists.length - 1][0];
+        const previousUndefinedToken = previousUndefinedEvent && previousUndefinedEvent[1];
+        if (
+          previousUndefinedToken &&
+          (previousUndefinedToken.end.line === undefinedReferenceType.start.line) &&
+          (previousUndefinedToken.end.column === undefinedReferenceType.start.column)
+        ) {
+          // Previous undefined reference event is immediately before this one
+          if (eventsToReplicate.length === 0) {
+            // The pair represent a collapsed reference (ex: [...][])
+            previousUndefinedToken.type = "undefinedReferenceCollapsed";
+            previousUndefinedToken.end = eventEndToken.end;
+          } else {
+            // The pair represent a full reference (ex: [...][...])
+            undefinedReferenceType.type = "undefinedReferenceFull";
+            undefinedReferenceType.start = previousUndefinedToken.start;
+            artificialEventLists.pop();
+          }
+        }
+
+        // Create artificial event list and replicate content
+        const text = eventsToReplicate
+          .filter((event) => event[0] === "enter")
+          .map((event) => tokenizeContext.sliceSerialize(event[1]))
+          .join("")
+          .trim();
+        if ((text.length > 0) && !text.includes("]")) {
+          /** @type {Event[]} */
+          const artificialEvents = [];
+          artificialEvents.push(
+            [ "enter", undefinedReferenceType, tokenizeContext ],
+            [ "enter", undefinedReference, tokenizeContext ]
+          );
+          for (const event of eventsToReplicate) {
+            const [ kind, token ] = event;
+            // Copy token because the current object will get modified by the parser
+            artificialEvents.push([ kind, { ...token }, tokenizeContext ]);
+          }
+          artificialEvents.push(
+            [ "exit", undefinedReference, tokenizeContext ],
+            [ "exit", undefinedReferenceType, tokenizeContext ]
+          );
+          artificialEventLists.push(artificialEvents);
+        }
+      }
+
+      // Continue with original behavior
+      return nokOriginal(code);
+    };
+
+    // Shim nok handler of labelEnd's tokenize
+    return tokenizeOriginal.call(tokenizeContext, effects, okOriginal, nokShim);
+  }
+
+  try {
+    // Shim labelEnd behavior to detect undefined references
+    labelEnd.tokenize = tokenizeShim;
+
+    // Use micromark to parse document into Events
+    const encoding = undefined;
+    const eol = true;
+    const parseContext = parse({ ...micromarkParseOptions, extensions });
+    const chunks = preprocess()(markdown, encoding, eol);
+    const events = postprocess(parseContext.document().write(chunks));
+
+    // Append artificial events and return all events
+    // eslint-disable-next-line unicorn/prefer-spread
+    return events.concat(...artificialEventLists);
+  } finally {
+    // Restore shimmed labelEnd behavior
+    labelEnd.tokenize = tokenizeOriginal;
+  }
+}
+
+/**
+ * Parses a Markdown document and returns micromark tokens (internal).
+ *
+ * @param {string} markdown Markdown document.
+ * @param {ParseOptions} [parseOptions] Options.
+ * @param {MicromarkParseOptions} [micromarkParseOptions] Options for micromark.
+ * @param {number} [lineDelta] Offset for start/end line.
+ * @param {MicromarkToken} [ancestor] Parent of top-most tokens.
+ * @returns {MicromarkToken[]} Micromark tokens.
+ */
+function parseInternal(
+  markdown,
+  parseOptions = {},
+  micromarkParseOptions = {},
+  lineDelta = 0,
+  ancestor = undefined
+) {
+  // Get options
+  const freezeTokens = Boolean(parseOptions.freezeTokens);
+
+  // Use micromark to parse document into Events
+  const events = getEvents(markdown, micromarkParseOptions);
+
+  // Create Token objects
+  const document = [];
+  let flatTokens = [];
+  /** @type {MicromarkToken} */
+  const root = {
+    "type": "data",
+    "startLine": -1,
+    "startColumn": -1,
+    "endLine": -1,
+    "endColumn": -1,
+    "text": "ROOT",
+    "children": document,
+    "parent": null
+  };
+  const history = [ root ];
+  let current = root;
+  /** @type {MicromarkParseOptions | null} */
+  let reparseOptions = null;
+  let lines = null;
+  let skipHtmlFlowChildren = false;
+  for (const event of events) {
+    const [ kind, token, context ] = event;
+    const { type, start, end } = token;
+    const { "column": startColumn, "line": startLine } = start;
+    const { "column": endColumn, "line": endLine } = end;
+    const text = context.sliceSerialize(token);
+    if ((kind === "enter") && !skipHtmlFlowChildren) {
+      const previous = current;
+      history.push(previous);
+      current = {
+        type,
+        "startLine": startLine + lineDelta,
+        startColumn,
+        "endLine": endLine + lineDelta,
+        endColumn,
+        text,
+        "children": [],
+        "parent": ((previous === root) ? (ancestor || null) : previous)
+      };
+      if (ancestor) {
+        Object.defineProperty(current, shared.htmlFlowSymbol, { "value": true });
+      }
+      previous.children.push(current);
+      flatTokens.push(current);
+      if ((current.type === "htmlFlow") && !(0,micromark_helpers.isHtmlFlowComment)(current)) {
+        skipHtmlFlowChildren = true;
+        if (!reparseOptions || !lines) {
+          reparseOptions = {
+            ...micromarkParseOptions,
+            "extensions": [
+              {
+                "disable": {
+                  "null": [ "codeIndented", "htmlFlow" ]
+                }
+              }
+            ]
+          };
+          lines = markdown.split(shared.newLineRe);
+        }
+        const reparseMarkdown = lines
+          .slice(current.startLine - 1, current.endLine)
+          .join("\n");
+        const tokens = parseInternal(
+          reparseMarkdown,
+          parseOptions,
+          reparseOptions,
+          current.startLine - 1,
+          current
+        );
+        current.children = tokens;
+        // Avoid stack overflow of Array.push(...spread)
+        // eslint-disable-next-line unicorn/prefer-spread
+        flatTokens = flatTokens.concat(tokens[shared.flatTokensSymbol]);
+      }
+    } else if (kind === "exit") {
+      if (type === "htmlFlow") {
+        skipHtmlFlowChildren = false;
+      }
+      if (!skipHtmlFlowChildren) {
+        if (freezeTokens) {
+          Object.freeze(current.children);
+          Object.freeze(current);
+        }
+        // @ts-ignore
+        current = history.pop();
+      }
+    }
+  }
+
+  // Return document
+  Object.defineProperty(document, shared.flatTokensSymbol, { "value": flatTokens });
+  if (freezeTokens) {
+    Object.freeze(document);
+  }
+  return document;
+}
+
+/**
+ * Parses a Markdown document and returns micromark tokens.
+ *
+ * @param {string} markdown Markdown document.
+ * @param {ParseOptions} [parseOptions] Options.
+ * @returns {MicromarkToken[]} Micromark tokens.
+ */
+function micromark_parse_parse(markdown, parseOptions) {
+  return parseInternal(markdown, parseOptions);
+}
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/constants.mjs
+// @ts-check
+
+const deprecatedRuleNames = (/* unused pure expression or super */ null && ([]));
+const fixableRuleNames = (/* unused pure expression or super */ null && ([
+  "MD004", "MD005", "MD007", "MD009", "MD010", "MD011",
+  "MD012", "MD014", "MD018", "MD019", "MD020", "MD021",
+  "MD022", "MD023", "MD026", "MD027", "MD030", "MD031",
+  "MD032", "MD034", "MD037", "MD038", "MD039", "MD044",
+  "MD047", "MD049", "MD050", "MD051", "MD053", "MD054",
+  "MD058"
+]));
+const homepage = "https://github.com/DavidAnson/markdownlint";
+const version = "0.36.1";
+
+// EXTERNAL MODULE: ./node_modules/markdownlint/helpers/helpers.cjs
+var helpers = __nccwpck_require__(3810);
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/cache.mjs
+// @ts-check
+
+
+
 
 /** @type {Map<string, object>} */
 const map = new Map();
@@ -46112,7 +62410,7 @@ let params = undefined;
 /**
  * Initializes (resets) the cache.
  *
- * @param {import("./markdownlint").RuleParams} [p] Rule parameters object.
+ * @param {import("./markdownlint.mjs").RuleParams} [p] Rule parameters object.
  * @returns {void}
  */
 function initialize(p) {
@@ -46139,15 +62437,15 @@ function getCached(name, getValue) {
 /**
  * Filters a list of Micromark tokens by type and caches the result.
  *
- * @param {import("./markdownlint").MicromarkTokenType[]} types Types to allow.
+ * @param {import("./markdownlint.mjs").MicromarkTokenType[]} types Types to allow.
  * @param {boolean} [htmlFlow] Whether to include htmlFlow content.
- * @returns {import("./markdownlint").MicromarkToken[]} Filtered tokens.
+ * @returns {import("./markdownlint.mjs").MicromarkToken[]} Filtered tokens.
  */
 function filterByTypesCached(types, htmlFlow) {
   return getCached(
     // eslint-disable-next-line prefer-rest-params
     JSON.stringify(arguments),
-    () => filterByTypes(params.parsers.micromark.tokens, types, htmlFlow)
+    () => (0,micromark_helpers.filterByTypes)(params.parsers.micromark.tokens, types, htmlFlow)
   );
 }
 
@@ -46159,60 +62457,3299 @@ function filterByTypesCached(types, htmlFlow) {
 function getReferenceLinkImageData() {
   return getCached(
     getReferenceLinkImageData.name,
-    () => helpers.getReferenceLinkImageData(params.parsers.micromark.tokens)
+    () => (0,helpers.getReferenceLinkImageData)(params.parsers.micromark.tokens)
   );
 }
 
-module.exports = {
-  initialize,
-  filterByTypesCached,
-  getReferenceLinkImageData
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md001.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md001 = ({
+  "names": [ "MD001", "heading-increment" ],
+  "description": "Heading levels should only increment by one level at a time",
+  "tags": [ "headings" ],
+  "parser": "micromark",
+  "function": function MD001(params, onError) {
+    let prevLevel = Number.MAX_SAFE_INTEGER;
+    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
+      const level = (0,micromark_helpers.getHeadingLevel)(heading);
+      if (level > prevLevel) {
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          heading.startLine,
+          `h${prevLevel + 1}`,
+          `h${level}`
+        );
+      }
+      prevLevel = level;
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md003.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md003 = ({
+  "names": [ "MD003", "heading-style" ],
+  "description": "Heading style",
+  "tags": [ "headings" ],
+  "parser": "micromark",
+  "function": function MD003(params, onError) {
+    let style = String(params.config.style || "consistent");
+    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
+      const styleForToken = (0,micromark_helpers.getHeadingStyle)(heading);
+      if (style === "consistent") {
+        style = styleForToken;
+      }
+      if (styleForToken !== style) {
+        const h12 = (0,micromark_helpers.getHeadingLevel)(heading) <= 2;
+        const setextWithAtx =
+          (style === "setext_with_atx") &&
+            ((h12 && (styleForToken === "setext")) ||
+            (!h12 && (styleForToken === "atx")));
+        const setextWithAtxClosed =
+          (style === "setext_with_atx_closed") &&
+            ((h12 && (styleForToken === "setext")) ||
+            (!h12 && (styleForToken === "atx_closed")));
+        if (!setextWithAtx && !setextWithAtxClosed) {
+          let expected = style;
+          if (style === "setext_with_atx") {
+            expected = h12 ? "setext" : "atx";
+          } else if (style === "setext_with_atx_closed") {
+            expected = h12 ? "setext" : "atx_closed";
+          }
+          (0,helpers.addErrorDetailIf)(
+            onError,
+            heading.startLine,
+            expected,
+            styleForToken
+          );
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md004.mjs
+// @ts-check
+
+
+
+
+
+const markerToStyle = {
+  "-": "dash",
+  "+": "plus",
+  "*": "asterisk"
+};
+const styleToMarker = {
+  "dash": "-",
+  "plus": "+",
+  "asterisk": "*"
+};
+const differentItemStyle = {
+  "dash": "plus",
+  "plus": "asterisk",
+  "asterisk": "dash"
+};
+const validStyles = new Set([
+  "asterisk",
+  "consistent",
+  "dash",
+  "plus",
+  "sublist"
+]);
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md004 = ({
+  "names": [ "MD004", "ul-style" ],
+  "description": "Unordered list style",
+  "tags": [ "bullet", "ul" ],
+  "parser": "micromark",
+  "function": function MD004(params, onError) {
+    const style = String(params.config.style || "consistent");
+    let expectedStyle = validStyles.has(style) ? style : "dash";
+    const nestingStyles = [];
+    for (const listUnordered of filterByTypesCached([ "listUnordered" ])) {
+      let nesting = 0;
+      if (style === "sublist") {
+        /** @type {import("../helpers/micromark-helpers.cjs").Token | null} */
+        let parent = listUnordered;
+        // @ts-ignore
+        while ((parent = (0,micromark_helpers.getParentOfType)(parent, [ "listOrdered", "listUnordered" ]))) {
+          nesting++;
+        }
+      }
+      const listItemMarkers = (0,micromark_helpers.getDescendantsByType)(listUnordered, [ "listItemPrefix", "listItemMarker" ]);
+      for (const listItemMarker of listItemMarkers) {
+        const itemStyle = markerToStyle[listItemMarker.text];
+        if (style === "sublist") {
+          if (!nestingStyles[nesting]) {
+            nestingStyles[nesting] =
+              (itemStyle === nestingStyles[nesting - 1]) ?
+                differentItemStyle[itemStyle] :
+                itemStyle;
+          }
+          expectedStyle = nestingStyles[nesting];
+        } else if (expectedStyle === "consistent") {
+          expectedStyle = itemStyle;
+        }
+        const column = listItemMarker.startColumn;
+        const length = listItemMarker.endColumn - listItemMarker.startColumn;
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          listItemMarker.startLine,
+          expectedStyle,
+          itemStyle,
+          undefined,
+          undefined,
+          [ column, length ],
+          {
+            "editColumn": column,
+            "deleteCount": length,
+            "insertText": styleToMarker[expectedStyle]
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md005.mjs
+// @ts-check
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md005 = ({
+  "names": [ "MD005", "list-indent" ],
+  "description": "Inconsistent indentation for list items at the same level",
+  "tags": [ "bullet", "ul", "indentation" ],
+  "parser": "micromark",
+  "function": function MD005(params, onError) {
+    for (const list of filterByTypesCached([ "listOrdered", "listUnordered" ])) {
+      const expectedIndent = list.startColumn - 1;
+      let expectedEnd = 0;
+      let endMatching = false;
+      const listItemPrefixes =
+        list.children.filter((token) => (token.type === "listItemPrefix"));
+      for (const listItemPrefix of listItemPrefixes) {
+        const lineNumber = listItemPrefix.startLine;
+        const actualIndent = listItemPrefix.startColumn - 1;
+        const range = [ 1, listItemPrefix.endColumn - 1 ];
+        if (list.type === "listUnordered") {
+          (0,helpers.addErrorDetailIf)(
+            onError,
+            lineNumber,
+            expectedIndent,
+            actualIndent,
+            undefined,
+            undefined,
+            range
+            // No fixInfo; MD007 handles this scenario better
+          );
+        } else {
+          const markerLength = listItemPrefix.text.trim().length;
+          const actualEnd = listItemPrefix.startColumn + markerLength - 1;
+          expectedEnd = expectedEnd || actualEnd;
+          if ((expectedIndent !== actualIndent) || endMatching) {
+            if (expectedEnd === actualEnd) {
+              endMatching = true;
+            } else {
+              const detail = endMatching ?
+                `Expected: (${expectedEnd}); Actual: (${actualEnd})` :
+                `Expected: ${expectedIndent}; Actual: ${actualIndent}`;
+              const expected = endMatching ?
+                expectedEnd - markerLength :
+                expectedIndent;
+              const actual = endMatching ?
+                actualEnd - markerLength :
+                actualIndent;
+              (0,helpers.addError)(
+                onError,
+                lineNumber,
+                detail,
+                undefined,
+                range,
+                {
+                  "editColumn": Math.min(actual, expected) + 1,
+                  "deleteCount": Math.max(actual - expected, 0),
+                  "insertText": "".padEnd(Math.max(expected - actual, 0))
+                }
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md007.mjs
+// @ts-check
+
+
+
+
+/** @type {import("micromark-util-types").TokenType[]} */
+const unorderedListTypes =
+  [ "blockQuotePrefix", "listItemPrefix", "listUnordered" ];
+/** @type {import("micromark-util-types").TokenType[]} */
+const unorderedParentTypes =
+  [ "blockQuote", "listOrdered", "listUnordered" ];
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md007 = ({
+  "names": [ "MD007", "ul-indent" ],
+  "description": "Unordered list indentation",
+  "tags": [ "bullet", "ul", "indentation" ],
+  "parser": "micromark",
+  "function": function MD007(params, onError) {
+    const indent = Number(params.config.indent || 2);
+    const startIndented = !!params.config.start_indented;
+    const startIndent = Number(params.config.start_indent || indent);
+    const unorderedListNesting = new Map();
+    let lastBlockQuotePrefix = null;
+    const tokens = filterByTypesCached(unorderedListTypes);
+    for (const token of tokens) {
+      const { endColumn, parent, startColumn, startLine, type } = token;
+      if (type === "blockQuotePrefix") {
+        lastBlockQuotePrefix = token;
+      } else if (type === "listUnordered") {
+        let nesting = 0;
+        /** @type {import("../helpers/micromark-helpers.cjs").Token | null} */
+        let current = token;
+        while (
+          // @ts-ignore
+          (current = (0,micromark_helpers.getParentOfType)(current, unorderedParentTypes))
+        ) {
+          if (current.type === "listUnordered") {
+            nesting++;
+            // eslint-disable-next-line no-continue
+            continue;
+          } else if (current.type === "listOrdered") {
+            nesting = -1;
+          }
+          break;
+        }
+        if (nesting >= 0) {
+          unorderedListNesting.set(token, nesting);
+        }
+      } else {
+        // listItemPrefix
+        const nesting = unorderedListNesting.get(parent);
+        if (nesting !== undefined) {
+          // listItemPrefix for listUnordered
+          const expectedIndent =
+            (startIndented ? startIndent : 0) + (nesting * indent);
+          const blockQuoteAdjustment =
+            (lastBlockQuotePrefix?.endLine === startLine) ?
+              (lastBlockQuotePrefix.endColumn - 1) :
+              0;
+          const actualIndent = startColumn - 1 - blockQuoteAdjustment;
+          const range = [ 1, endColumn - 1 ];
+          const fixInfo = {
+            "editColumn": startColumn - actualIndent,
+            "deleteCount": Math.max(actualIndent - expectedIndent, 0),
+            "insertText": "".padEnd(Math.max(expectedIndent - actualIndent, 0))
+          };
+          (0,helpers.addErrorDetailIf)(
+            onError,
+            startLine,
+            expectedIndent,
+            actualIndent,
+            undefined,
+            undefined,
+            range,
+            fixInfo
+          );
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md009.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md009 = ({
+  "names": [ "MD009", "no-trailing-spaces" ],
+  "description": "Trailing spaces",
+  "tags": [ "whitespace" ],
+  "parser": "micromark",
+  "function": function MD009(params, onError) {
+    let brSpaces = params.config.br_spaces;
+    brSpaces = Number((brSpaces === undefined) ? 2 : brSpaces);
+    const listItemEmptyLines = !!params.config.list_item_empty_lines;
+    const strict = !!params.config.strict;
+    const codeBlockLineNumbers = new Set();
+    for (const codeBlock of filterByTypesCached([ "codeFenced" ])) {
+      (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine + 1, codeBlock.endLine - 1);
+    }
+    for (const codeBlock of filterByTypesCached([ "codeIndented" ])) {
+      (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
+    }
+    const listItemLineNumbers = new Set();
+    if (listItemEmptyLines) {
+      for (const listBlock of filterByTypesCached([ "listOrdered", "listUnordered" ])) {
+        (0,micromark_helpers.addRangeToSet)(listItemLineNumbers, listBlock.startLine, listBlock.endLine);
+        let trailingIndent = true;
+        for (let i = listBlock.children.length - 1; i >= 0; i--) {
+          const child = listBlock.children[i];
+          switch (child.type) {
+            case "content":
+              trailingIndent = false;
+              break;
+            case "listItemIndent":
+              if (trailingIndent) {
+                listItemLineNumbers.delete(child.startLine);
+              }
+              break;
+            case "listItemPrefix":
+              trailingIndent = true;
+              break;
+            default:
+              break;
+          }
+        }
+      }
+    }
+    const paragraphLineNumbers = new Set();
+    const codeInlineLineNumbers = new Set();
+    if (strict) {
+      for (const paragraph of filterByTypesCached([ "paragraph" ])) {
+        (0,micromark_helpers.addRangeToSet)(paragraphLineNumbers, paragraph.startLine, paragraph.endLine - 1);
+      }
+      for (const codeText of filterByTypesCached([ "codeText" ])) {
+        (0,micromark_helpers.addRangeToSet)(codeInlineLineNumbers, codeText.startLine, codeText.endLine - 1);
+      }
+    }
+    const expected = (brSpaces < 2) ? 0 : brSpaces;
+    for (let lineIndex = 0; lineIndex < params.lines.length; lineIndex++) {
+      const line = params.lines[lineIndex];
+      const lineNumber = lineIndex + 1;
+      const trailingSpaces = line.length - line.trimEnd().length;
+      if (
+        trailingSpaces &&
+        !codeBlockLineNumbers.has(lineNumber) &&
+        !listItemLineNumbers.has(lineNumber) &&
+        (
+          (expected !== trailingSpaces) ||
+          (strict &&
+            (!paragraphLineNumbers.has(lineNumber) ||
+             codeInlineLineNumbers.has(lineNumber)))
+        )
+      ) {
+        const column = line.length - trailingSpaces + 1;
+        (0,helpers.addError)(
+          onError,
+          lineNumber,
+          "Expected: " + (expected === 0 ? "" : "0 or ") +
+            expected + "; Actual: " + trailingSpaces,
+          undefined,
+          [ column, trailingSpaces ],
+          {
+            "editColumn": column,
+            "deleteCount": trailingSpaces
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md010.mjs
+// @ts-check
+
+
+
+
+
+const tabRe = /\t+/g;
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md010 = ({
+  "names": [ "MD010", "no-hard-tabs" ],
+  "description": "Hard tabs",
+  "tags": [ "whitespace", "hard_tab" ],
+  "parser": "micromark",
+  "function": function MD010(params, onError) {
+    const codeBlocks = params.config.code_blocks;
+    const includeCode = (codeBlocks === undefined) ? true : !!codeBlocks;
+    const ignoreCodeLanguages = new Set(
+      (params.config.ignore_code_languages || [])
+        .map((language) => language.toLowerCase())
+    );
+    const spacesPerTab = params.config.spaces_per_tab;
+    const spaceMultiplier = (spacesPerTab === undefined) ?
+      1 :
+      Math.max(0, Number(spacesPerTab));
+    /** @type {import("../helpers/micromark-helpers.cjs").TokenType[]} */
+    const exclusionTypes = [];
+    if (includeCode) {
+      if (ignoreCodeLanguages.size > 0) {
+        exclusionTypes.push("codeFenced");
+      }
+    } else {
+      exclusionTypes.push("codeFenced", "codeIndented", "codeText");
+    }
+    const codeTokens = filterByTypesCached(exclusionTypes).filter((token) => {
+      if ((token.type === "codeFenced") && (ignoreCodeLanguages.size > 0)) {
+        const fenceInfos = (0,micromark_helpers.getDescendantsByType)(token, [ "codeFencedFence", "codeFencedFenceInfo" ]);
+        return fenceInfos.every((fenceInfo) => ignoreCodeLanguages.has(fenceInfo.text.toLowerCase()));
+      }
+      return true;
+    });
+    const codeRanges = codeTokens.map((token) => {
+      const { type, startLine, startColumn, endLine, endColumn } = token;
+      const codeFenced = (type === "codeFenced");
+      return {
+        "startLine": startLine + (codeFenced ? 1 : 0),
+        "startColumn": codeFenced ? 0 : startColumn,
+        "endLine": endLine - (codeFenced ? 1 : 0),
+        "endColumn": codeFenced ? Number.MAX_SAFE_INTEGER : endColumn
+      };
+    });
+    for (let lineIndex = 0; lineIndex < params.lines.length; lineIndex++) {
+      const line = params.lines[lineIndex];
+      let match = null;
+      while ((match = tabRe.exec(line)) !== null) {
+        const lineNumber = lineIndex + 1;
+        const column = match.index + 1;
+        const length = match[0].length;
+        /** @type {import("../helpers/helpers.cjs").FileRange} */
+        const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
+        if (!codeRanges.some((codeRange) => (0,helpers.hasOverlap)(codeRange, range))) {
+          (0,helpers.addError)(
+            onError,
+            lineNumber,
+            "Column: " + column,
+            undefined,
+            [ column, length ],
+            {
+              "editColumn": column,
+              "deleteCount": length,
+              "insertText": "".padEnd(length * spaceMultiplier)
+            }
+          );
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md011.mjs
+// @ts-check
+
+
+
+
+
+const reversedLinkRe =
+  /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md011 = ({
+  "names": [ "MD011", "no-reversed-links" ],
+  "description": "Reversed link syntax",
+  "tags": [ "links" ],
+  "parser": "micromark",
+  "function": function MD011(params, onError) {
+    const codeBlockLineNumbers = new Set();
+    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
+      (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
+    }
+    const codeTexts = filterByTypesCached([ "codeText" ]);
+    for (const [ lineIndex, line ] of params.lines.entries()) {
+      const lineNumber = lineIndex + 1;
+      if (!codeBlockLineNumbers.has(lineNumber)) {
+        let match = null;
+        while ((match = reversedLinkRe.exec(line)) !== null) {
+          const [ reversedLink, preChar, linkText, linkDestination ] = match;
+          if (
+            !linkText.endsWith("\\") &&
+            !linkDestination.endsWith("\\")
+          ) {
+            const column = match.index + preChar.length + 1;
+            const length = match[0].length - preChar.length;
+            /** @type {import("../helpers/helpers.cjs").FileRange} */
+            const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
+            if (!codeTexts.some((codeText) => (0,helpers.hasOverlap)(codeText, range))) {
+              (0,helpers.addError)(
+                onError,
+                lineNumber,
+                reversedLink.slice(preChar.length),
+                undefined,
+                [ column, length ],
+                {
+                  "editColumn": column,
+                  "deleteCount": length,
+                  "insertText": `[${linkText}](${linkDestination})`
+                }
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md012.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md012 = ({
+  "names": [ "MD012", "no-multiple-blanks" ],
+  "description": "Multiple consecutive blank lines",
+  "tags": [ "whitespace", "blank_lines" ],
+  "parser": "micromark",
+  "function": function MD012(params, onError) {
+    const maximum = Number(params.config.maximum || 1);
+    const { lines } = params;
+    const codeBlockLineNumbers = new Set();
+    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
+      (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
+    }
+    let count = 0;
+    for (const [ lineIndex, line ] of lines.entries()) {
+      const inCode = codeBlockLineNumbers.has(lineIndex + 1);
+      count = (inCode || (line.trim().length > 0)) ? 0 : count + 1;
+      if (maximum < count) {
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          lineIndex + 1,
+          maximum,
+          count,
+          undefined,
+          undefined,
+          undefined,
+          {
+            "deleteCount": -1
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md013.mjs
+// @ts-check
+
+
+
+
+
+const longLineRePrefix = "^.{";
+const longLineRePostfixRelaxed = "}.*\\s.*$";
+const longLineRePostfixStrict = "}.+$";
+const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md013 = ({
+  "names": [ "MD013", "line-length" ],
+  "description": "Line length",
+  "tags": [ "line_length" ],
+  "parser": "micromark",
+  "function": function MD013(params, onError) {
+    const lineLength = Number(params.config.line_length || 80);
+    const headingLineLength =
+      Number(params.config.heading_line_length || lineLength);
+    const codeLineLength =
+      Number(params.config.code_block_line_length || lineLength);
+    const strict = !!params.config.strict;
+    const stern = !!params.config.stern;
+    const longLineRePostfix =
+      (strict || stern) ? longLineRePostfixStrict : longLineRePostfixRelaxed;
+    const longLineRe =
+      new RegExp(longLineRePrefix + lineLength + longLineRePostfix);
+    const longHeadingLineRe =
+      new RegExp(longLineRePrefix + headingLineLength + longLineRePostfix);
+    const longCodeLineRe =
+      new RegExp(longLineRePrefix + codeLineLength + longLineRePostfix);
+    const codeBlocks = params.config.code_blocks;
+    const includeCodeBlocks = (codeBlocks === undefined) ? true : !!codeBlocks;
+    const tables = params.config.tables;
+    const includeTables = (tables === undefined) ? true : !!tables;
+    const headings = params.config.headings;
+    const includeHeadings = (headings === undefined) ? true : !!headings;
+    const headingLineNumbers = new Set();
+    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
+      (0,micromark_helpers.addRangeToSet)(headingLineNumbers, heading.startLine, heading.endLine);
+    }
+    const codeBlockLineNumbers = new Set();
+    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
+      (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
+    }
+    const tableLineNumbers = new Set();
+    for (const table of filterByTypesCached([ "table" ])) {
+      (0,micromark_helpers.addRangeToSet)(tableLineNumbers, table.startLine, table.endLine);
+    }
+    const linkLineNumbers = new Set();
+    for (const link of filterByTypesCached([ "autolink", "image", "link", "literalAutolink" ])) {
+      (0,micromark_helpers.addRangeToSet)(linkLineNumbers, link.startLine, link.endLine);
+    }
+    const paragraphDataLineNumbers = new Set();
+    for (const paragraph of filterByTypesCached([ "paragraph" ])) {
+      for (const data of (0,micromark_helpers.getDescendantsByType)(paragraph, [ "data" ])) {
+        (0,micromark_helpers.addRangeToSet)(paragraphDataLineNumbers, data.startLine, data.endLine);
+      }
+    }
+    const linkOnlyLineNumbers = new Set();
+    for (const lineNumber of linkLineNumbers) {
+      if (!paragraphDataLineNumbers.has(lineNumber)) {
+        linkOnlyLineNumbers.add(lineNumber);
+      }
+    }
+    const definitionLineIndices = new Set(getReferenceLinkImageData().definitionLineIndices);
+    for (let lineIndex = 0; lineIndex < params.lines.length; lineIndex++) {
+      const line = params.lines[lineIndex];
+      const lineNumber = lineIndex + 1;
+      const isHeading = headingLineNumbers.has(lineNumber);
+      const inCode = codeBlockLineNumbers.has(lineNumber);
+      const inTable = tableLineNumbers.has(lineNumber);
+      const length = inCode ?
+        codeLineLength :
+        (isHeading ? headingLineLength : lineLength);
+      const lengthRe = inCode ?
+        longCodeLineRe :
+        (isHeading ? longHeadingLineRe : longLineRe);
+      if ((includeCodeBlocks || !inCode) &&
+          (includeTables || !inTable) &&
+          (includeHeadings || !isHeading) &&
+          !definitionLineIndices.has(lineIndex) &&
+          (strict ||
+           (!(stern && sternModeRe.test(line)) &&
+            !linkOnlyLineNumbers.has(lineNumber))) &&
+          lengthRe.test(line)) {
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          lineNumber,
+          length,
+          line.length,
+          undefined,
+          undefined,
+          [ length + 1, line.length - length ]
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md014.mjs
+// @ts-check
+
+
+
+
+const dollarCommandRe = /^(\s*)(\$\s+)/;
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md014 = ({
+  "names": [ "MD014", "commands-show-output" ],
+  "description": "Dollar signs used before commands without showing output",
+  "tags": [ "code" ],
+  "parser": "micromark",
+  "function": function MD014(params, onError) {
+    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
+      const codeFlowValues = codeBlock.children.filter((child) => child.type === "codeFlowValue");
+      const dollarMatches = codeFlowValues
+        .map((codeFlowValue) => ({
+          "result": codeFlowValue.text.match(dollarCommandRe),
+          "startColumn": codeFlowValue.startColumn,
+          "startLine": codeFlowValue.startLine,
+          "text": codeFlowValue.text
+        }))
+        .filter((dollarMatch) => dollarMatch.result);
+      if (dollarMatches.length === codeFlowValues.length) {
+        for (const dollarMatch of dollarMatches) {
+          // @ts-ignore
+          const column = dollarMatch.startColumn + dollarMatch.result[1].length;
+          // @ts-ignore
+          const length = dollarMatch.result[2].length;
+          (0,helpers.addErrorContext)(
+            onError,
+            dollarMatch.startLine,
+            dollarMatch.text,
+            undefined,
+            undefined,
+            [ column, length ],
+            {
+              "editColumn": column,
+              "deleteCount": length
+            }
+          );
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md018.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md018 = ({
+  "names": [ "MD018", "no-missing-space-atx" ],
+  "description": "No space after hash on atx style heading",
+  "tags": [ "headings", "atx", "spaces" ],
+  "parser": "micromark",
+  "function": function MD018(params, onError) {
+    const { lines } = params;
+    const ignoreBlockLineNumbers = new Set();
+    for (const ignoreBlock of filterByTypesCached([ "codeFenced", "codeIndented", "htmlFlow" ])) {
+      (0,micromark_helpers.addRangeToSet)(ignoreBlockLineNumbers, ignoreBlock.startLine, ignoreBlock.endLine);
+    }
+    for (const [ lineIndex, line ] of lines.entries()) {
+      if (
+        !ignoreBlockLineNumbers.has(lineIndex + 1) &&
+        /^#+[^# \t]/.test(line) &&
+        !/#\s*$/.test(line) &&
+        !line.startsWith("#️⃣")
+      ) {
+        // @ts-ignore
+        const hashCount = /^#+/.exec(line)[0].length;
+        (0,helpers.addErrorContext)(
+          onError,
+          lineIndex + 1,
+          line.trim(),
+          undefined,
+          undefined,
+          [ 1, hashCount + 1 ],
+          {
+            "editColumn": hashCount + 1,
+            "insertText": " "
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md019-md021.mjs
+// @ts-check
+
+
+
+
+
+/**
+ * Validate heading sequence and whitespace length at start or end.
+ *
+ * @param {import("./markdownlint.mjs").RuleOnError} onError Error-reporting callback.
+ * @param {import("./markdownlint.mjs").MicromarkToken} heading ATX heading token.
+ * @param {number} delta Direction to scan.
+ * @returns {void}
+ */
+function validateHeadingSpaces(onError, heading, delta) {
+  const { children, startLine, text } = heading;
+  let index = (delta > 0) ? 0 : (children.length - 1);
+  while (
+    children[index] &&
+    (children[index].type !== "atxHeadingSequence")
+  ) {
+    index += delta;
+  }
+  const headingSequence = children[index];
+  const whitespace = children[index + delta];
+  if (
+    (headingSequence?.type === "atxHeadingSequence") &&
+    (whitespace?.type === "whitespace") &&
+    (whitespace.text.length > 1)
+  ) {
+    const column = whitespace.startColumn + 1;
+    const length = whitespace.endColumn - column;
+    (0,helpers.addErrorContext)(
+      onError,
+      startLine,
+      text.trim(),
+      delta > 0,
+      delta < 0,
+      [ column, length ],
+      {
+        "editColumn": column,
+        "deleteCount": length
+      }
+    );
+  }
+}
+/** @type {import("./markdownlint.mjs").Rule[]} */
+/* harmony default export */ const md019_md021 = ([
+  {
+    "names": [ "MD019", "no-multiple-space-atx" ],
+    "description": "Multiple spaces after hash on atx style heading",
+    "tags": [ "headings", "atx", "spaces" ],
+    "parser": "micromark",
+    "function": function MD019(params, onError) {
+      const atxHeadings = filterByTypesCached([ "atxHeading" ])
+        .filter((heading) => (0,micromark_helpers.getHeadingStyle)(heading) === "atx");
+      for (const atxHeading of atxHeadings) {
+        validateHeadingSpaces(onError, atxHeading, 1);
+      }
+    }
+  },
+  {
+    "names": [ "MD021", "no-multiple-space-closed-atx" ],
+    "description": "Multiple spaces inside hashes on closed atx style heading",
+    "tags": [ "headings", "atx_closed", "spaces" ],
+    "parser": "micromark",
+    "function": function MD021(params, onError) {
+      const atxClosedHeadings = filterByTypesCached([ "atxHeading" ])
+        .filter((heading) => (0,micromark_helpers.getHeadingStyle)(heading) === "atx_closed");
+      for (const atxClosedHeading of atxClosedHeadings) {
+        validateHeadingSpaces(onError, atxClosedHeading, 1);
+        validateHeadingSpaces(onError, atxClosedHeading, -1);
+      }
+    }
+  }
+]);
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md020.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md020 = ({
+  "names": [ "MD020", "no-missing-space-closed-atx" ],
+  "description": "No space inside hashes on closed atx style heading",
+  "tags": [ "headings", "atx_closed", "spaces" ],
+  "parser": "micromark",
+  "function": function MD020(params, onError) {
+    const { lines } = params;
+    const ignoreBlockLineNumbers = new Set();
+    for (const ignoreBlock of filterByTypesCached([ "codeFenced", "codeIndented", "htmlFlow" ])) {
+      (0,micromark_helpers.addRangeToSet)(ignoreBlockLineNumbers, ignoreBlock.startLine, ignoreBlock.endLine);
+    }
+    for (const [ lineIndex, line ] of lines.entries()) {
+      if (!ignoreBlockLineNumbers.has(lineIndex + 1)) {
+        const match =
+          /^(#+)([ \t]*)([^# \t\\]|[^# \t][^#]*?[^# \t\\])([ \t]*)((?:\\#)?)(#+)(\s*)$/.exec(line);
+        if (match) {
+          const [
+            ,
+            leftHash,
+            { "length": leftSpaceLength },
+            content,
+            { "length": rightSpaceLength },
+            rightEscape,
+            rightHash,
+            { "length": trailSpaceLength }
+          ] = match;
+          const leftHashLength = leftHash.length;
+          const rightHashLength = rightHash.length;
+          const left = !leftSpaceLength;
+          const right = !rightSpaceLength || !!rightEscape;
+          const rightEscapeReplacement = rightEscape ? `${rightEscape} ` : "";
+          if (left || right) {
+            const range = left ?
+              [
+                1,
+                leftHashLength + 1
+              ] :
+              [
+                line.length - trailSpaceLength - rightHashLength,
+                rightHashLength + 1
+              ];
+            (0,helpers.addErrorContext)(
+              onError,
+              lineIndex + 1,
+              line.trim(),
+              left,
+              right,
+              range,
+              {
+                "editColumn": 1,
+                "deleteCount": line.length,
+                "insertText":
+                  `${leftHash} ${content} ${rightEscapeReplacement}${rightHash}`
+              }
+            );
+          }
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md022.mjs
+// @ts-check
+
+
+
+
+
+const defaultLines = 1;
+
+const getLinesFunction = (linesParam) => {
+  if (Array.isArray(linesParam)) {
+    const linesArray = new Array(6).fill(defaultLines);
+    for (const [ index, value ] of [ ...linesParam.entries() ].slice(0, 6)) {
+      linesArray[index] = value;
+    }
+    return (heading) => linesArray[(0,micromark_helpers.getHeadingLevel)(heading) - 1];
+  }
+  // Coerce linesParam to a number
+  const lines = (linesParam === undefined) ? defaultLines : Number(linesParam);
+  return () => lines;
+};
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md022 = ({
+  "names": [ "MD022", "blanks-around-headings" ],
+  "description": "Headings should be surrounded by blank lines",
+  "tags": [ "headings", "blank_lines" ],
+  "parser": "micromark",
+  "function": function MD022(params, onError) {
+    const getLinesAbove = getLinesFunction(params.config.lines_above);
+    const getLinesBelow = getLinesFunction(params.config.lines_below);
+    const { lines } = params;
+    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
+    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
+      const { startLine, endLine } = heading;
+      const line = lines[startLine - 1].trim();
+
+      // Check lines above
+      const linesAbove = getLinesAbove(heading);
+      if (linesAbove >= 0) {
+        let actualAbove = 0;
+        for (
+          let i = 0;
+          (i < linesAbove) && (0,helpers.isBlankLine)(lines[startLine - 2 - i]);
+          i++
+        ) {
+          actualAbove++;
+        }
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          startLine,
+          linesAbove,
+          actualAbove,
+          "Above",
+          line,
+          undefined,
+          {
+            "insertText": (0,micromark_helpers.getBlockQuotePrefixText)(
+              blockQuotePrefixes,
+              startLine - 1,
+              linesAbove - actualAbove
+            )
+          }
+        );
+      }
+
+      // Check lines below
+      const linesBelow = getLinesBelow(heading);
+      if (linesBelow >= 0) {
+        let actualBelow = 0;
+        for (
+          let i = 0;
+          (i < linesBelow) && (0,helpers.isBlankLine)(lines[endLine + i]);
+          i++
+        ) {
+          actualBelow++;
+        }
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          startLine,
+          linesBelow,
+          actualBelow,
+          "Below",
+          line,
+          undefined,
+          {
+            "lineNumber": endLine + 1,
+            "insertText": (0,micromark_helpers.getBlockQuotePrefixText)(
+              blockQuotePrefixes,
+              endLine + 1,
+              linesBelow - actualBelow
+            )
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md023.mjs
+// @ts-check
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md023 = ({
+  "names": [ "MD023", "heading-start-left" ],
+  "description": "Headings must start at the beginning of the line",
+  "tags": [ "headings", "spaces" ],
+  "parser": "micromark",
+  "function": function MD023(params, onError) {
+    const headings = filterByTypesCached([ "atxHeading", "linePrefix", "setextHeading" ]);
+    for (let i = 0; i < headings.length - 1; i++) {
+      if (
+        (headings[i].type === "linePrefix") &&
+        (headings[i + 1].type !== "linePrefix") &&
+        (headings[i].startLine === headings[i + 1].startLine)
+      ) {
+        const { endColumn, startColumn, startLine } = headings[i];
+        const length = endColumn - startColumn;
+        (0,helpers.addErrorContext)(
+          onError,
+          startLine,
+          params.lines[startLine - 1],
+          true,
+          false,
+          [ startColumn, length ],
+          {
+            "editColumn": startColumn,
+            "deleteCount": length
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md024.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md024 = ({
+  "names": [ "MD024", "no-duplicate-heading" ],
+  "description": "Multiple headings with the same content",
+  "tags": [ "headings" ],
+  "parser": "micromark",
+  "function": function MD024(params, onError) {
+    const siblingsOnly = !!params.config.siblings_only || false;
+    const knownContents = [ null, [] ];
+    let lastLevel = 1;
+    let knownContent = knownContents[lastLevel];
+    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
+      const headingText = (0,micromark_helpers.getHeadingText)(heading);
+      if (siblingsOnly) {
+        const newLevel = (0,micromark_helpers.getHeadingLevel)(heading);
+        while (lastLevel < newLevel) {
+          lastLevel++;
+          knownContents[lastLevel] = [];
+        }
+        while (lastLevel > newLevel) {
+          knownContents[lastLevel] = [];
+          lastLevel--;
+        }
+        knownContent = knownContents[newLevel];
+      }
+      // @ts-ignore
+      if (knownContent.includes(headingText)) {
+        (0,helpers.addErrorContext)(
+          onError,
+          heading.startLine,
+          headingText.trim()
+        );
+      } else {
+        // @ts-ignore
+        knownContent.push(headingText);
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md025.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md025 = ({
+  "names": [ "MD025", "single-title", "single-h1" ],
+  "description": "Multiple top-level headings in the same document",
+  "tags": [ "headings" ],
+  "parser": "micromark",
+  "function": function MD025(params, onError) {
+    const level = Number(params.config.level || 1);
+    const foundFrontMatterTitle =
+      (0,helpers.frontMatterHasTitle)(
+        params.frontMatterLines,
+        params.config.front_matter_title
+      );
+    let hasTopLevelHeading = false;
+    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
+      const headingLevel = (0,micromark_helpers.getHeadingLevel)(heading);
+      if (headingLevel === level) {
+        if (hasTopLevelHeading || foundFrontMatterTitle) {
+          const headingText = (0,micromark_helpers.getHeadingText)(heading);
+          (0,helpers.addErrorContext)(
+            onError,
+            heading.startLine,
+            headingText
+          );
+        } else if (heading.startLine === 1) {
+          hasTopLevelHeading = true;
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md026.mjs
+// @ts-check
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md026 = ({
+  "names": [ "MD026", "no-trailing-punctuation" ],
+  "description": "Trailing punctuation in heading",
+  "tags": [ "headings" ],
+  "parser": "micromark",
+  "function": function MD026(params, onError) {
+    let punctuation = params.config.punctuation;
+    punctuation = String(
+      (punctuation === undefined) ? helpers.allPunctuationNoQuestion : punctuation
+    );
+    const trailingPunctuationRe =
+      new RegExp("\\s*[" + (0,helpers.escapeForRegExp)(punctuation) + "]+$");
+    const headings = filterByTypesCached([ "atxHeadingText", "setextHeadingText" ]);
+    for (const heading of headings) {
+      const { endColumn, endLine, text } = heading;
+      const match = trailingPunctuationRe.exec(text);
+      if (
+        match &&
+        !helpers.endOfLineHtmlEntityRe.test(text) &&
+        !helpers.endOfLineGemojiCodeRe.test(text)
+      ) {
+        const fullMatch = match[0];
+        const length = fullMatch.length;
+        const column = endColumn - length;
+        (0,helpers.addError)(
+          onError,
+          endLine,
+          `Punctuation: '${fullMatch}'`,
+          undefined,
+          [ column, length ],
+          {
+            "editColumn": column,
+            "deleteCount": length
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md027.mjs
+// @ts-check
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md027 = ({
+  "names": [ "MD027", "no-multiple-space-blockquote" ],
+  "description": "Multiple spaces after blockquote symbol",
+  "tags": [ "blockquote", "whitespace", "indentation" ],
+  "parser": "micromark",
+  "function": function MD027(params, onError) {
+    const { tokens } = params.parsers.micromark;
+    for (const token of filterByTypesCached([ "linePrefix" ])) {
+      const parent = token.parent;
+      const codeIndented = parent?.type === "codeIndented";
+      const siblings = parent?.children || tokens;
+      if (
+        !codeIndented &&
+        (siblings[siblings.indexOf(token) - 1]?.type === "blockQuotePrefix")
+      ) {
+        const { startColumn, startLine, text } = token;
+        const { length } = text;
+        const line = params.lines[startLine - 1];
+        (0,helpers.addErrorContext)(
+          onError,
+          startLine,
+          line,
+          undefined,
+          undefined,
+          [ startColumn, length ],
+          {
+            "editColumn": startColumn,
+            "deleteCount": length
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md028.mjs
+// @ts-check
+
+
+
+
+const ignoreTypes = new Set([ "lineEnding", "listItemIndent", "linePrefix" ]);
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md028 = ({
+  "names": [ "MD028", "no-blanks-blockquote" ],
+  "description": "Blank line inside blockquote",
+  "tags": [ "blockquote", "whitespace" ],
+  "parser": "micromark",
+  "function": function MD028(params, onError) {
+    for (const token of filterByTypesCached([ "blockQuote" ])) {
+      const errorLineNumbers = [];
+      const siblings = token.parent?.children || params.parsers.micromark.tokens;
+      for (let i = siblings.indexOf(token) + 1; i < siblings.length; i++) {
+        const sibling = siblings[i];
+        const { startLine, type } = sibling;
+        if (type === "lineEndingBlank") {
+          // Possible blank between blockquotes
+          errorLineNumbers.push(startLine);
+        } else if (ignoreTypes.has(type)) {
+          // Ignore invisible formatting
+        } else if (type === "blockQuote") {
+          // Blockquote followed by blockquote
+          for (const lineNumber of errorLineNumbers) {
+            (0,helpers.addError)(onError, lineNumber);
+          }
+          break;
+        } else {
+          // Blockquote not followed by blockquote
+          break;
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md029.mjs
+// @ts-check
+
+
+
+
+
+const listStyleExamples = {
+  "one": "1/1/1",
+  "ordered": "1/2/3",
+  "zero": "0/0/0"
 };
 
+/**
+ * Gets the value of an ordered list item prefix token.
+ *
+ * @param {import("../helpers/micromark-helpers.cjs").Token} listItemPrefix List item prefix token.
+ * @returns {number} List item value.
+ */
+function getOrderedListItemValue(listItemPrefix) {
+  return Number((0,micromark_helpers.getDescendantsByType)(listItemPrefix, [ "listItemValue" ])[0].text);
+}
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md029 = ({
+  "names": [ "MD029", "ol-prefix" ],
+  "description": "Ordered list item prefix",
+  "tags": [ "ol" ],
+  "parser": "micromark",
+  "function": function MD029(params, onError) {
+    const style = String(params.config.style || "one_or_ordered");
+    for (const listOrdered of filterByTypesCached([ "listOrdered" ])) {
+      const listItemPrefixes = (0,micromark_helpers.getDescendantsByType)(listOrdered, [ "listItemPrefix" ]);
+      let expected = 1;
+      let incrementing = false;
+      // Check for incrementing number pattern 1/2/3 or 0/1/2
+      if (listItemPrefixes.length >= 2) {
+        const firstValue = getOrderedListItemValue(listItemPrefixes[0]);
+        const secondValue = getOrderedListItemValue(listItemPrefixes[1]);
+        if ((secondValue !== 1) || (firstValue === 0)) {
+          incrementing = true;
+          if (firstValue === 0) {
+            expected = 0;
+          }
+        }
+      }
+      // Determine effective style
+      let listStyle = style;
+      if (listStyle === "one_or_ordered") {
+        listStyle = incrementing ? "ordered" : "one";
+      } else if (listStyle === "zero") {
+        expected = 0;
+      } else if (listStyle === "one") {
+        expected = 1;
+      }
+      // Validate each list item marker
+      for (const listItemPrefix of listItemPrefixes) {
+        const actual = getOrderedListItemValue(listItemPrefix);
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          listItemPrefix.startLine,
+          expected,
+          actual,
+          "Style: " + listStyleExamples[listStyle],
+          undefined,
+          [ listItemPrefix.startColumn, listItemPrefix.endColumn - listItemPrefix.startColumn ]
+        );
+        if (listStyle === "ordered") {
+          expected++;
+        }
+      }
+    }
+  }
+});
 
-/***/ }),
-
-/***/ 6072:
-/***/ ((module) => {
-
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md030.mjs
 // @ts-check
 
 
 
-module.exports.deprecatedRuleNames = [];
-module.exports.fixableRuleNames = [
-  "MD004", "MD005", "MD007", "MD009", "MD010", "MD011",
-  "MD012", "MD014", "MD018", "MD019", "MD020", "MD021",
-  "MD022", "MD023", "MD026", "MD027", "MD030", "MD031",
-  "MD032", "MD034", "MD037", "MD038", "MD039", "MD044",
-  "MD047", "MD049", "MD050", "MD051", "MD053", "MD054",
-  "MD058"
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md030 = ({
+  "names": [ "MD030", "list-marker-space" ],
+  "description": "Spaces after list markers",
+  "tags": [ "ol", "ul", "whitespace" ],
+  "parser": "micromark",
+  "function": function MD030(params, onError) {
+    const ulSingle = Number(params.config.ul_single || 1);
+    const olSingle = Number(params.config.ol_single || 1);
+    const ulMulti = Number(params.config.ul_multi || 1);
+    const olMulti = Number(params.config.ol_multi || 1);
+    for (const list of filterByTypesCached([ "listOrdered", "listUnordered" ])) {
+      const ordered = (list.type === "listOrdered");
+      const listItemPrefixes =
+        list.children.filter((token) => (token.type === "listItemPrefix"));
+      const allSingleLine =
+        (list.endLine - list.startLine + 1) === listItemPrefixes.length;
+      const expectedSpaces = ordered ?
+        (allSingleLine ? olSingle : olMulti) :
+        (allSingleLine ? ulSingle : ulMulti);
+      for (const listItemPrefix of listItemPrefixes) {
+        const range = [
+          listItemPrefix.startColumn,
+          listItemPrefix.endColumn - listItemPrefix.startColumn
+        ];
+        const listItemPrefixWhitespaces = listItemPrefix.children.filter(
+          (token) => (token.type === "listItemPrefixWhitespace")
+        );
+        for (const listItemPrefixWhitespace of listItemPrefixWhitespaces) {
+          const { endColumn, startColumn, startLine } =
+            listItemPrefixWhitespace;
+          const actualSpaces = endColumn - startColumn;
+          const fixInfo = {
+            "editColumn": startColumn,
+            "deleteCount": actualSpaces,
+            "insertText": "".padEnd(expectedSpaces)
+          };
+          (0,helpers.addErrorDetailIf)(
+            onError,
+            startLine,
+            expectedSpaces,
+            actualSpaces,
+            undefined,
+            undefined,
+            range,
+            fixInfo
+          );
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md031.mjs
+// @ts-check
+
+
+
+
+
+const codeFencePrefixRe = /^(.*?)[`~]/;
+
+// eslint-disable-next-line jsdoc/valid-types
+/** @typedef {readonly string[]} ReadonlyStringArray */
+
+/**
+ * Adds an error for the top or bottom of a code fence.
+ *
+ * @param {import("./markdownlint.mjs").RuleOnError} onError Error-reporting callback.
+ * @param {ReadonlyStringArray} lines Lines of Markdown content.
+ * @param {number} lineNumber Line number.
+ * @param {boolean} top True iff top fence.
+ * @returns {void}
+ */
+function addError(onError, lines, lineNumber, top) {
+  const line = lines[lineNumber - 1];
+  const [ , prefix ] = line.match(codeFencePrefixRe) || [];
+  const fixInfo = (prefix === undefined) ?
+    undefined :
+    {
+      "lineNumber": lineNumber + (top ? 0 : 1),
+      "insertText": `${prefix.replace(/[^>]/g, " ").trim()}\n`
+    };
+  (0,helpers.addErrorContext)(
+    onError,
+    lineNumber,
+    line.trim(),
+    undefined,
+    undefined,
+    undefined,
+    fixInfo
+  );
+}
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md031 = ({
+  "names": [ "MD031", "blanks-around-fences" ],
+  "description": "Fenced code blocks should be surrounded by blank lines",
+  "tags": [ "code", "blank_lines" ],
+  "parser": "micromark",
+  "function": function MD031(params, onError) {
+    const listItems = params.config.list_items;
+    const includeListItems = (listItems === undefined) ? true : !!listItems;
+    const { lines } = params;
+    for (const codeBlock of filterByTypesCached([ "codeFenced" ])) {
+      if (includeListItems || !((0,micromark_helpers.getParentOfType)(codeBlock, [ "listOrdered", "listUnordered" ]))) {
+        if (!(0,helpers.isBlankLine)(lines[codeBlock.startLine - 2])) {
+          addError(onError, lines, codeBlock.startLine, true);
+        }
+        if (!(0,helpers.isBlankLine)(lines[codeBlock.endLine]) && !(0,helpers.isBlankLine)(lines[codeBlock.endLine - 1])) {
+          addError(onError, lines, codeBlock.endLine, false);
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md032.mjs
+// @ts-check
+
+
+
+
+
+const isList = (token) => (
+  (token.type === "listOrdered") || (token.type === "listUnordered")
+);
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md032 = ({
+  "names": [ "MD032", "blanks-around-lists" ],
+  "description": "Lists should be surrounded by blank lines",
+  "tags": [ "bullet", "ul", "ol", "blank_lines" ],
+  "parser": "micromark",
+  "function": function MD032(params, onError) {
+    const { lines, parsers } = params;
+    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
+
+    // For every top-level list...
+    const topLevelLists = (0,micromark_helpers.filterByPredicate)(
+      parsers.micromark.tokens,
+      isList,
+      (token) => (
+        (isList(token) || (token.type === "htmlFlow")) ? [] : token.children
+      )
+    );
+    for (const list of topLevelLists) {
+
+      // Look for a blank line above the list
+      const firstLineNumber = list.startLine;
+      if (!(0,helpers.isBlankLine)(lines[firstLineNumber - 2])) {
+        (0,helpers.addErrorContext)(
+          onError,
+          firstLineNumber,
+          lines[firstLineNumber - 1].trim(),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "insertText": (0,micromark_helpers.getBlockQuotePrefixText)(blockQuotePrefixes, firstLineNumber)
+          }
+        );
+      }
+
+      // Find the "visual" end of the list
+      let endLine = list.endLine;
+      const flattenedChildren = (0,micromark_helpers.filterByPredicate)(list.children);
+      for (const child of flattenedChildren.reverse()) {
+        if (!micromark_helpers.nonContentTokens.has(child.type)) {
+          endLine = child.endLine;
+          break;
+        }
+      }
+
+      // Look for a blank line below the list
+      const lastLineNumber = endLine;
+      if (!(0,helpers.isBlankLine)(lines[lastLineNumber])) {
+        (0,helpers.addErrorContext)(
+          onError,
+          lastLineNumber,
+          lines[lastLineNumber - 1].trim(),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "lineNumber": lastLineNumber + 1,
+            "insertText": (0,micromark_helpers.getBlockQuotePrefixText)(blockQuotePrefixes, lastLineNumber)
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md033.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md033 = ({
+  "names": [ "MD033", "no-inline-html" ],
+  "description": "Inline HTML",
+  "tags": [ "html" ],
+  "parser": "micromark",
+  "function": function MD033(params, onError) {
+    let allowedElements = params.config.allowed_elements;
+    allowedElements = Array.isArray(allowedElements) ? allowedElements : [];
+    allowedElements = allowedElements.map((element) => element.toLowerCase());
+    for (const token of filterByTypesCached([ "htmlText" ], true)) {
+      const htmlTagInfo = (0,micromark_helpers.getHtmlTagInfo)(token);
+      if (
+        htmlTagInfo &&
+        !htmlTagInfo.close &&
+        !allowedElements.includes(htmlTagInfo.name.toLowerCase())
+      ) {
+        const range = [
+          token.startColumn,
+          token.text.replace(helpers.nextLinesRe, "").length
+        ];
+        (0,helpers.addError)(
+          onError,
+          token.startLine,
+          "Element: " + htmlTagInfo.name,
+          undefined,
+          range
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md034.mjs
+// @ts-check
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md034 = ({
+  "names": [ "MD034", "no-bare-urls" ],
+  "description": "Bare URL used",
+  "tags": [ "links", "url" ],
+  "parser": "micromark",
+  "function": function MD034(params, onError) {
+    const literalAutolinks = (tokens) => (
+      (0,micromark_helpers.filterByPredicate)(
+        tokens,
+        (token) => {
+          if ((token.type === "literalAutolink") && !(0,micromark_helpers.inHtmlFlow)(token)) {
+            // Detect and ignore https://github.com/micromark/micromark/issues/164
+            const siblings = token.parent?.children;
+            const index = siblings?.indexOf(token);
+            // @ts-ignore
+            const prev = siblings?.at(index - 1);
+            // @ts-ignore
+            const next = siblings?.at(index + 1);
+            return !(
+              prev &&
+              next &&
+              (prev.type === "data") &&
+              (next.type === "data") &&
+              prev.text.endsWith("<") &&
+              next.text.startsWith(">")
+            );
+          }
+          return false;
+        },
+        (token) => {
+          // Ignore content of inline HTML tags
+          const { children } = token;
+          const result = [];
+          for (let i = 0; i < children.length; i++) {
+            const current = children[i];
+            const openTagInfo = (0,micromark_helpers.getHtmlTagInfo)(current);
+            if (openTagInfo && !openTagInfo.close) {
+              let count = 1;
+              for (let j = i + 1; j < children.length; j++) {
+                const candidate = children[j];
+                const closeTagInfo = (0,micromark_helpers.getHtmlTagInfo)(candidate);
+                if (closeTagInfo && (openTagInfo.name === closeTagInfo.name)) {
+                  if (closeTagInfo.close) {
+                    count--;
+                    if (count === 0) {
+                      i = j;
+                      break;
+                    }
+                  } else {
+                    count++;
+                  }
+                }
+              }
+            } else {
+              result.push(current);
+            }
+          }
+          return result;
+        }
+      )
+    );
+    for (const token of literalAutolinks(params.parsers.micromark.tokens)) {
+      const range = [
+        token.startColumn,
+        token.endColumn - token.startColumn
+      ];
+      const fixInfo = {
+        "editColumn": range[0],
+        "deleteCount": range[1],
+        "insertText": `<${token.text}>`
+      };
+      (0,helpers.addErrorContext)(
+        onError,
+        token.startLine,
+        token.text,
+        undefined,
+        undefined,
+        range,
+        fixInfo
+      );
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md035.mjs
+// @ts-check
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md035 = ({
+  "names": [ "MD035", "hr-style" ],
+  "description": "Horizontal rule style",
+  "tags": [ "hr" ],
+  "parser": "micromark",
+  "function": function MD035(params, onError) {
+    let style = String(params.config.style || "consistent").trim();
+    const thematicBreaks = filterByTypesCached([ "thematicBreak" ]);
+    for (const token of thematicBreaks) {
+      const { startLine, text } = token;
+      if (style === "consistent") {
+        style = text;
+      }
+      (0,helpers.addErrorDetailIf)(onError, startLine, style, text);
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md036.mjs
+// @ts-check
+
+
+
+
+
+/** @typedef {import("../helpers/micromark-helpers.cjs").TokenType} TokenType */
+/** @type {TokenType[][]} */
+const emphasisTypes = [
+  [ "emphasis", "emphasisText" ],
+  [ "strong", "strongText" ]
 ];
-module.exports.homepage = "https://github.com/DavidAnson/markdownlint";
-module.exports.version = "0.36.1";
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md036 = ({
+  "names": [ "MD036", "no-emphasis-as-heading" ],
+  "description": "Emphasis used instead of a heading",
+  "tags": [ "headings", "emphasis" ],
+  "parser": "micromark",
+  "function": function MD036(params, onError) {
+    let punctuation = params.config.punctuation;
+    punctuation = String((punctuation === undefined) ? helpers.allPunctuation : punctuation);
+    const punctuationRe = new RegExp("[" + punctuation + "]$");
+    const paragraphTokens =
+      filterByTypesCached([ "paragraph" ])
+        .filter((token) =>
+          (token.parent?.type === "content") && !token.parent?.parent && (token.children.length === 1)
+        );
+    for (const emphasisType of emphasisTypes) {
+      const textTokens = (0,micromark_helpers.getDescendantsByType)(paragraphTokens, emphasisType);
+      for (const textToken of textTokens) {
+        if (
+          (textToken.children.length === 1) &&
+          (textToken.children[0].type === "data") &&
+          !punctuationRe.test(textToken.text)
+        ) {
+          (0,helpers.addErrorContext)(onError, textToken.startLine, textToken.text);
+        }
+      }
+    }
+  }
+});
 
-
-/***/ }),
-
-/***/ 9061:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md037.mjs
 // @ts-check
 
 
 
-const path = __nccwpck_require__(6760);
-const { promisify } = __nccwpck_require__(7975);
-const micromark = __nccwpck_require__(7132);
-const { version } = __nccwpck_require__(6072);
-const rules = __nccwpck_require__(5414);
-const helpers = __nccwpck_require__(8307);
-const cache = __nccwpck_require__(5791);
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md037 = ({
+  "names": [ "MD037", "no-space-in-emphasis" ],
+  "description": "Spaces inside emphasis markers",
+  "tags": [ "whitespace", "emphasis" ],
+  "parser": "micromark",
+  "function": function MD037(params, onError) {
 
-// @ts-ignore
-// eslint-disable-next-line camelcase, no-inline-comments, no-undef
-const dynamicRequire = (typeof __WEBPACK_EXTERNAL_createRequire(import.meta.url) === "undefined") ? __WEBPACK_EXTERNAL_createRequire(import.meta.url) : /* c8 ignore next */ eval("require");
-// Capture native require implementation for dynamic loading of modules
+    // Initialize variables
+    const { lines, parsers } = params;
+    const emphasisTokensByMarker = new Map();
+    for (const marker of [ "_", "__", "___", "*", "**", "***" ]) {
+      emphasisTokensByMarker.set(marker, []);
+    }
+    const tokens = (0,micromark_helpers.filterByPredicate)(
+      parsers.micromark.tokens,
+      (token) => token.children.some((child) => child.type === "data")
+    );
+    for (const token of tokens) {
+
+      // Build lists of bare tokens for each emphasis marker type
+      for (const emphasisTokens of emphasisTokensByMarker.values()) {
+        emphasisTokens.length = 0;
+      }
+      for (const child of token.children) {
+        const { text, type } = child;
+        if ((type === "data") && (text.length <= 3)) {
+          const emphasisTokens = emphasisTokensByMarker.get(text);
+          if (emphasisTokens && !(0,micromark_helpers.inHtmlFlow)(child)) {
+            emphasisTokens.push(child);
+          }
+        }
+      }
+
+      // Process bare tokens for each emphasis marker type
+      for (const entry of emphasisTokensByMarker.entries()) {
+        const [ marker, emphasisTokens ] = entry;
+        for (let i = 0; i + 1 < emphasisTokens.length; i += 2) {
+
+          // Process start token of start/end pair
+          const startToken = emphasisTokens[i];
+          const startLine = lines[startToken.startLine - 1];
+          const startSlice = startLine.slice(startToken.endColumn - 1);
+          const startMatch = startSlice.match(/^\s+\S/);
+          if (startMatch) {
+            const [ startSpaceCharacter ] = startMatch;
+            const startContext = `${marker}${startSpaceCharacter}`;
+            (0,helpers.addError)(
+              onError,
+              startToken.startLine,
+              undefined,
+              startContext,
+              [ startToken.startColumn, startContext.length ],
+              {
+                "editColumn": startToken.endColumn,
+                "deleteCount": startSpaceCharacter.length - 1
+              }
+            );
+          }
+
+          // Process end token of start/end pair
+          const endToken = emphasisTokens[i + 1];
+          const endLine = lines[endToken.startLine - 1];
+          const endSlice = endLine.slice(0, endToken.startColumn - 1);
+          const endMatch = endSlice.match(/\S\s+$/);
+          if (endMatch) {
+            const [ endSpaceCharacter ] = endMatch;
+            const endContext = `${endSpaceCharacter}${marker}`;
+            (0,helpers.addError)(
+              onError,
+              endToken.startLine,
+              undefined,
+              endContext,
+              [ endToken.endColumn - endContext.length, endContext.length ],
+              {
+                "editColumn":
+                  endToken.startColumn - (endSpaceCharacter.length - 1),
+                "deleteCount": endSpaceCharacter.length - 1
+              }
+            );
+          }
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md038.mjs
+// @ts-check
+
+
+
+
+
+const leftSpaceRe = /^\s(?:[^`]|$)/;
+const rightSpaceRe = /[^`]\s$/;
+const trimCodeText = (text, start, end) => {
+  text = text.replace(/^\s+$/, "");
+  if (start) {
+    text = text.replace(/^\s+?(\s`|\S)/, "$1");
+  }
+  if (end) {
+    text = text.replace(/(`\s|\S)\s+$/, "$1");
+  }
+  return text;
+};
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md038 = ({
+  "names": [ "MD038", "no-space-in-code" ],
+  "description": "Spaces inside code span elements",
+  "tags": [ "whitespace", "code" ],
+  "parser": "micromark",
+  "function": function MD038(params, onError) {
+    const codeTexts = filterByTypesCached([ "codeText" ]);
+    for (const codeText of codeTexts) {
+      const sequences = (0,micromark_helpers.getDescendantsByType)(codeText, [ "codeTextSequence" ]);
+      const startSequence = sequences[0];
+      const endSequence = sequences[sequences.length - 1];
+      const datas = (0,micromark_helpers.getDescendantsByType)(codeText, [ "codeTextData" ]);
+      const startData = datas[0];
+      const endData = datas[datas.length - 1];
+      if (startSequence && endSequence && startData && endData) {
+        const spaceLeft = leftSpaceRe.test(startData.text);
+        const spaceRight = rightSpaceRe.test(endData.text);
+        if (spaceLeft || spaceRight) {
+          let lineNumber = startSequence.startLine;
+          let range = undefined;
+          let fixInfo = undefined;
+          if (startSequence.startLine === endSequence.endLine) {
+            range = [
+              startSequence.startColumn,
+              endSequence.endColumn - startSequence.startColumn
+            ];
+            fixInfo = {
+              "editColumn": startSequence.endColumn,
+              "deleteCount": endSequence.startColumn - startSequence.endColumn,
+              "insertText": trimCodeText(startData.text, true, true)
+            };
+          } else if (spaceLeft && (startSequence.endLine === startData.startLine)) {
+            range = [
+              startSequence.startColumn,
+              startData.endColumn - startSequence.startColumn
+            ];
+            fixInfo = {
+              "editColumn": startSequence.endColumn,
+              "deleteCount": startData.endColumn - startData.startColumn,
+              "insertText": trimCodeText(startData.text, true, false)
+            };
+          } else if (spaceRight && (endData.text.trim().length > 0)) {
+            lineNumber = endSequence.endLine;
+            range = [
+              endData.startColumn,
+              endSequence.endColumn - endData.startColumn
+            ];
+            fixInfo = {
+              "editColumn": endData.startColumn,
+              "deleteCount": endData.endColumn - endData.startColumn,
+              "insertText": trimCodeText(endData.text, false, true)
+            };
+          }
+          if (range) {
+            const context = params
+              .lines[lineNumber - 1]
+              .substring(range[0] - 1, range[0] - 1 + range[1]);
+            (0,helpers.addErrorContext)(
+              onError,
+              lineNumber,
+              context,
+              spaceLeft,
+              spaceRight,
+              range,
+              fixInfo
+            );
+          }
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md039.mjs
+// @ts-check
+
+
+
+
+/**
+ * Adds an error for a label space issue.
+ *
+ * @param {import("./markdownlint.mjs").RuleOnError} onError Error-reporting callback.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} label Label token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} labelText LabelText token.
+ * @param {boolean} isStart True iff error is at the start of the link.
+ */
+function addLabelSpaceError(onError, label, labelText, isStart) {
+  const match = labelText.text.match(isStart ? /^[^\S\r\n]+/ : /[^\S\r\n]+$/);
+  const range = match ?
+    [
+      (isStart ? (labelText.startColumn) : (labelText.endColumn - match[0].length)),
+      match[0].length
+    ] :
+    undefined;
+  (0,helpers.addErrorContext)(
+    onError,
+    isStart ? (labelText.startLine + (match ? 0 : 1)) : (labelText.endLine - (match ? 0 : 1)),
+    label.text.replace(/\s+/g, " "),
+    isStart,
+    !isStart,
+    range,
+    range ?
+      {
+        "editColumn": range[0],
+        "deleteCount": range[1]
+      } :
+      undefined
+  );
+}
+
+/**
+ * Determines if a link is a valid link (and not a fake shortcut link due to parser tricks).
+ *
+ * @param {import("../helpers/micromark-helpers.cjs").Token} label Label token.
+ * @param {import("../helpers/micromark-helpers.cjs").Token} labelText LabelText token.
+ * @param {Map<string, any>} definitions Map of link definitions.
+ * @returns {boolean} True iff the link is valid.
+ */
+function validLink(label, labelText, definitions) {
+  return (label.parent?.children.length !== 1) || definitions.has(labelText.text.trim());
+}
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md039 = ({
+  "names": [ "MD039", "no-space-in-links" ],
+  "description": "Spaces inside link text",
+  "tags": [ "whitespace", "links" ],
+  "parser": "micromark",
+  "function": function MD039(params, onError) {
+    const { definitions } = getReferenceLinkImageData();
+    const labels = filterByTypesCached([ "label" ])
+      .filter((label) => label.parent?.type === "link");
+    for (const label of labels) {
+      const labelTexts = label.children.filter((child) => child.type === "labelText");
+      for (const labelText of labelTexts) {
+        if (
+          (labelText.text.trimStart().length !== labelText.text.length) &&
+          validLink(label, labelText, definitions)
+        ) {
+          addLabelSpaceError(onError, label, labelText, true);
+        }
+        if (
+          (labelText.text.trimEnd().length !== labelText.text.length) &&
+          validLink(label, labelText, definitions)
+        ) {
+          addLabelSpaceError(onError, label, labelText, false);
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md040.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md040 = ({
+  "names": [ "MD040", "fenced-code-language" ],
+  "description": "Fenced code blocks should have a language specified",
+  "tags": [ "code", "language" ],
+  "parser": "micromark",
+  "function": function MD040(params, onError) {
+    let allowed = params.config.allowed_languages;
+    allowed = Array.isArray(allowed) ? allowed : [];
+    const languageOnly = !!params.config.language_only;
+    const fencedCodes = filterByTypesCached([ "codeFenced" ]);
+    for (const fencedCode of fencedCodes) {
+      const openingFence = (0,micromark_helpers.getDescendantsByType)(fencedCode, [ "codeFencedFence" ])[0];
+      const { startLine, text } = openingFence;
+      const info = (0,micromark_helpers.getDescendantsByType)(openingFence, [ "codeFencedFenceInfo" ])[0]?.text;
+      if (!info) {
+        (0,helpers.addErrorContext)(onError, startLine, text);
+      } else if ((allowed.length > 0) && !allowed.includes(info)) {
+        (0,helpers.addError)(onError, startLine, `"${info}" is not allowed`);
+      }
+      if (languageOnly && (0,micromark_helpers.getDescendantsByType)(openingFence, [ "codeFencedFenceMeta" ]).length > 0) {
+        (0,helpers.addError)(onError, startLine, `Info string contains more than language: "${text}"`);
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md041.mjs
+// @ts-check
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md041 = ({
+  "names": [ "MD041", "first-line-heading", "first-line-h1" ],
+  "description": "First line in a file should be a top-level heading",
+  "tags": [ "headings" ],
+  "parser": "micromark",
+  "function": function MD041(params, onError) {
+    const level = Number(params.config.level || 1);
+    if (!(0,helpers.frontMatterHasTitle)(params.frontMatterLines, params.config.front_matter_title)) {
+      params.parsers.micromark.tokens
+        .filter((token) => !micromark_helpers.nonContentTokens.has(token.type) && !(0,micromark_helpers.isHtmlFlowComment)(token))
+        .every((token) => {
+          let isError = true;
+          if ((token.type === "atxHeading") || (token.type === "setextHeading")) {
+            isError = ((0,micromark_helpers.getHeadingLevel)(token) !== level);
+          } else if (token.type === "htmlFlow") {
+            const htmlTexts = (0,micromark_helpers.filterByTypes)(token.children, [ "htmlText" ], true);
+            const tagInfo = (htmlTexts.length > 0) && (0,micromark_helpers.getHtmlTagInfo)(htmlTexts[0]);
+            isError = !tagInfo || (tagInfo.name.toLowerCase() !== `h${level}`);
+          }
+          if (isError) {
+            (0,helpers.addErrorContext)(onError, token.startLine, params.lines[token.startLine - 1]);
+          }
+          return false;
+        });
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md042.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md042 = ({
+  "names": [ "MD042", "no-empty-links" ],
+  "description": "No empty links",
+  "tags": [ "links" ],
+  "parser": "micromark",
+  "function": function MD042(params, onError) {
+    const { definitions } = getReferenceLinkImageData();
+    const isReferenceDefinitionHash = (token) => {
+      const definition = definitions.get(token.text.trim());
+      return (definition && (definition[1] === "#"));
+    };
+    const links = filterByTypesCached([ "link" ]);
+    for (const link of links) {
+      const labelText = (0,micromark_helpers.getDescendantsByType)(link, [ "label", "labelText" ]);
+      const reference = (0,micromark_helpers.getDescendantsByType)(link, [ "reference" ]);
+      const resource = (0,micromark_helpers.getDescendantsByType)(link, [ "resource" ]);
+      const referenceString = (0,micromark_helpers.getDescendantsByType)(reference, [ "referenceString" ]);
+      const resourceDestinationString = (0,micromark_helpers.getDescendantsByType)(resource, [ "resourceDestination", [ "resourceDestinationLiteral", "resourceDestinationRaw" ], "resourceDestinationString" ]);
+      const hasLabelText = labelText.length > 0;
+      const hasReference = reference.length > 0;
+      const hasResource = resource.length > 0;
+      const hasReferenceString = referenceString.length > 0;
+      const hasResourceDestinationString = resourceDestinationString.length > 0;
+      let error = false;
+      if (
+        hasLabelText &&
+        ((!hasReference && !hasResource) || (hasReference && !hasReferenceString))
+      ) {
+        error = isReferenceDefinitionHash(labelText[0]);
+      } else if (hasReferenceString && !hasResourceDestinationString) {
+        error = isReferenceDefinitionHash(referenceString[0]);
+      } else if (!hasReferenceString && hasResourceDestinationString) {
+        error = (resourceDestinationString[0].text.trim() === "#");
+      } else if (!hasReferenceString && !hasResourceDestinationString) {
+        error = true;
+      }
+      if (error) {
+        (0,helpers.addErrorContext)(
+          onError,
+          link.startLine,
+          link.text,
+          undefined,
+          undefined,
+          [ link.startColumn, link.endColumn - link.startColumn ]
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md043.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md043 = ({
+  "names": [ "MD043", "required-headings" ],
+  "description": "Required heading structure",
+  "tags": [ "headings" ],
+  "parser": "micromark",
+  "function": function MD043(params, onError) {
+    const requiredHeadings = params.config.headings;
+    if (!Array.isArray(requiredHeadings)) {
+      // Nothing to check; avoid doing any work
+      return;
+    }
+    const matchCase = params.config.match_case || false;
+    let i = 0;
+    let matchAny = false;
+    let hasError = false;
+    let anyHeadings = false;
+    const getExpected = () => requiredHeadings[i++] || "[None]";
+    const handleCase = (str) => (matchCase ? str : str.toLowerCase());
+    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
+      if (!hasError) {
+        const headingText = (0,micromark_helpers.getHeadingText)(heading);
+        const headingLevel = (0,micromark_helpers.getHeadingLevel)(heading);
+        anyHeadings = true;
+        const actual = `${"".padEnd(headingLevel, "#")} ${headingText}`;
+        const expected = getExpected();
+        if (expected === "*") {
+          const nextExpected = getExpected();
+          if (handleCase(nextExpected) !== handleCase(actual)) {
+            matchAny = true;
+            i--;
+          }
+        } else if (expected === "+") {
+          matchAny = true;
+        } else if (handleCase(expected) === handleCase(actual)) {
+          matchAny = false;
+        } else if (matchAny) {
+          i--;
+        } else {
+          (0,helpers.addErrorDetailIf)(
+            onError,
+            heading.startLine,
+            expected,
+            actual
+          );
+          hasError = true;
+        }
+      }
+    }
+    const extraHeadings = requiredHeadings.length - i;
+    if (
+      !hasError &&
+      ((extraHeadings > 1) ||
+        ((extraHeadings === 1) && (requiredHeadings[i] !== "*"))) &&
+      (anyHeadings || !requiredHeadings.every((heading) => heading === "*"))
+    ) {
+      (0,helpers.addErrorContext)(
+        onError,
+        params.lines.length,
+        requiredHeadings[i]
+      );
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md044.mjs
+// @ts-check
+
+
+
+
+
+const ignoredChildTypes = new Set(
+  [ "codeFencedFence", "definition", "reference", "resource" ]
+);
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md044 = ({
+  "names": [ "MD044", "proper-names" ],
+  "description": "Proper names should have the correct capitalization",
+  "tags": [ "spelling" ],
+  "parser": "micromark",
+  "function": function MD044(params, onError) {
+    let names = params.config.names;
+    names = Array.isArray(names) ? names : [];
+    names.sort((a, b) => (b.length - a.length) || a.localeCompare(b));
+    if (names.length === 0) {
+      // Nothing to check; avoid doing any work
+      return;
+    }
+    const codeBlocks = params.config.code_blocks;
+    const includeCodeBlocks =
+      (codeBlocks === undefined) ? true : !!codeBlocks;
+    const htmlElements = params.config.html_elements;
+    const includeHtmlElements =
+      (htmlElements === undefined) ? true : !!htmlElements;
+    const scannedTypes = new Set([ "data" ]);
+    if (includeCodeBlocks) {
+      scannedTypes.add("codeFlowValue");
+      scannedTypes.add("codeTextData");
+    }
+    if (includeHtmlElements) {
+      scannedTypes.add("htmlFlowData");
+      scannedTypes.add("htmlTextData");
+    }
+    const contentTokens =
+      (0,micromark_helpers.filterByPredicate)(
+        params.parsers.micromark.tokens,
+        (token) => scannedTypes.has(token.type),
+        (token) => (
+          token.children.filter((t) => !ignoredChildTypes.has(t.type))
+        )
+      );
+    /** @type {import("../helpers/helpers.cjs").FileRange[]} */
+    const exclusions = [];
+    const scannedTokens = new Set();
+    for (const name of names) {
+      const escapedName = (0,helpers.escapeForRegExp)(name);
+      const startNamePattern = /^\W/.test(name) ? "" : "\\b_*";
+      const endNamePattern = /\W$/.test(name) ? "" : "_*\\b";
+      const namePattern = `(${startNamePattern})(${escapedName})${endNamePattern}`;
+      const nameRe = new RegExp(namePattern, "gi");
+      for (const token of contentTokens) {
+        let match = null;
+        while ((match = nameRe.exec(token.text)) !== null) {
+          const [ , leftMatch, nameMatch ] = match;
+          const column = token.startColumn + match.index + leftMatch.length;
+          const length = nameMatch.length;
+          const lineNumber = token.startLine;
+          /** @type {import("../helpers/helpers.cjs").FileRange} */
+          const nameRange = {
+            "startLine": lineNumber,
+            "startColumn": column,
+            "endLine": lineNumber,
+            "endColumn": column + length - 1
+          };
+          if (
+            !names.includes(nameMatch) &&
+            !exclusions.some((exclusion) => (0,helpers.hasOverlap)(exclusion, nameRange))
+          ) {
+            /** @type {import("../helpers/helpers.cjs").FileRange[]} */
+            let autolinkRanges = [];
+            if (!scannedTokens.has(token)) {
+              autolinkRanges = (0,micromark_helpers.filterByTypes)(micromark_parse_parse(token.text), [ "literalAutolink" ])
+                .map((tok) => ({
+                  "startLine": lineNumber,
+                  "startColumn": token.startColumn + tok.startColumn - 1,
+                  "endLine": lineNumber,
+                  "endColumn": token.endColumn + tok.endColumn - 1
+                }));
+              exclusions.push(...autolinkRanges);
+              scannedTokens.add(token);
+            }
+            if (!autolinkRanges.some((autolinkRange) => (0,helpers.hasOverlap)(autolinkRange, nameRange))) {
+              (0,helpers.addErrorDetailIf)(
+                onError,
+                token.startLine,
+                name,
+                nameMatch,
+                undefined,
+                undefined,
+                [ column, length ],
+                {
+                  "editColumn": column,
+                  "deleteCount": length,
+                  "insertText": name
+                }
+              );
+            }
+          }
+          exclusions.push(nameRange);
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md045.mjs
+// @ts-check
+
+
+
+
+
+const altRe = (0,helpers.getHtmlAttributeRe)("alt");
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md045 = ({
+  "names": [ "MD045", "no-alt-text" ],
+  "description": "Images should have alternate text (alt text)",
+  "tags": [ "accessibility", "images" ],
+  "parser": "micromark",
+  "function": function MD045(params, onError) {
+    // Process Markdown images
+    const images = filterByTypesCached([ "image" ]);
+    for (const image of images) {
+      const labelTexts = (0,micromark_helpers.getDescendantsByType)(image, [ "label", "labelText" ]);
+      if (labelTexts.some((labelText) => labelText.text.length === 0)) {
+        const range = (image.startLine === image.endLine) ?
+          [ image.startColumn, image.endColumn - image.startColumn ] :
+          undefined;
+        (0,helpers.addError)(
+          onError,
+          image.startLine,
+          undefined,
+          undefined,
+          range
+        );
+      }
+    }
+
+    // Process HTML images
+    const htmlTexts = filterByTypesCached([ "htmlText" ], true);
+    for (const htmlText of htmlTexts) {
+      const { startColumn, startLine, text } = htmlText;
+      const htmlTagInfo = (0,micromark_helpers.getHtmlTagInfo)(htmlText);
+      if (
+        htmlTagInfo &&
+        !htmlTagInfo.close &&
+        (htmlTagInfo.name.toLowerCase() === "img") &&
+        !altRe.test(text)
+      ) {
+        const range = [
+          startColumn,
+          text.replace(helpers.nextLinesRe, "").length
+        ];
+        (0,helpers.addError)(
+          onError,
+          startLine,
+          undefined,
+          undefined,
+          range
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md046.mjs
+// @ts-check
+
+
+
+
+const tokenTypeToStyle = {
+  "codeFenced": "fenced",
+  "codeIndented": "indented"
+};
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md046 = ({
+  "names": [ "MD046", "code-block-style" ],
+  "description": "Code block style",
+  "tags": [ "code" ],
+  "parser": "micromark",
+  "function": function MD046(params, onError) {
+    let expectedStyle = String(params.config.style || "consistent");
+    for (const token of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
+      const { startLine, type } = token;
+      if (expectedStyle === "consistent") {
+        expectedStyle = tokenTypeToStyle[type];
+      }
+      (0,helpers.addErrorDetailIf)(
+        onError,
+        startLine,
+        expectedStyle,
+        tokenTypeToStyle[type]);
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md047.mjs
+// @ts-check
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md047 = ({
+  "names": [ "MD047", "single-trailing-newline" ],
+  "description": "Files should end with a single newline character",
+  "tags": [ "blank_lines" ],
+  "parser": "none",
+  "function": function MD047(params, onError) {
+    const lastLineNumber = params.lines.length;
+    const lastLine = params.lines[lastLineNumber - 1];
+    if (!(0,helpers.isBlankLine)(lastLine)) {
+      (0,helpers.addError)(
+        onError,
+        lastLineNumber,
+        undefined,
+        undefined,
+        [ lastLine.length, 1 ],
+        {
+          "insertText": "\n",
+          "editColumn": lastLine.length + 1
+        }
+      );
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md048.mjs
+// @ts-check
+
+
+
+
+
+/**
+ * Return the string representation of a fence markup character.
+ *
+ * @param {string} markup Fence string.
+ * @returns {"tilde" | "backtick"} String representation.
+ */
+function fencedCodeBlockStyleFor(markup) {
+  switch (markup[0]) {
+    case "~":
+      return "tilde";
+    default:
+      return "backtick";
+  }
+};
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md048 = ({
+  "names": [ "MD048", "code-fence-style" ],
+  "description": "Code fence style",
+  "tags": [ "code" ],
+  "parser": "micromark",
+  "function": function MD048(params, onError) {
+    const style = String(params.config.style || "consistent");
+    let expectedStyle = style;
+    const codeFenceds = filterByTypesCached([ "codeFenced" ]);
+    for (const codeFenced of codeFenceds) {
+      const codeFencedFenceSequence =
+        (0,micromark_helpers.getDescendantsByType)(codeFenced, [ "codeFencedFence", "codeFencedFenceSequence" ])[0];
+      const { startLine, text } = codeFencedFenceSequence;
+      if (expectedStyle === "consistent") {
+        expectedStyle = fencedCodeBlockStyleFor(text);
+      }
+      (0,helpers.addErrorDetailIf)(
+        onError,
+        startLine,
+        expectedStyle,
+        fencedCodeBlockStyleFor(text)
+      );
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md049-md050.mjs
+// @ts-check
+
+
+
+
+const intrawordRe = /^\w$/;
+
+/**
+ * Return the string representation of a emphasis or strong markup character.
+ *
+ * @param {string} markup Emphasis or strong string.
+ * @returns {"asterisk" | "underscore"} String representation.
+ */
+function emphasisOrStrongStyleFor(markup) {
+  switch (markup[0]) {
+    case "*":
+      return "asterisk";
+    default:
+      return "underscore";
+  }
+};
+
+/**
+ * @param {import("./markdownlint.mjs").RuleParams} params Rule parameters.
+ * @param {import("./markdownlint.mjs").RuleOnError} onError Error-reporting callback.
+ * @param {import("micromark-util-types").TokenType} type Token type.
+ * @param {import("micromark-util-types").TokenType} typeSequence Token sequence type.
+ * @param {"*" | "**"} asterisk Asterisk kind.
+ * @param {"_" | "__"} underline Underline kind.
+ * @param {"asterisk" | "consistent" | "underscore"} style Style string.
+ */
+const impl =
+  (params, onError, type, typeSequence, asterisk, underline, style = "consistent") => {
+    const { lines, parsers } = params;
+    const emphasisTokens = (0,micromark_helpers.filterByPredicate)(
+      parsers.micromark.tokens,
+      (token) => token.type === type,
+      (token) => ((token.type === "htmlFlow") ? [] : token.children)
+    );
+    for (const token of emphasisTokens) {
+      const sequences = (0,micromark_helpers.getDescendantsByType)(token, [ typeSequence ]);
+      const startSequence = sequences[0];
+      const endSequence = sequences[sequences.length - 1];
+      if (startSequence && endSequence) {
+        const markupStyle = emphasisOrStrongStyleFor(startSequence.text);
+        if (style === "consistent") {
+          style = markupStyle;
+        }
+        if (style !== markupStyle) {
+          const underscoreIntraword = (style === "underscore") && (
+            intrawordRe.test(
+              lines[startSequence.startLine - 1][startSequence.startColumn - 2]
+            ) ||
+            intrawordRe.test(
+              lines[endSequence.endLine - 1][endSequence.endColumn - 1]
+            )
+          );
+          if (!underscoreIntraword) {
+            for (const sequence of [ startSequence, endSequence ]) {
+              (0,helpers.addError)(
+                onError,
+                sequence.startLine,
+                `Expected: ${style}; Actual: ${markupStyle}`,
+                undefined,
+                [ sequence.startColumn, sequence.text.length ],
+                {
+                  "editColumn": sequence.startColumn,
+                  "deleteCount": sequence.text.length,
+                  "insertText": (style === "asterisk") ? asterisk : underline
+                }
+              );
+            }
+          }
+        }
+      }
+    }
+  };
+/** @type {import("./markdownlint.mjs").Rule[]} */
+/* harmony default export */ const md049_md050 = ([
+  {
+    "names": [ "MD049", "emphasis-style" ],
+    "description": "Emphasis style",
+    "tags": [ "emphasis" ],
+    "parser": "micromark",
+    "function": function MD049(params, onError) {
+      return impl(
+        params,
+        onError,
+        "emphasis",
+        "emphasisSequence",
+        "*",
+        "_",
+        params.config.style || undefined
+      );
+    }
+  },
+  {
+    "names": [ "MD050", "strong-style" ],
+    "description": "Strong style",
+    "tags": [ "emphasis" ],
+    "parser": "micromark",
+    "function": function MD050(params, onError) {
+      return impl(
+        params,
+        onError,
+        "strong",
+        "strongSequence",
+        "**",
+        "__",
+        params.config.style || undefined
+      );
+    }
+  }
+]);
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md051.mjs
+// @ts-check
+
+
+
+
+
+// Regular expression for identifying HTML anchor names
+const idRe = (0,helpers.getHtmlAttributeRe)("id");
+const nameRe = (0,helpers.getHtmlAttributeRe)("name");
+const anchorRe = /\{(#[a-z\d]+(?:[-_][a-z\d]+)*)\}/gu;
+const lineFragmentRe = /^#(?:L\d+(?:C\d+)?-L\d+(?:C\d+)?|L\d+)$/;
+
+// Sets for filtering heading tokens during conversion
+const childrenExclude = new Set([ "image", "reference", "resource" ]);
+const tokensInclude = new Set(
+  [ "characterEscapeValue", "codeTextData", "data", "mathTextData" ]
+);
+
+/**
+ * Converts a Markdown heading into an HTML fragment according to the rules
+ * used by GitHub.
+ *
+ * @param {import("../helpers/micromark-helpers.cjs").Token} headingText Heading text token.
+ * @returns {string} Fragment string for heading.
+ */
+function convertHeadingToHTMLFragment(headingText) {
+  const inlineText =
+    (0,micromark_helpers.filterByPredicate)(
+      headingText.children,
+      (token) => tokensInclude.has(token.type),
+      (token) => (childrenExclude.has(token.type) ? [] : token.children)
+    )
+      .map((token) => token.text)
+      .join("");
+  return "#" + encodeURIComponent(
+    inlineText
+      .toLowerCase()
+      // RegExp source with Ruby's \p{Word} expanded into its General Categories
+      // https://github.com/gjtorikian/html-pipeline/blob/main/lib/html/pipeline/toc_filter.rb
+      // https://ruby-doc.org/core-3.0.2/Regexp.html
+      .replace(
+        /[^\p{Letter}\p{Mark}\p{Number}\p{Connector_Punctuation}\- ]/gu,
+        ""
+      )
+      .replace(/ /gu, "-")
+  );
+}
+
+/**
+ * Unescapes the text of a String-type micromark Token.
+ *
+ * @param {import("../helpers/micromark-helpers.cjs").Token} token String-type micromark Token.
+ * @returns {string} Unescaped token text.
+ */
+function unescapeStringTokenText(token) {
+  return (0,micromark_helpers.filterByTypes)(token.children, [ "characterEscapeValue", "data" ])
+    .map((child) => child.text)
+    .join("");
+}
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md051 = ({
+  "names": [ "MD051", "link-fragments" ],
+  "description": "Link fragments should be valid",
+  "tags": [ "links" ],
+  "parser": "micromark",
+  "function": function MD051(params, onError) {
+    const ignoreCase = params.config.ignore_case || false;
+    const fragments = new Map();
+
+    // Process headings
+    const headingTexts = filterByTypesCached([ "atxHeadingText", "setextHeadingText" ]);
+    for (const headingText of headingTexts) {
+      const fragment = convertHeadingToHTMLFragment(headingText);
+      if (fragment !== "#") {
+        const count = fragments.get(fragment) || 0;
+        if (count) {
+          fragments.set(`${fragment}-${count}`, 0);
+        }
+        fragments.set(fragment, count + 1);
+        let match = null;
+        while ((match = anchorRe.exec(headingText.text)) !== null) {
+          const [ , anchor ] = match;
+          if (!fragments.has(anchor)) {
+            fragments.set(anchor, 1);
+          }
+        }
+      }
+    }
+
+    // Process HTML anchors
+    for (const token of filterByTypesCached([ "htmlText" ], true)) {
+      const htmlTagInfo = (0,micromark_helpers.getHtmlTagInfo)(token);
+      if (htmlTagInfo && !htmlTagInfo.close) {
+        const anchorMatch = idRe.exec(token.text) ||
+          (htmlTagInfo.name.toLowerCase() === "a" && nameRe.exec(token.text));
+        if (anchorMatch && anchorMatch.length > 0) {
+          fragments.set(`#${anchorMatch[1]}`, 0);
+        }
+      }
+    }
+
+    // Process link and definition fragments
+    /** @type {import("../helpers/micromark-helpers.cjs").TokenType[][]} */
+    const parentChilds = [
+      [ "link", "resourceDestinationString" ],
+      [ "definition", "definitionDestinationString" ]
+    ];
+    for (const [ parentType, definitionType ] of parentChilds) {
+      const links = filterByTypesCached([ parentType ]);
+      for (const link of links) {
+        const definitions = (0,micromark_helpers.filterByTypes)(link.children, [ definitionType ]);
+        for (const definition of definitions) {
+          const { endColumn, startColumn } = definition;
+          const text = unescapeStringTokenText(definition);
+          const encodedText = `#${encodeURIComponent(text.slice(1))}`;
+          if (
+            (text.length > 1) &&
+            text.startsWith("#") &&
+            !fragments.has(encodedText) &&
+            !lineFragmentRe.test(encodedText)
+          ) {
+            let context = undefined;
+            let range = undefined;
+            let fixInfo = undefined;
+            if (link.startLine === link.endLine) {
+              context = link.text;
+              range = [ link.startColumn, link.endColumn - link.startColumn ];
+              fixInfo = {
+                "editColumn": startColumn,
+                "deleteCount": endColumn - startColumn
+              };
+            }
+            const textLower = text.toLowerCase();
+            const mixedCaseKey = [ ...fragments.keys() ]
+              .find((key) => textLower === key.toLowerCase());
+            if (mixedCaseKey) {
+              // @ts-ignore
+              (fixInfo || {}).insertText = mixedCaseKey;
+              if (!ignoreCase && (mixedCaseKey !== text)) {
+                (0,helpers.addError)(
+                  onError,
+                  link.startLine,
+                  `Expected: ${mixedCaseKey}; Actual: ${text}`,
+                  context,
+                  range,
+                  fixInfo
+                );
+              }
+            } else {
+              (0,helpers.addError)(
+                onError,
+                link.startLine,
+                undefined,
+                context,
+                range
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md052.mjs
+// @ts-check
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md052 = ({
+  "names": [ "MD052", "reference-links-images" ],
+  "description":
+    "Reference links and images should use a label that is defined",
+  "tags": [ "images", "links" ],
+  "parser": "none",
+  "function": function MD052(params, onError) {
+    const { config, lines } = params;
+    const shortcutSyntax = config.shortcut_syntax || false;
+    const { definitions, references, shortcuts } = getReferenceLinkImageData();
+    const entries = shortcutSyntax ?
+      [ ...references.entries(), ...shortcuts.entries() ] :
+      references.entries();
+    // Look for links/images that use an undefined link reference
+    for (const reference of entries) {
+      const [ label, datas ] = reference;
+      if (!definitions.has(label)) {
+        for (const data of datas) {
+          const [ lineIndex, index, length ] = data;
+          // Context will be incomplete if reporting for a multi-line link
+          const context = lines[lineIndex].slice(index, index + length);
+          (0,helpers.addError)(
+            onError,
+            lineIndex + 1,
+            `Missing link or image reference definition: "${label}"`,
+            context,
+            [ index + 1, context.length ]
+          );
+        }
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md053.mjs
+// @ts-check
+
+
+
+
+const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md053 = ({
+  "names": [ "MD053", "link-image-reference-definitions" ],
+  "description": "Link and image reference definitions should be needed",
+  "tags": [ "images", "links" ],
+  "parser": "none",
+  "function": function MD053(params, onError) {
+    const ignored = new Set(params.config.ignored_definitions || [ "//" ]);
+    const lines = params.lines;
+    const { references, shortcuts, definitions, duplicateDefinitions } =
+      getReferenceLinkImageData();
+    const singleLineDefinition = (line) => (
+      line.replace(linkReferenceDefinitionRe, "").trim().length > 0
+    );
+    const deleteFixInfo = {
+      "deleteCount": -1
+    };
+    // Look for unused link references (unreferenced by any link/image)
+    for (const definition of definitions.entries()) {
+      const [ label, [ lineIndex ] ] = definition;
+      if (
+        !ignored.has(label) &&
+        !references.has(label) &&
+        !shortcuts.has(label)
+      ) {
+        const line = lines[lineIndex];
+        (0,helpers.addError)(
+          onError,
+          lineIndex + 1,
+          `Unused link or image reference definition: "${label}"`,
+          (0,helpers.ellipsify)(line),
+          [ 1, line.length ],
+          singleLineDefinition(line) ? deleteFixInfo : undefined
+        );
+      }
+    }
+    // Look for duplicate link references (defined more than once)
+    for (const duplicateDefinition of duplicateDefinitions) {
+      const [ label, lineIndex ] = duplicateDefinition;
+      if (!ignored.has(label)) {
+        const line = lines[lineIndex];
+        (0,helpers.addError)(
+          onError,
+          lineIndex + 1,
+          `Duplicate link or image reference definition: "${label}"`,
+          (0,helpers.ellipsify)(line),
+          [ 1, line.length ],
+          singleLineDefinition(line) ? deleteFixInfo : undefined
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md054.mjs
+// @ts-check
+
+
+
+
+
+const backslashEscapeRe = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g;
+const removeBackslashEscapes = (text) => text.replace(backslashEscapeRe, "$1");
+const autolinkDisallowedRe = /[ <>]/;
+const autolinkAble = (destination) => {
+  try {
+    // eslint-disable-next-line no-new
+    new URL(destination);
+  } catch {
+    // Not an absolute URL
+    return false;
+  }
+  return !autolinkDisallowedRe.test(destination);
+};
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md054 = ({
+  "names": [ "MD054", "link-image-style" ],
+  "description": "Link and image style",
+  "tags": [ "images", "links" ],
+  "parser": "micromark",
+  "function": (params, onError) => {
+    const config = params.config;
+    const autolink = (config.autolink === undefined) || !!config.autolink;
+    const inline = (config.inline === undefined) || !!config.inline;
+    const full = (config.full === undefined) || !!config.full;
+    const collapsed = (config.collapsed === undefined) || !!config.collapsed;
+    const shortcut = (config.shortcut === undefined) || !!config.shortcut;
+    const urlInline = (config.url_inline === undefined) || !!config.url_inline;
+    if (autolink && inline && full && collapsed && shortcut && urlInline) {
+      // Everything allowed, nothing to check
+      return;
+    }
+    const { definitions } = getReferenceLinkImageData();
+    const links = filterByTypesCached([ "autolink", "image", "link" ]);
+    for (const link of links) {
+      let label = null;
+      let destination = null;
+      const {
+        endColumn, endLine, startColumn, startLine, text, type
+      } = link;
+      const image = (type === "image");
+      let isError = false;
+      if (type === "autolink") {
+        // link kind is an autolink
+        destination = (0,micromark_helpers.getDescendantsByType)(link, [ [ "autolinkEmail", "autolinkProtocol" ] ])[0]?.text;
+        label = destination;
+        isError = !autolink && Boolean(destination);
+      } else {
+        // link type is "image" or "link"
+        label = (0,micromark_helpers.getDescendantsByType)(link, [ "label", "labelText" ])[0].text;
+        destination =
+          (0,micromark_helpers.getDescendantsByType)(link, [ "resource", "resourceDestination", [ "resourceDestinationLiteral", "resourceDestinationRaw" ], "resourceDestinationString" ])[0]?.text;
+        if (destination) {
+          // link kind is an inline link
+          const title = (0,micromark_helpers.getDescendantsByType)(link, [ "resource", "resourceTitle", "resourceTitleString" ])[0]?.text;
+          isError = !inline || (
+            !urlInline &&
+            autolink &&
+            !image &&
+            !title &&
+            (label === destination) &&
+            autolinkAble(destination)
+          );
+        } else {
+          // link kind is a full/collapsed/shortcut reference link
+          const isShortcut = (0,micromark_helpers.getDescendantsByType)(link, [ "reference" ]).length === 0;
+          const referenceString = (0,micromark_helpers.getDescendantsByType)(link, [ "reference", "referenceString" ])[0]?.text;
+          const isCollapsed = (referenceString === undefined);
+          const definition = definitions.get(referenceString || label);
+          destination = definition && definition[1];
+          isError = destination &&
+            (isShortcut ? !shortcut : (isCollapsed ? !collapsed : !full));
+        }
+      }
+      if (isError) {
+        let range = undefined;
+        let fixInfo = undefined;
+        if (startLine === endLine) {
+          range = [ startColumn, endColumn - startColumn ];
+          let insertText = null;
+          const canInline = (inline && label);
+          const canAutolink = (autolink && !image && autolinkAble(destination));
+          if (canInline && (urlInline || !canAutolink)) {
+            // Most useful form
+            const prefix = (image ? "!" : "");
+            // @ts-ignore
+            const escapedLabel = label.replace(/[[\]]/g, "\\$&");
+            const escapedDestination = destination.replace(/[()]/g, "\\$&");
+            insertText = `${prefix}[${escapedLabel}](${escapedDestination})`;
+          } else if (canAutolink) {
+            // Simplest form
+            insertText = `<${removeBackslashEscapes(destination)}>`;
+          }
+          if (insertText) {
+            fixInfo = {
+              "editColumn": range[0],
+              insertText,
+              "deleteCount": range[1]
+            };
+          }
+        }
+        (0,helpers.addErrorContext)(
+          onError,
+          startLine,
+          text.replace(helpers.nextLinesRe, ""),
+          undefined,
+          undefined,
+          range,
+          fixInfo
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md055.mjs
+// @ts-check
+
+
+
+
+const whitespaceTypes = new Set([ "linePrefix", "whitespace" ]);
+const ignoreWhitespace = (tokens) => tokens.filter(
+  (token) => !whitespaceTypes.has(token.type)
+);
+const firstOrNothing = (items) => items[0];
+const lastOrNothing = (items) => items[items.length - 1];
+const makeRange = (start, end) => [ start, end - start + 1 ];
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md055 = ({
+  "names": [ "MD055", "table-pipe-style" ],
+  "description": "Table pipe style",
+  "tags": [ "table" ],
+  "parser": "micromark",
+  "function": function MD055(params, onError) {
+    const style = String(params.config.style || "consistent");
+    let expectedStyle = style;
+    let expectedLeadingPipe =
+      ((expectedStyle !== "no_leading_or_trailing") && (expectedStyle !== "trailing_only"));
+    let expectedTrailingPipe =
+      ((expectedStyle !== "no_leading_or_trailing") && (expectedStyle !== "leading_only"));
+    const rows = filterByTypesCached([ "tableDelimiterRow", "tableRow" ]);
+    for (const row of rows) {
+      // The following uses of first/lastOrNothing lack fallback handling
+      // because it seems not to be possible (i.e., 0% coverage)
+      const firstCell = firstOrNothing(row.children);
+      const leadingToken = firstOrNothing(ignoreWhitespace(firstCell.children));
+      const actualLeadingPipe = (leadingToken.type === "tableCellDivider");
+      const lastCell = lastOrNothing(row.children);
+      const trailingToken = lastOrNothing(ignoreWhitespace(lastCell.children));
+      const actualTrailingPipe = (trailingToken.type === "tableCellDivider");
+      const actualStyle = actualLeadingPipe ?
+        (actualTrailingPipe ? "leading_and_trailing" : "leading_only") :
+        (actualTrailingPipe ? "trailing_only" : "no_leading_or_trailing");
+      if (expectedStyle === "consistent") {
+        expectedStyle = actualStyle;
+        expectedLeadingPipe = actualLeadingPipe;
+        expectedTrailingPipe = actualTrailingPipe;
+      }
+      if (actualLeadingPipe !== expectedLeadingPipe) {
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          firstCell.startLine,
+          expectedStyle,
+          actualStyle,
+          `${expectedLeadingPipe ? "Missing" : "Unexpected"} leading pipe`,
+          undefined,
+          makeRange(row.startColumn, firstCell.startColumn)
+        );
+      }
+      if (actualTrailingPipe !== expectedTrailingPipe) {
+        (0,helpers.addErrorDetailIf)(
+          onError,
+          lastCell.endLine,
+          expectedStyle,
+          actualStyle,
+          `${expectedTrailingPipe ? "Missing" : "Unexpected"} trailing pipe`,
+          undefined,
+          makeRange(lastCell.endColumn - 1, row.endColumn - 1)
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md056.mjs
+// @ts-check
+
+
+
+
+
+const md056_makeRange = (start, end) => [ start, end - start + 1 ];
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md056 = ({
+  "names": [ "MD056", "table-column-count" ],
+  "description": "Table column count",
+  "tags": [ "table" ],
+  "parser": "micromark",
+  "function": function MD056(params, onError) {
+    const rows = filterByTypesCached([ "tableDelimiterRow", "tableRow" ]);
+    let expectedCount = 0;
+    let currentTable = null;
+    for (const row of rows) {
+      const table = (0,micromark_helpers.getParentOfType)(row, [ "table" ]);
+      if (currentTable !== table) {
+        expectedCount = 0;
+        currentTable = table;
+      }
+      const cells = row.children.filter((child) => [ "tableData", "tableDelimiter", "tableHeader" ].includes(child.type));
+      const actualCount = cells.length;
+      expectedCount ||= actualCount;
+      let detail = undefined;
+      let range = undefined;
+      if (actualCount < expectedCount) {
+        detail = "Too few cells, row will be missing data";
+        range = [ row.endColumn - 1, 1 ];
+      } else if (expectedCount < actualCount) {
+        detail = "Too many cells, extra data will be missing";
+        range = md056_makeRange(cells[expectedCount].startColumn, row.endColumn - 1);
+      }
+      (0,helpers.addErrorDetailIf)(
+        onError,
+        row.endLine,
+        expectedCount,
+        actualCount,
+        detail,
+        undefined,
+        range
+      );
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md058.mjs
+// @ts-check
+
+
+
+
+/** @type {import("./markdownlint.mjs").Rule} */
+/* harmony default export */ const md058 = ({
+  "names": [ "MD058", "blanks-around-tables" ],
+  "description": "Tables should be surrounded by blank lines",
+  "tags": [ "table" ],
+  "parser": "micromark",
+  "function": function MD058(params, onError) {
+    const { lines } = params;
+    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
+
+    // For every table...
+    const tables = filterByTypesCached([ "table" ]);
+    for (const table of tables) {
+
+      // Look for a blank line above the table
+      const firstLineNumber = table.startLine;
+      if (!(0,helpers.isBlankLine)(lines[firstLineNumber - 2])) {
+        (0,helpers.addErrorContext)(
+          onError,
+          firstLineNumber,
+          lines[firstLineNumber - 1].trim(),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "insertText": (0,micromark_helpers.getBlockQuotePrefixText)(blockQuotePrefixes, firstLineNumber)
+          }
+        );
+      }
+
+      // Look for a blank line below the table
+      const lastLineNumber = table.endLine;
+      if (!(0,helpers.isBlankLine)(lines[lastLineNumber])) {
+        (0,helpers.addErrorContext)(
+          onError,
+          lastLineNumber,
+          lines[lastLineNumber - 1].trim(),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "lineNumber": lastLineNumber + 1,
+            "insertText": (0,micromark_helpers.getBlockQuotePrefixText)(blockQuotePrefixes, lastLineNumber)
+          }
+        );
+      }
+    }
+  }
+});
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/rules.mjs
+// @ts-check
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const rules = [
+  md001,
+  // md002: Deprecated and removed
+  md003,
+  md004,
+  md005,
+  // md006: Deprecated and removed
+  md007,
+  md009,
+  md010,
+  md011,
+  md012,
+  md013,
+  md014,
+  md018,
+  md019_md021[0],
+  md020,
+  md019_md021[1],
+  md022,
+  md023,
+  md024,
+  md025,
+  md026,
+  md027,
+  md028,
+  md029,
+  md030,
+  md031,
+  md032,
+  md033,
+  md034,
+  md035,
+  md036,
+  md037,
+  md038,
+  md039,
+  md040,
+  md041,
+  md042,
+  md043,
+  md044,
+  md045,
+  md046,
+  md047,
+  md048,
+  md049_md050[0],
+  md049_md050[1],
+  md051,
+  md052,
+  md053,
+  md054,
+  md055,
+  md056,
+  // md057: See https://github.com/markdownlint/markdownlint
+  md058
+];
+for (const rule of rules) {
+  const name = rule.names[0].toLowerCase();
+  // eslint-disable-next-line dot-notation
+  rule["information"] =
+    new URL(`${homepage}/blob/v${version}/doc/${name}.md`);
+}
+/* harmony default export */ const lib_rules = (rules);
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/markdownlint.mjs
+// @ts-check
+
+
+
+const dynamicRequire = (0,external_node_module_namespaceObject.createRequire)(import.meta.url);
+
+
+
+
+
+
+
+
+
 
 /**
  * Validate the list of rules for structure and reuse.
@@ -46223,13 +65760,13 @@ const dynamicRequire = (typeof __WEBPACK_EXTERNAL_createRequire(import.meta.url)
  */
 function validateRuleList(ruleList, synchronous) {
   let result = null;
-  if (ruleList.length === rules.length) {
+  if (ruleList.length === lib_rules.length) {
     // No need to validate if only using built-in rules
     return result;
   }
   const allIds = {};
   for (const [ index, rule ] of ruleList.entries()) {
-    const customIndex = index - rules.length;
+    const customIndex = index - lib_rules.length;
     // eslint-disable-next-line jsdoc/require-jsdoc
     function newError(property, value) {
       return new Error(
@@ -46694,9 +66231,9 @@ function lintContent(
   const needMarkdownItTokens = enabledRuleList.some(
     (rule) => (rule.parser === "markdownit") || (rule.parser === undefined)
   );
-  const customRulesPresent = (ruleList.length !== rules.length);
+  const customRulesPresent = (ruleList.length !== lib_rules.length);
   // Parse content into parser tokens
-  const micromarkTokens = micromark.parse(
+  const micromarkTokens = micromark_parse_parse(
     content,
     { "freezeTokens": customRulesPresent }
   );
@@ -46706,7 +66243,7 @@ function lintContent(
   // Parse content into lines and get markdown-it tokens
   const lines = content.split(helpers.newLineRe);
   const markdownitTokens = needMarkdownItTokens ?
-    (__nccwpck_require__(9917).getMarkdownItTokens)(markdownItPlugins, preClearedContent, lines) :
+    (0,markdownit.getMarkdownItTokens)(markdownItPlugins, preClearedContent, lines) :
     [];
   // Create (frozen) parameters for rules
   /** @type {MarkdownParsers} */
@@ -46728,11 +66265,11 @@ function lintContent(
   const parsersNone = Object.freeze({});
   const paramsBase = {
     name,
-    version,
+    version: version,
     "lines": Object.freeze(lines),
     "frontMatterLines": Object.freeze(frontMatterLines)
   };
-  cache.initialize({
+  initialize({
     ...paramsBase,
     "parsers": parsersMicromark,
     "config": null
@@ -46950,7 +66487,7 @@ function lintContent(
   } catch (error) {
     callbackError(error);
   } finally {
-    cache.initialize();
+    initialize();
   }
 }
 
@@ -47040,7 +66577,7 @@ function lintInput(options, synchronous, callback) {
         "function": rule.function
       }));
   // eslint-disable-next-line unicorn/prefer-spread
-  const ruleList = rules.concat(customRuleList);
+  const ruleList = lib_rules.concat(customRuleList);
   const ruleErr = validateRuleList(ruleList, synchronous);
   if (ruleErr) {
     callback(ruleErr);
@@ -47065,7 +66602,7 @@ function lintInput(options, synchronous, callback) {
     3 :
     options.resultVersion;
   const markdownItPlugins = options.markdownItPlugins || [];
-  const fs = options.fs || __nccwpck_require__(3024);
+  const fs = options.fs || external_node_fs_namespaceObject_0;
   const aliasToRuleNames = mapAliasToRuleNames(ruleList);
   const results = newResults(ruleList);
   let done = false;
@@ -47161,7 +66698,7 @@ function markdownlint(options, callback) {
   return lintInput(options, false, callback);
 }
 
-const markdownlintPromisify = promisify && promisify(markdownlint);
+const markdownlintPromisify = external_node_util_.promisify && (0,external_node_util_.promisify)(markdownlint);
 
 /**
  * Lint specified Markdown files.
@@ -47204,8 +66741,8 @@ function markdownlintSync(options) {
  * @returns {void}
  */
 function resolveConfigExtends(configFile, referenceId, fs, callback) {
-  const configFileDirname = path.dirname(configFile);
-  const resolvedExtendsFile = path.resolve(configFileDirname, referenceId);
+  const configFileDirname = external_node_path_namespaceObject.dirname(configFile);
+  const resolvedExtendsFile = external_node_path_namespaceObject.resolve(configFileDirname, referenceId);
   fs.access(resolvedExtendsFile, (err) => {
     if (err) {
       // Not a file, try require.resolve
@@ -47232,8 +66769,8 @@ function resolveConfigExtends(configFile, referenceId, fs, callback) {
  * @returns {string} Resolved path to file.
  */
 function resolveConfigExtendsSync(configFile, referenceId, fs) {
-  const configFileDirname = path.dirname(configFile);
-  const resolvedExtendsFile = path.resolve(configFileDirname, referenceId);
+  const configFileDirname = external_node_path_namespaceObject.dirname(configFile);
+  const resolvedExtendsFile = external_node_path_namespaceObject.resolve(configFileDirname, referenceId);
   try {
     fs.accessSync(resolvedExtendsFile);
     return resolvedExtendsFile;
@@ -47267,7 +66804,7 @@ function extendConfig(config, file, parsers, fs, callback) {
   if (configExtends) {
     return resolveConfigExtends(
       file,
-      helpers.expandTildePath(configExtends, __nccwpck_require__(8161)),
+      helpers.expandTildePath(configExtends, external_node_os_namespaceObject_0),
       fs,
       // eslint-disable-next-line no-use-before-define
       (_, resolvedExtends) => readConfig(
@@ -47292,7 +66829,7 @@ function extendConfig(config, file, parsers, fs, callback) {
   return callback(null, config);
 }
 
-const extendConfigPromisify = promisify && promisify(extendConfig);
+const extendConfigPromisify = external_node_util_.promisify && (0,external_node_util_.promisify)(extendConfig);
 
 /**
  * Extend specified configuration object.
@@ -47331,10 +66868,10 @@ function readConfig(file, parsers, fs, callback) {
     }
   }
   if (!fs) {
-    fs = __nccwpck_require__(3024);
+    fs = external_node_fs_namespaceObject_0;
   }
   // Read file
-  file = helpers.expandTildePath(file, __nccwpck_require__(8161));
+  file = helpers.expandTildePath(file, external_node_os_namespaceObject_0);
   fs.readFile(file, "utf8", (err, content) => {
     if (err) {
       // @ts-ignore
@@ -47353,7 +66890,7 @@ function readConfig(file, parsers, fs, callback) {
   });
 }
 
-const readConfigPromisify = promisify && promisify(readConfig);
+const readConfigPromisify = external_node_util_.promisify && (0,external_node_util_.promisify)(readConfig);
 
 /**
  * Read specified configuration file.
@@ -47379,11 +66916,10 @@ function readConfigPromise(file, parsers, fs) {
  */
 function readConfigSync(file, parsers, fs) {
   if (!fs) {
-    fs = __nccwpck_require__(3024);
+    fs = external_node_fs_namespaceObject_0;
   }
   // Read file
-  const os = __nccwpck_require__(8161);
-  file = helpers.expandTildePath(file, os);
+  file = helpers.expandTildePath(file, external_node_os_namespaceObject_0);
   const content = fs.readFileSync(file, "utf8");
   // Try to parse file
   const { config, message } = parseConfiguration(file, content, parsers);
@@ -47396,7 +66932,7 @@ function readConfigSync(file, parsers, fs) {
     delete config.extends;
     const resolvedExtends = resolveConfigExtendsSync(
       file,
-      helpers.expandTildePath(configExtends, os),
+      helpers.expandTildePath(configExtends, external_node_os_namespaceObject_0),
       fs
     );
     return {
@@ -47447,7 +66983,7 @@ function applyFix(line, fixInfo, lineEnding = "\n") {
  * @returns {string} Fixed content.
  */
 function applyFixes(input, errors) {
-  const lineEnding = helpers.getPreferredLineEnding(input, __nccwpck_require__(8161));
+  const lineEnding = helpers.getPreferredLineEnding(input, external_node_os_namespaceObject_0);
   const lines = input.split(helpers.newLineRe);
   // Normalize fixInfo objects
   let fixInfos = errors
@@ -47466,8 +67002,7 @@ function applyFixes(input, errors) {
     );
   });
   // Remove duplicate entries (needed for following collapse step)
-  // eslint-disable-next-line jsdoc/valid-types
-  /** @type RuleOnErrorFixInfo */
+  /** @type {RuleOnErrorFixInfo} */
   let lastFixInfo = {};
   fixInfos = fixInfos.filter((fixInfo) => {
     const unique = (
@@ -47541,7 +67076,7 @@ markdownlint.promises = {
 };
 markdownlint.applyFix = applyFix;
 markdownlint.applyFixes = applyFixes;
-module.exports = markdownlint;
+/* harmony default export */ const lib_markdownlint = (markdownlint);
 
 // Type declarations
 
@@ -47613,7 +67148,7 @@ module.exports = markdownlint;
  * @property {string} line Line content.
  */
 
-/** @typedef {import("markdownlint-micromark").TokenType} MicromarkTokenType */
+/** @typedef {import("micromark-util-types").TokenType} MicromarkTokenType */
 
 /**
  * micromark token.
@@ -47766,14 +67301,14 @@ module.exports = markdownlint;
  * Configuration object for linting rules. For the JSON schema, see
  * {@link ../schema/markdownlint-config-schema.json}.
  *
- * @typedef {import("./configuration").Configuration} Configuration
+ * @typedef {import("./configuration.d.ts").Configuration} Configuration
  */
 
 /**
  * Configuration object for linting rules strictly. For the JSON schema, see
  * {@link ../schema/markdownlint-config-schema-strict.json}.
  *
- * @typedef {import("./configuration-strict").ConfigurationStrict} ConfigurationStrict
+ * @typedef {import("./configuration-strict.d.ts").ConfigurationStrict} ConfigurationStrict
  */
 
 /**
@@ -47808,5342 +67343,6 @@ module.exports = markdownlint;
  * @returns {void}
  */
 
-
-/***/ }),
-
-/***/ 137:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getHeadingLevel } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD001", "heading-increment" ],
-  "description": "Heading levels should only increment by one level at a time",
-  "tags": [ "headings" ],
-  "parser": "micromark",
-  "function": function MD001(params, onError) {
-    let prevLevel = Number.MAX_SAFE_INTEGER;
-    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
-      const level = getHeadingLevel(heading);
-      if (level > prevLevel) {
-        addErrorDetailIf(
-          onError,
-          heading.startLine,
-          `h${prevLevel + 1}`,
-          `h${level}`
-        );
-      }
-      prevLevel = level;
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 7911:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getHeadingLevel, getHeadingStyle } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD003", "heading-style" ],
-  "description": "Heading style",
-  "tags": [ "headings" ],
-  "parser": "micromark",
-  "function": function MD003(params, onError) {
-    let style = String(params.config.style || "consistent");
-    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
-      const styleForToken = getHeadingStyle(heading);
-      if (style === "consistent") {
-        style = styleForToken;
-      }
-      if (styleForToken !== style) {
-        const h12 = getHeadingLevel(heading) <= 2;
-        const setextWithAtx =
-          (style === "setext_with_atx") &&
-            ((h12 && (styleForToken === "setext")) ||
-            (!h12 && (styleForToken === "atx")));
-        const setextWithAtxClosed =
-          (style === "setext_with_atx_closed") &&
-            ((h12 && (styleForToken === "setext")) ||
-            (!h12 && (styleForToken === "atx_closed")));
-        if (!setextWithAtx && !setextWithAtxClosed) {
-          let expected = style;
-          if (style === "setext_with_atx") {
-            expected = h12 ? "setext" : "atx";
-          } else if (style === "setext_with_atx_closed") {
-            expected = h12 ? "setext" : "atx_closed";
-          }
-          addErrorDetailIf(
-            onError,
-            heading.startLine,
-            expected,
-            styleForToken
-          );
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 1398:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getDescendantsByType, getParentOfType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const markerToStyle = {
-  "-": "dash",
-  "+": "plus",
-  "*": "asterisk"
-};
-const styleToMarker = {
-  "dash": "-",
-  "plus": "+",
-  "asterisk": "*"
-};
-const differentItemStyle = {
-  "dash": "plus",
-  "plus": "asterisk",
-  "asterisk": "dash"
-};
-const validStyles = new Set([
-  "asterisk",
-  "consistent",
-  "dash",
-  "plus",
-  "sublist"
-]);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD004", "ul-style" ],
-  "description": "Unordered list style",
-  "tags": [ "bullet", "ul" ],
-  "parser": "micromark",
-  "function": function MD004(params, onError) {
-    const style = String(params.config.style || "consistent");
-    let expectedStyle = validStyles.has(style) ? style : "dash";
-    const nestingStyles = [];
-    for (const listUnordered of filterByTypesCached([ "listUnordered" ])) {
-      let nesting = 0;
-      if (style === "sublist") {
-        /** @type {import("../helpers/micromark-helpers.cjs").Token | null} */
-        let parent = listUnordered;
-        // @ts-ignore
-        while ((parent = getParentOfType(parent, [ "listOrdered", "listUnordered" ]))) {
-          nesting++;
-        }
-      }
-      const listItemMarkers = getDescendantsByType(listUnordered, [ "listItemPrefix", "listItemMarker" ]);
-      for (const listItemMarker of listItemMarkers) {
-        const itemStyle = markerToStyle[listItemMarker.text];
-        if (style === "sublist") {
-          if (!nestingStyles[nesting]) {
-            nestingStyles[nesting] =
-              (itemStyle === nestingStyles[nesting - 1]) ?
-                differentItemStyle[itemStyle] :
-                itemStyle;
-          }
-          expectedStyle = nestingStyles[nesting];
-        } else if (expectedStyle === "consistent") {
-          expectedStyle = itemStyle;
-        }
-        const column = listItemMarker.startColumn;
-        const length = listItemMarker.endColumn - listItemMarker.startColumn;
-        addErrorDetailIf(
-          onError,
-          listItemMarker.startLine,
-          expectedStyle,
-          itemStyle,
-          undefined,
-          undefined,
-          [ column, length ],
-          {
-            "editColumn": column,
-            "deleteCount": length,
-            "insertText": styleToMarker[expectedStyle]
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 9637:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, addErrorDetailIf } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD005", "list-indent" ],
-  "description": "Inconsistent indentation for list items at the same level",
-  "tags": [ "bullet", "ul", "indentation" ],
-  "parser": "micromark",
-  "function": function MD005(params, onError) {
-    for (const list of filterByTypesCached([ "listOrdered", "listUnordered" ])) {
-      const expectedIndent = list.startColumn - 1;
-      let expectedEnd = 0;
-      let endMatching = false;
-      const listItemPrefixes =
-        list.children.filter((token) => (token.type === "listItemPrefix"));
-      for (const listItemPrefix of listItemPrefixes) {
-        const lineNumber = listItemPrefix.startLine;
-        const actualIndent = listItemPrefix.startColumn - 1;
-        const range = [ 1, listItemPrefix.endColumn - 1 ];
-        if (list.type === "listUnordered") {
-          addErrorDetailIf(
-            onError,
-            lineNumber,
-            expectedIndent,
-            actualIndent,
-            undefined,
-            undefined,
-            range
-            // No fixInfo; MD007 handles this scenario better
-          );
-        } else {
-          const markerLength = listItemPrefix.text.trim().length;
-          const actualEnd = listItemPrefix.startColumn + markerLength - 1;
-          expectedEnd = expectedEnd || actualEnd;
-          if ((expectedIndent !== actualIndent) || endMatching) {
-            if (expectedEnd === actualEnd) {
-              endMatching = true;
-            } else {
-              const detail = endMatching ?
-                `Expected: (${expectedEnd}); Actual: (${actualEnd})` :
-                `Expected: ${expectedIndent}; Actual: ${actualIndent}`;
-              const expected = endMatching ?
-                expectedEnd - markerLength :
-                expectedIndent;
-              const actual = endMatching ?
-                actualEnd - markerLength :
-                actualIndent;
-              addError(
-                onError,
-                lineNumber,
-                detail,
-                undefined,
-                range,
-                {
-                  "editColumn": Math.min(actual, expected) + 1,
-                  "deleteCount": Math.max(actual - expected, 0),
-                  "insertText": "".padEnd(Math.max(expected - actual, 0))
-                }
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 1043:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getParentOfType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("markdownlint-micromark").TokenType[] */
-const unorderedListTypes =
-  [ "blockQuotePrefix", "listItemPrefix", "listUnordered" ];
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("markdownlint-micromark").TokenType[] */
-const unorderedParentTypes =
-  [ "blockQuote", "listOrdered", "listUnordered" ];
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD007", "ul-indent" ],
-  "description": "Unordered list indentation",
-  "tags": [ "bullet", "ul", "indentation" ],
-  "parser": "micromark",
-  "function": function MD007(params, onError) {
-    const indent = Number(params.config.indent || 2);
-    const startIndented = !!params.config.start_indented;
-    const startIndent = Number(params.config.start_indent || indent);
-    const unorderedListNesting = new Map();
-    let lastBlockQuotePrefix = null;
-    const tokens = filterByTypesCached(unorderedListTypes);
-    for (const token of tokens) {
-      const { endColumn, parent, startColumn, startLine, type } = token;
-      if (type === "blockQuotePrefix") {
-        lastBlockQuotePrefix = token;
-      } else if (type === "listUnordered") {
-        let nesting = 0;
-        /** @type {import("../helpers/micromark-helpers.cjs").Token | null} */
-        let current = token;
-        while (
-          // @ts-ignore
-          (current = getParentOfType(current, unorderedParentTypes))
-        ) {
-          if (current.type === "listUnordered") {
-            nesting++;
-            // eslint-disable-next-line no-continue
-            continue;
-          } else if (current.type === "listOrdered") {
-            nesting = -1;
-          }
-          break;
-        }
-        if (nesting >= 0) {
-          unorderedListNesting.set(token, nesting);
-        }
-      } else {
-        // listItemPrefix
-        const nesting = unorderedListNesting.get(parent);
-        if (nesting !== undefined) {
-          // listItemPrefix for listUnordered
-          const expectedIndent =
-            (startIndented ? startIndent : 0) + (nesting * indent);
-          const blockQuoteAdjustment =
-            (lastBlockQuotePrefix?.endLine === startLine) ?
-              (lastBlockQuotePrefix.endColumn - 1) :
-              0;
-          const actualIndent = startColumn - 1 - blockQuoteAdjustment;
-          const range = [ 1, endColumn - 1 ];
-          const fixInfo = {
-            "editColumn": startColumn - actualIndent,
-            "deleteCount": Math.max(actualIndent - expectedIndent, 0),
-            "insertText": "".padEnd(Math.max(expectedIndent - actualIndent, 0))
-          };
-          addErrorDetailIf(
-            onError,
-            startLine,
-            expectedIndent,
-            actualIndent,
-            undefined,
-            undefined,
-            range,
-            fixInfo
-          );
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 3841:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD009", "no-trailing-spaces" ],
-  "description": "Trailing spaces",
-  "tags": [ "whitespace" ],
-  "parser": "micromark",
-  "function": function MD009(params, onError) {
-    let brSpaces = params.config.br_spaces;
-    brSpaces = Number((brSpaces === undefined) ? 2 : brSpaces);
-    const listItemEmptyLines = !!params.config.list_item_empty_lines;
-    const strict = !!params.config.strict;
-    const codeBlockLineNumbers = new Set();
-    for (const codeBlock of filterByTypesCached([ "codeFenced" ])) {
-      addRangeToSet(codeBlockLineNumbers, codeBlock.startLine + 1, codeBlock.endLine - 1);
-    }
-    for (const codeBlock of filterByTypesCached([ "codeIndented" ])) {
-      addRangeToSet(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
-    }
-    const listItemLineNumbers = new Set();
-    if (listItemEmptyLines) {
-      for (const listBlock of filterByTypesCached([ "listOrdered", "listUnordered" ])) {
-        addRangeToSet(listItemLineNumbers, listBlock.startLine, listBlock.endLine);
-        let trailingIndent = true;
-        for (let i = listBlock.children.length - 1; i >= 0; i--) {
-          const child = listBlock.children[i];
-          switch (child.type) {
-            case "content":
-              trailingIndent = false;
-              break;
-            case "listItemIndent":
-              if (trailingIndent) {
-                listItemLineNumbers.delete(child.startLine);
-              }
-              break;
-            case "listItemPrefix":
-              trailingIndent = true;
-              break;
-            default:
-              break;
-          }
-        }
-      }
-    }
-    const paragraphLineNumbers = new Set();
-    const codeInlineLineNumbers = new Set();
-    if (strict) {
-      for (const paragraph of filterByTypesCached([ "paragraph" ])) {
-        addRangeToSet(paragraphLineNumbers, paragraph.startLine, paragraph.endLine - 1);
-      }
-      for (const codeText of filterByTypesCached([ "codeText" ])) {
-        addRangeToSet(codeInlineLineNumbers, codeText.startLine, codeText.endLine - 1);
-      }
-    }
-    const expected = (brSpaces < 2) ? 0 : brSpaces;
-    for (let lineIndex = 0; lineIndex < params.lines.length; lineIndex++) {
-      const line = params.lines[lineIndex];
-      const lineNumber = lineIndex + 1;
-      const trailingSpaces = line.length - line.trimEnd().length;
-      if (
-        trailingSpaces &&
-        !codeBlockLineNumbers.has(lineNumber) &&
-        !listItemLineNumbers.has(lineNumber) &&
-        (
-          (expected !== trailingSpaces) ||
-          (strict &&
-            (!paragraphLineNumbers.has(lineNumber) ||
-             codeInlineLineNumbers.has(lineNumber)))
-        )
-      ) {
-        const column = line.length - trailingSpaces + 1;
-        addError(
-          onError,
-          lineNumber,
-          "Expected: " + (expected === 0 ? "" : "0 or ") +
-            expected + "; Actual: " + trailingSpaces,
-          undefined,
-          [ column, trailingSpaces ],
-          {
-            "editColumn": column,
-            "deleteCount": trailingSpaces
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 7415:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, hasOverlap } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const tabRe = /\t+/g;
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD010", "no-hard-tabs" ],
-  "description": "Hard tabs",
-  "tags": [ "whitespace", "hard_tab" ],
-  "parser": "micromark",
-  "function": function MD010(params, onError) {
-    const codeBlocks = params.config.code_blocks;
-    const includeCode = (codeBlocks === undefined) ? true : !!codeBlocks;
-    const ignoreCodeLanguages = new Set(
-      (params.config.ignore_code_languages || [])
-        .map((language) => language.toLowerCase())
-    );
-    const spacesPerTab = params.config.spaces_per_tab;
-    const spaceMultiplier = (spacesPerTab === undefined) ?
-      1 :
-      Math.max(0, Number(spacesPerTab));
-    // eslint-disable-next-line jsdoc/valid-types
-    /** @type import("../helpers/micromark-helpers.cjs").TokenType[] */
-    const exclusionTypes = [];
-    if (includeCode) {
-      if (ignoreCodeLanguages.size > 0) {
-        exclusionTypes.push("codeFenced");
-      }
-    } else {
-      exclusionTypes.push("codeFenced", "codeIndented", "codeText");
-    }
-    const codeTokens = filterByTypesCached(exclusionTypes).filter((token) => {
-      if ((token.type === "codeFenced") && (ignoreCodeLanguages.size > 0)) {
-        const fenceInfos = getDescendantsByType(token, [ "codeFencedFence", "codeFencedFenceInfo" ]);
-        return fenceInfos.every((fenceInfo) => ignoreCodeLanguages.has(fenceInfo.text.toLowerCase()));
-      }
-      return true;
-    });
-    const codeRanges = codeTokens.map((token) => {
-      const { type, startLine, startColumn, endLine, endColumn } = token;
-      const codeFenced = (type === "codeFenced");
-      return {
-        "startLine": startLine + (codeFenced ? 1 : 0),
-        "startColumn": codeFenced ? 0 : startColumn,
-        "endLine": endLine - (codeFenced ? 1 : 0),
-        "endColumn": codeFenced ? Number.MAX_SAFE_INTEGER : endColumn
-      };
-    });
-    for (let lineIndex = 0; lineIndex < params.lines.length; lineIndex++) {
-      const line = params.lines[lineIndex];
-      let match = null;
-      while ((match = tabRe.exec(line)) !== null) {
-        const lineNumber = lineIndex + 1;
-        const column = match.index + 1;
-        const length = match[0].length;
-        /** @type {import("../helpers").FileRange} */
-        const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
-        if (!codeRanges.some((codeRange) => hasOverlap(codeRange, range))) {
-          addError(
-            onError,
-            lineNumber,
-            "Column: " + column,
-            undefined,
-            [ column, length ],
-            {
-              "editColumn": column,
-              "deleteCount": length,
-              "insertText": "".padEnd(length * spaceMultiplier)
-            }
-          );
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 16:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, hasOverlap } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const reversedLinkRe =
-  /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD011", "no-reversed-links" ],
-  "description": "Reversed link syntax",
-  "tags": [ "links" ],
-  "parser": "micromark",
-  "function": function MD011(params, onError) {
-    const codeBlockLineNumbers = new Set();
-    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
-      addRangeToSet(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
-    }
-    const codeTexts = filterByTypesCached([ "codeText" ]);
-    for (const [ lineIndex, line ] of params.lines.entries()) {
-      const lineNumber = lineIndex + 1;
-      if (!codeBlockLineNumbers.has(lineNumber)) {
-        let match = null;
-        while ((match = reversedLinkRe.exec(line)) !== null) {
-          const [ reversedLink, preChar, linkText, linkDestination ] = match;
-          if (
-            !linkText.endsWith("\\") &&
-            !linkDestination.endsWith("\\")
-          ) {
-            const column = match.index + preChar.length + 1;
-            const length = match[0].length - preChar.length;
-            /** @type {import("../helpers").FileRange} */
-            const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
-            if (!codeTexts.some((codeText) => hasOverlap(codeText, range))) {
-              addError(
-                onError,
-                lineNumber,
-                reversedLink.slice(preChar.length),
-                undefined,
-                [ column, length ],
-                {
-                  "editColumn": column,
-                  "deleteCount": length,
-                  "insertText": `[${linkText}](${linkDestination})`
-                }
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 905:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD012", "no-multiple-blanks" ],
-  "description": "Multiple consecutive blank lines",
-  "tags": [ "whitespace", "blank_lines" ],
-  "parser": "micromark",
-  "function": function MD012(params, onError) {
-    const maximum = Number(params.config.maximum || 1);
-    const { lines } = params;
-    const codeBlockLineNumbers = new Set();
-    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
-      addRangeToSet(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
-    }
-    let count = 0;
-    for (const [ lineIndex, line ] of lines.entries()) {
-      const inCode = codeBlockLineNumbers.has(lineIndex + 1);
-      count = (inCode || (line.trim().length > 0)) ? 0 : count + 1;
-      if (maximum < count) {
-        addErrorDetailIf(
-          onError,
-          lineIndex + 1,
-          maximum,
-          count,
-          undefined,
-          undefined,
-          undefined,
-          {
-            "deleteCount": -1
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 3690:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getReferenceLinkImageData } = __nccwpck_require__(5791);
-const { addRangeToSet, getDescendantsByType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const longLineRePrefix = "^.{";
-const longLineRePostfixRelaxed = "}.*\\s.*$";
-const longLineRePostfixStrict = "}.+$";
-const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD013", "line-length" ],
-  "description": "Line length",
-  "tags": [ "line_length" ],
-  "parser": "micromark",
-  "function": function MD013(params, onError) {
-    const lineLength = Number(params.config.line_length || 80);
-    const headingLineLength =
-      Number(params.config.heading_line_length || lineLength);
-    const codeLineLength =
-      Number(params.config.code_block_line_length || lineLength);
-    const strict = !!params.config.strict;
-    const stern = !!params.config.stern;
-    const longLineRePostfix =
-      (strict || stern) ? longLineRePostfixStrict : longLineRePostfixRelaxed;
-    const longLineRe =
-      new RegExp(longLineRePrefix + lineLength + longLineRePostfix);
-    const longHeadingLineRe =
-      new RegExp(longLineRePrefix + headingLineLength + longLineRePostfix);
-    const longCodeLineRe =
-      new RegExp(longLineRePrefix + codeLineLength + longLineRePostfix);
-    const codeBlocks = params.config.code_blocks;
-    const includeCodeBlocks = (codeBlocks === undefined) ? true : !!codeBlocks;
-    const tables = params.config.tables;
-    const includeTables = (tables === undefined) ? true : !!tables;
-    const headings = params.config.headings;
-    const includeHeadings = (headings === undefined) ? true : !!headings;
-    const headingLineNumbers = new Set();
-    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
-      addRangeToSet(headingLineNumbers, heading.startLine, heading.endLine);
-    }
-    const codeBlockLineNumbers = new Set();
-    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
-      addRangeToSet(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
-    }
-    const tableLineNumbers = new Set();
-    for (const table of filterByTypesCached([ "table" ])) {
-      addRangeToSet(tableLineNumbers, table.startLine, table.endLine);
-    }
-    const linkLineNumbers = new Set();
-    for (const link of filterByTypesCached([ "autolink", "image", "link", "literalAutolink" ])) {
-      addRangeToSet(linkLineNumbers, link.startLine, link.endLine);
-    }
-    const paragraphDataLineNumbers = new Set();
-    for (const paragraph of filterByTypesCached([ "paragraph" ])) {
-      for (const data of getDescendantsByType(paragraph, [ "data" ])) {
-        addRangeToSet(paragraphDataLineNumbers, data.startLine, data.endLine);
-      }
-    }
-    const linkOnlyLineNumbers = new Set();
-    for (const lineNumber of linkLineNumbers) {
-      if (!paragraphDataLineNumbers.has(lineNumber)) {
-        linkOnlyLineNumbers.add(lineNumber);
-      }
-    }
-    const definitionLineIndices = new Set(getReferenceLinkImageData().definitionLineIndices);
-    for (let lineIndex = 0; lineIndex < params.lines.length; lineIndex++) {
-      const line = params.lines[lineIndex];
-      const lineNumber = lineIndex + 1;
-      const isHeading = headingLineNumbers.has(lineNumber);
-      const inCode = codeBlockLineNumbers.has(lineNumber);
-      const inTable = tableLineNumbers.has(lineNumber);
-      const length = inCode ?
-        codeLineLength :
-        (isHeading ? headingLineLength : lineLength);
-      const lengthRe = inCode ?
-        longCodeLineRe :
-        (isHeading ? longHeadingLineRe : longLineRe);
-      if ((includeCodeBlocks || !inCode) &&
-          (includeTables || !inTable) &&
-          (includeHeadings || !isHeading) &&
-          !definitionLineIndices.has(lineIndex) &&
-          (strict ||
-           (!(stern && sternModeRe.test(line)) &&
-            !linkOnlyLineNumbers.has(lineNumber))) &&
-          lengthRe.test(line)) {
-        addErrorDetailIf(
-          onError,
-          lineNumber,
-          length,
-          line.length,
-          undefined,
-          undefined,
-          [ length + 1, line.length - length ]
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 7379:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const dollarCommandRe = /^(\s*)(\$\s+)/;
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD014", "commands-show-output" ],
-  "description": "Dollar signs used before commands without showing output",
-  "tags": [ "code" ],
-  "parser": "micromark",
-  "function": function MD014(params, onError) {
-    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
-      const codeFlowValues = codeBlock.children.filter((child) => child.type === "codeFlowValue");
-      const dollarMatches = codeFlowValues
-        .map((codeFlowValue) => ({
-          "result": codeFlowValue.text.match(dollarCommandRe),
-          "startColumn": codeFlowValue.startColumn,
-          "startLine": codeFlowValue.startLine,
-          "text": codeFlowValue.text
-        }))
-        .filter((dollarMatch) => dollarMatch.result);
-      if (dollarMatches.length === codeFlowValues.length) {
-        for (const dollarMatch of dollarMatches) {
-          // @ts-ignore
-          const column = dollarMatch.startColumn + dollarMatch.result[1].length;
-          // @ts-ignore
-          const length = dollarMatch.result[2].length;
-          addErrorContext(
-            onError,
-            dollarMatch.startLine,
-            dollarMatch.text,
-            undefined,
-            undefined,
-            [ column, length ],
-            {
-              "editColumn": column,
-              "deleteCount": length
-            }
-          );
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 1615:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD018", "no-missing-space-atx" ],
-  "description": "No space after hash on atx style heading",
-  "tags": [ "headings", "atx", "spaces" ],
-  "parser": "micromark",
-  "function": function MD018(params, onError) {
-    const { lines } = params;
-    const ignoreBlockLineNumbers = new Set();
-    for (const ignoreBlock of filterByTypesCached([ "codeFenced", "codeIndented", "htmlFlow" ])) {
-      addRangeToSet(ignoreBlockLineNumbers, ignoreBlock.startLine, ignoreBlock.endLine);
-    }
-    for (const [ lineIndex, line ] of lines.entries()) {
-      if (
-        !ignoreBlockLineNumbers.has(lineIndex + 1) &&
-        /^#+[^# \t]/.test(line) &&
-        !/#\s*$/.test(line) &&
-        !line.startsWith("#️⃣")
-      ) {
-        // @ts-ignore
-        const hashCount = /^#+/.exec(line)[0].length;
-        addErrorContext(
-          onError,
-          lineIndex + 1,
-          line.trim(),
-          undefined,
-          undefined,
-          [ 1, hashCount + 1 ],
-          {
-            "editColumn": hashCount + 1,
-            "insertText": " "
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 2231:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { getHeadingStyle } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-/**
- * Validate heading sequence and whitespace length at start or end.
- *
- * @param {import("./markdownlint").RuleOnError} onError Error-reporting callback.
- * @param {import("./markdownlint").MicromarkToken} heading ATX heading token.
- * @param {number} delta Direction to scan.
- * @returns {void}
- */
-function validateHeadingSpaces(onError, heading, delta) {
-  const { children, startLine, text } = heading;
-  let index = (delta > 0) ? 0 : (children.length - 1);
-  while (
-    children[index] &&
-    (children[index].type !== "atxHeadingSequence")
-  ) {
-    index += delta;
-  }
-  const headingSequence = children[index];
-  const whitespace = children[index + delta];
-  if (
-    (headingSequence?.type === "atxHeadingSequence") &&
-    (whitespace?.type === "whitespace") &&
-    (whitespace.text.length > 1)
-  ) {
-    const column = whitespace.startColumn + 1;
-    const length = whitespace.endColumn - column;
-    addErrorContext(
-      onError,
-      startLine,
-      text.trim(),
-      delta > 0,
-      delta < 0,
-      [ column, length ],
-      {
-        "editColumn": column,
-        "deleteCount": length
-      }
-    );
-  }
-}
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule[] */
-module.exports = [
-  {
-    "names": [ "MD019", "no-multiple-space-atx" ],
-    "description": "Multiple spaces after hash on atx style heading",
-    "tags": [ "headings", "atx", "spaces" ],
-    "parser": "micromark",
-    "function": function MD019(params, onError) {
-      const atxHeadings = filterByTypesCached([ "atxHeading" ])
-        .filter((heading) => getHeadingStyle(heading) === "atx");
-      for (const atxHeading of atxHeadings) {
-        validateHeadingSpaces(onError, atxHeading, 1);
-      }
-    }
-  },
-  {
-    "names": [ "MD021", "no-multiple-space-closed-atx" ],
-    "description": "Multiple spaces inside hashes on closed atx style heading",
-    "tags": [ "headings", "atx_closed", "spaces" ],
-    "parser": "micromark",
-    "function": function MD021(params, onError) {
-      const atxClosedHeadings = filterByTypesCached([ "atxHeading" ])
-        .filter((heading) => getHeadingStyle(heading) === "atx_closed");
-      for (const atxClosedHeading of atxClosedHeadings) {
-        validateHeadingSpaces(onError, atxClosedHeading, 1);
-        validateHeadingSpaces(onError, atxClosedHeading, -1);
-      }
-    }
-  }
-];
-
-
-/***/ }),
-
-/***/ 8680:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { addRangeToSet } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD020", "no-missing-space-closed-atx" ],
-  "description": "No space inside hashes on closed atx style heading",
-  "tags": [ "headings", "atx_closed", "spaces" ],
-  "parser": "micromark",
-  "function": function MD020(params, onError) {
-    const { lines } = params;
-    const ignoreBlockLineNumbers = new Set();
-    for (const ignoreBlock of filterByTypesCached([ "codeFenced", "codeIndented", "htmlFlow" ])) {
-      addRangeToSet(ignoreBlockLineNumbers, ignoreBlock.startLine, ignoreBlock.endLine);
-    }
-    for (const [ lineIndex, line ] of lines.entries()) {
-      if (!ignoreBlockLineNumbers.has(lineIndex + 1)) {
-        const match =
-          /^(#+)([ \t]*)([^# \t\\]|[^# \t][^#]*?[^# \t\\])([ \t]*)((?:\\#)?)(#+)(\s*)$/.exec(line);
-        if (match) {
-          const [
-            ,
-            leftHash,
-            { "length": leftSpaceLength },
-            content,
-            { "length": rightSpaceLength },
-            rightEscape,
-            rightHash,
-            { "length": trailSpaceLength }
-          ] = match;
-          const leftHashLength = leftHash.length;
-          const rightHashLength = rightHash.length;
-          const left = !leftSpaceLength;
-          const right = !rightSpaceLength || !!rightEscape;
-          const rightEscapeReplacement = rightEscape ? `${rightEscape} ` : "";
-          if (left || right) {
-            const range = left ?
-              [
-                1,
-                leftHashLength + 1
-              ] :
-              [
-                line.length - trailSpaceLength - rightHashLength,
-                rightHashLength + 1
-              ];
-            addErrorContext(
-              onError,
-              lineIndex + 1,
-              line.trim(),
-              left,
-              right,
-              range,
-              {
-                "editColumn": 1,
-                "deleteCount": line.length,
-                "insertText":
-                  `${leftHash} ${content} ${rightEscapeReplacement}${rightHash}`
-              }
-            );
-          }
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 5122:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf, isBlankLine } = __nccwpck_require__(8307);
-const { getBlockQuotePrefixText, getHeadingLevel } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const defaultLines = 1;
-
-const getLinesFunction = (linesParam) => {
-  if (Array.isArray(linesParam)) {
-    const linesArray = new Array(6).fill(defaultLines);
-    for (const [ index, value ] of [ ...linesParam.entries() ].slice(0, 6)) {
-      linesArray[index] = value;
-    }
-    return (heading) => linesArray[getHeadingLevel(heading) - 1];
-  }
-  // Coerce linesParam to a number
-  const lines = (linesParam === undefined) ? defaultLines : Number(linesParam);
-  return () => lines;
-};
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD022", "blanks-around-headings" ],
-  "description": "Headings should be surrounded by blank lines",
-  "tags": [ "headings", "blank_lines" ],
-  "parser": "micromark",
-  "function": function MD022(params, onError) {
-    const getLinesAbove = getLinesFunction(params.config.lines_above);
-    const getLinesBelow = getLinesFunction(params.config.lines_below);
-    const { lines } = params;
-    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
-    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
-      const { startLine, endLine } = heading;
-      const line = lines[startLine - 1].trim();
-
-      // Check lines above
-      const linesAbove = getLinesAbove(heading);
-      if (linesAbove >= 0) {
-        let actualAbove = 0;
-        for (
-          let i = 0;
-          (i < linesAbove) && isBlankLine(lines[startLine - 2 - i]);
-          i++
-        ) {
-          actualAbove++;
-        }
-        addErrorDetailIf(
-          onError,
-          startLine,
-          linesAbove,
-          actualAbove,
-          "Above",
-          line,
-          undefined,
-          {
-            "insertText": getBlockQuotePrefixText(
-              blockQuotePrefixes,
-              startLine - 1,
-              linesAbove - actualAbove
-            )
-          }
-        );
-      }
-
-      // Check lines below
-      const linesBelow = getLinesBelow(heading);
-      if (linesBelow >= 0) {
-        let actualBelow = 0;
-        for (
-          let i = 0;
-          (i < linesBelow) && isBlankLine(lines[endLine + i]);
-          i++
-        ) {
-          actualBelow++;
-        }
-        addErrorDetailIf(
-          onError,
-          startLine,
-          linesBelow,
-          actualBelow,
-          "Below",
-          line,
-          undefined,
-          {
-            "lineNumber": endLine + 1,
-            "insertText": getBlockQuotePrefixText(
-              blockQuotePrefixes,
-              endLine + 1,
-              linesBelow - actualBelow
-            )
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 3009:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD023", "heading-start-left" ],
-  "description": "Headings must start at the beginning of the line",
-  "tags": [ "headings", "spaces" ],
-  "parser": "micromark",
-  "function": function MD023(params, onError) {
-    const headings = filterByTypesCached([ "atxHeading", "linePrefix", "setextHeading" ]);
-    for (let i = 0; i < headings.length - 1; i++) {
-      if (
-        (headings[i].type === "linePrefix") &&
-        (headings[i + 1].type !== "linePrefix") &&
-        (headings[i].startLine === headings[i + 1].startLine)
-      ) {
-        const { endColumn, startColumn, startLine } = headings[i];
-        const length = endColumn - startColumn;
-        addErrorContext(
-          onError,
-          startLine,
-          params.lines[startLine - 1],
-          true,
-          false,
-          [ startColumn, length ],
-          {
-            "editColumn": startColumn,
-            "deleteCount": length
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 2884:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { getHeadingLevel, getHeadingText } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD024", "no-duplicate-heading" ],
-  "description": "Multiple headings with the same content",
-  "tags": [ "headings" ],
-  "parser": "micromark",
-  "function": function MD024(params, onError) {
-    const siblingsOnly = !!params.config.siblings_only || false;
-    const knownContents = [ null, [] ];
-    let lastLevel = 1;
-    let knownContent = knownContents[lastLevel];
-    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
-      const headingText = getHeadingText(heading);
-      if (siblingsOnly) {
-        const newLevel = getHeadingLevel(heading);
-        while (lastLevel < newLevel) {
-          lastLevel++;
-          knownContents[lastLevel] = [];
-        }
-        while (lastLevel > newLevel) {
-          knownContents[lastLevel] = [];
-          lastLevel--;
-        }
-        knownContent = knownContents[newLevel];
-      }
-      // @ts-ignore
-      if (knownContent.includes(headingText)) {
-        addErrorContext(
-          onError,
-          heading.startLine,
-          headingText.trim()
-        );
-      } else {
-        // @ts-ignore
-        knownContent.push(headingText);
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 8555:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext, frontMatterHasTitle } = __nccwpck_require__(8307);
-const { getHeadingLevel, getHeadingText } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD025", "single-title", "single-h1" ],
-  "description": "Multiple top-level headings in the same document",
-  "tags": [ "headings" ],
-  "parser": "micromark",
-  "function": function MD025(params, onError) {
-    const level = Number(params.config.level || 1);
-    const foundFrontMatterTitle =
-      frontMatterHasTitle(
-        params.frontMatterLines,
-        params.config.front_matter_title
-      );
-    let hasTopLevelHeading = false;
-    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
-      const headingLevel = getHeadingLevel(heading);
-      if (headingLevel === level) {
-        if (hasTopLevelHeading || foundFrontMatterTitle) {
-          const headingText = getHeadingText(heading);
-          addErrorContext(
-            onError,
-            heading.startLine,
-            headingText
-          );
-        } else if (heading.startLine === 1) {
-          hasTopLevelHeading = true;
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 1454:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, allPunctuationNoQuestion, endOfLineGemojiCodeRe,
-  endOfLineHtmlEntityRe, escapeForRegExp } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD026", "no-trailing-punctuation" ],
-  "description": "Trailing punctuation in heading",
-  "tags": [ "headings" ],
-  "parser": "micromark",
-  "function": function MD026(params, onError) {
-    let punctuation = params.config.punctuation;
-    punctuation = String(
-      (punctuation === undefined) ? allPunctuationNoQuestion : punctuation
-    );
-    const trailingPunctuationRe =
-      new RegExp("\\s*[" + escapeForRegExp(punctuation) + "]+$");
-    const headings = filterByTypesCached([ "atxHeadingText", "setextHeadingText" ]);
-    for (const heading of headings) {
-      const { endColumn, endLine, text } = heading;
-      const match = trailingPunctuationRe.exec(text);
-      if (
-        match &&
-        !endOfLineHtmlEntityRe.test(text) &&
-        !endOfLineGemojiCodeRe.test(text)
-      ) {
-        const fullMatch = match[0];
-        const length = fullMatch.length;
-        const column = endColumn - length;
-        addError(
-          onError,
-          endLine,
-          `Punctuation: '${fullMatch}'`,
-          undefined,
-          [ column, length ],
-          {
-            "editColumn": column,
-            "deleteCount": length
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 765:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD027", "no-multiple-space-blockquote" ],
-  "description": "Multiple spaces after blockquote symbol",
-  "tags": [ "blockquote", "whitespace", "indentation" ],
-  "parser": "micromark",
-  "function": function MD027(params, onError) {
-    for (const token of filterByTypesCached([ "linePrefix" ])) {
-      const siblings = token.parent?.children || params.parsers.micromark.tokens;
-      if (siblings[siblings.indexOf(token) - 1]?.type === "blockQuotePrefix") {
-        const { startColumn, startLine, text } = token;
-        const { length } = text;
-        const line = params.lines[startLine - 1];
-        addErrorContext(
-          onError,
-          startLine,
-          line,
-          undefined,
-          undefined,
-          [ startColumn, length ],
-          {
-            "editColumn": startColumn,
-            "deleteCount": length
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 4064:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const ignoreTypes = new Set([ "lineEnding", "listItemIndent", "linePrefix" ]);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD028", "no-blanks-blockquote" ],
-  "description": "Blank line inside blockquote",
-  "tags": [ "blockquote", "whitespace" ],
-  "parser": "micromark",
-  "function": function MD028(params, onError) {
-    for (const token of filterByTypesCached([ "blockQuote" ])) {
-      const errorLineNumbers = [];
-      const siblings = token.parent?.children || params.parsers.micromark.tokens;
-      for (let i = siblings.indexOf(token) + 1; i < siblings.length; i++) {
-        const sibling = siblings[i];
-        const { startLine, type } = sibling;
-        if (type === "lineEndingBlank") {
-          // Possible blank between blockquotes
-          errorLineNumbers.push(startLine);
-        } else if (ignoreTypes.has(type)) {
-          // Ignore invisible formatting
-        } else if (type === "blockQuote") {
-          // Blockquote followed by blockquote
-          for (const lineNumber of errorLineNumbers) {
-            addError(onError, lineNumber);
-          }
-          break;
-        } else {
-          // Blockquote not followed by blockquote
-          break;
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 935:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const listStyleExamples = {
-  "one": "1/1/1",
-  "ordered": "1/2/3",
-  "zero": "0/0/0"
-};
-
-/**
- * Gets the value of an ordered list item prefix token.
- *
- * @param {import("../helpers/micromark-helpers.cjs").Token} listItemPrefix List item prefix token.
- * @returns {number} List item value.
- */
-function getOrderedListItemValue(listItemPrefix) {
-  return Number(getDescendantsByType(listItemPrefix, [ "listItemValue" ])[0].text);
-}
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD029", "ol-prefix" ],
-  "description": "Ordered list item prefix",
-  "tags": [ "ol" ],
-  "parser": "micromark",
-  "function": function MD029(params, onError) {
-    const style = String(params.config.style || "one_or_ordered");
-    for (const listOrdered of filterByTypesCached([ "listOrdered" ])) {
-      const listItemPrefixes = getDescendantsByType(listOrdered, [ "listItemPrefix" ]);
-      let expected = 1;
-      let incrementing = false;
-      // Check for incrementing number pattern 1/2/3 or 0/1/2
-      if (listItemPrefixes.length >= 2) {
-        const firstValue = getOrderedListItemValue(listItemPrefixes[0]);
-        const secondValue = getOrderedListItemValue(listItemPrefixes[1]);
-        if ((secondValue !== 1) || (firstValue === 0)) {
-          incrementing = true;
-          if (firstValue === 0) {
-            expected = 0;
-          }
-        }
-      }
-      // Determine effective style
-      let listStyle = style;
-      if (listStyle === "one_or_ordered") {
-        listStyle = incrementing ? "ordered" : "one";
-      } else if (listStyle === "zero") {
-        expected = 0;
-      } else if (listStyle === "one") {
-        expected = 1;
-      }
-      // Validate each list item marker
-      for (const listItemPrefix of listItemPrefixes) {
-        const actual = getOrderedListItemValue(listItemPrefix);
-        addErrorDetailIf(
-          onError,
-          listItemPrefix.startLine,
-          expected,
-          actual,
-          "Style: " + listStyleExamples[listStyle],
-          undefined,
-          [ listItemPrefix.startColumn, listItemPrefix.endColumn - listItemPrefix.startColumn ]
-        );
-        if (listStyle === "ordered") {
-          expected++;
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 2221:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD030", "list-marker-space" ],
-  "description": "Spaces after list markers",
-  "tags": [ "ol", "ul", "whitespace" ],
-  "parser": "micromark",
-  "function": function MD030(params, onError) {
-    const ulSingle = Number(params.config.ul_single || 1);
-    const olSingle = Number(params.config.ol_single || 1);
-    const ulMulti = Number(params.config.ul_multi || 1);
-    const olMulti = Number(params.config.ol_multi || 1);
-    for (const list of filterByTypesCached([ "listOrdered", "listUnordered" ])) {
-      const ordered = (list.type === "listOrdered");
-      const listItemPrefixes =
-        list.children.filter((token) => (token.type === "listItemPrefix"));
-      const allSingleLine =
-        (list.endLine - list.startLine + 1) === listItemPrefixes.length;
-      const expectedSpaces = ordered ?
-        (allSingleLine ? olSingle : olMulti) :
-        (allSingleLine ? ulSingle : ulMulti);
-      for (const listItemPrefix of listItemPrefixes) {
-        const range = [
-          listItemPrefix.startColumn,
-          listItemPrefix.endColumn - listItemPrefix.startColumn
-        ];
-        const listItemPrefixWhitespaces = listItemPrefix.children.filter(
-          (token) => (token.type === "listItemPrefixWhitespace")
-        );
-        for (const listItemPrefixWhitespace of listItemPrefixWhitespaces) {
-          const { endColumn, startColumn, startLine } =
-            listItemPrefixWhitespace;
-          const actualSpaces = endColumn - startColumn;
-          const fixInfo = {
-            "editColumn": startColumn,
-            "deleteCount": actualSpaces,
-            "insertText": "".padEnd(expectedSpaces)
-          };
-          addErrorDetailIf(
-            onError,
-            startLine,
-            expectedSpaces,
-            actualSpaces,
-            undefined,
-            undefined,
-            range,
-            fixInfo
-          );
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 5950:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext, isBlankLine } = __nccwpck_require__(8307);
-const { getParentOfType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const codeFencePrefixRe = /^(.*?)[`~]/;
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @typedef {readonly string[]} ReadonlyStringArray */
-
-/**
- * Adds an error for the top or bottom of a code fence.
- *
- * @param {import("./markdownlint").RuleOnError} onError Error-reporting callback.
- * @param {ReadonlyStringArray} lines Lines of Markdown content.
- * @param {number} lineNumber Line number.
- * @param {boolean} top True iff top fence.
- * @returns {void}
- */
-function addError(onError, lines, lineNumber, top) {
-  const line = lines[lineNumber - 1];
-  const [ , prefix ] = line.match(codeFencePrefixRe) || [];
-  const fixInfo = (prefix === undefined) ?
-    null :
-    {
-      "lineNumber": lineNumber + (top ? 0 : 1),
-      "insertText": `${prefix.replace(/[^>]/g, " ").trim()}\n`
-    };
-  addErrorContext(
-    onError,
-    lineNumber,
-    line.trim(),
-    undefined,
-    undefined,
-    undefined,
-    fixInfo
-  );
-}
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD031", "blanks-around-fences" ],
-  "description": "Fenced code blocks should be surrounded by blank lines",
-  "tags": [ "code", "blank_lines" ],
-  "parser": "micromark",
-  "function": function MD031(params, onError) {
-    const listItems = params.config.list_items;
-    const includeListItems = (listItems === undefined) ? true : !!listItems;
-    const { lines } = params;
-    for (const codeBlock of filterByTypesCached([ "codeFenced" ])) {
-      if (includeListItems || !(getParentOfType(codeBlock, [ "listOrdered", "listUnordered" ]))) {
-        if (!isBlankLine(lines[codeBlock.startLine - 2])) {
-          addError(onError, lines, codeBlock.startLine, true);
-        }
-        if (!isBlankLine(lines[codeBlock.endLine]) && !isBlankLine(lines[codeBlock.endLine - 1])) {
-          addError(onError, lines, codeBlock.endLine, false);
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 8315:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext, isBlankLine } = __nccwpck_require__(8307);
-const { filterByPredicate, getBlockQuotePrefixText, nonContentTokens } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const isList = (token) => (
-  (token.type === "listOrdered") || (token.type === "listUnordered")
-);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD032", "blanks-around-lists" ],
-  "description": "Lists should be surrounded by blank lines",
-  "tags": [ "bullet", "ul", "ol", "blank_lines" ],
-  "parser": "micromark",
-  "function": function MD032(params, onError) {
-    const { lines, parsers } = params;
-    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
-
-    // For every top-level list...
-    const topLevelLists = filterByPredicate(
-      parsers.micromark.tokens,
-      isList,
-      (token) => (
-        (isList(token) || (token.type === "htmlFlow")) ? [] : token.children
-      )
-    );
-    for (const list of topLevelLists) {
-
-      // Look for a blank line above the list
-      const firstLineNumber = list.startLine;
-      if (!isBlankLine(lines[firstLineNumber - 2])) {
-        addErrorContext(
-          onError,
-          firstLineNumber,
-          lines[firstLineNumber - 1].trim(),
-          undefined,
-          undefined,
-          undefined,
-          {
-            "insertText": getBlockQuotePrefixText(blockQuotePrefixes, firstLineNumber)
-          }
-        );
-      }
-
-      // Find the "visual" end of the list
-      let endLine = list.endLine;
-      const flattenedChildren = filterByPredicate(list.children);
-      for (const child of flattenedChildren.reverse()) {
-        if (!nonContentTokens.has(child.type)) {
-          endLine = child.endLine;
-          break;
-        }
-      }
-
-      // Look for a blank line below the list
-      const lastLineNumber = endLine;
-      if (!isBlankLine(lines[lastLineNumber])) {
-        addErrorContext(
-          onError,
-          lastLineNumber,
-          lines[lastLineNumber - 1].trim(),
-          undefined,
-          undefined,
-          undefined,
-          {
-            "lineNumber": lastLineNumber + 1,
-            "insertText": getBlockQuotePrefixText(blockQuotePrefixes, lastLineNumber)
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 4020:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, nextLinesRe } = __nccwpck_require__(8307);
-const { getHtmlTagInfo } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD033", "no-inline-html" ],
-  "description": "Inline HTML",
-  "tags": [ "html" ],
-  "parser": "micromark",
-  "function": function MD033(params, onError) {
-    let allowedElements = params.config.allowed_elements;
-    allowedElements = Array.isArray(allowedElements) ? allowedElements : [];
-    allowedElements = allowedElements.map((element) => element.toLowerCase());
-    for (const token of filterByTypesCached([ "htmlText" ], true)) {
-      const htmlTagInfo = getHtmlTagInfo(token);
-      if (
-        htmlTagInfo &&
-        !htmlTagInfo.close &&
-        !allowedElements.includes(htmlTagInfo.name.toLowerCase())
-      ) {
-        const range = [
-          token.startColumn,
-          token.text.replace(nextLinesRe, "").length
-        ];
-        addError(
-          onError,
-          token.startLine,
-          "Element: " + htmlTagInfo.name,
-          undefined,
-          range
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 9089:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { filterByPredicate, getHtmlTagInfo, inHtmlFlow } = __nccwpck_require__(1670);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD034", "no-bare-urls" ],
-  "description": "Bare URL used",
-  "tags": [ "links", "url" ],
-  "parser": "micromark",
-  "function": function MD034(params, onError) {
-    const literalAutolinks = (tokens) => (
-      filterByPredicate(
-        tokens,
-        (token) => {
-          if ((token.type === "literalAutolink") && !inHtmlFlow(token)) {
-            // Detect and ignore https://github.com/micromark/micromark/issues/164
-            const siblings = token.parent?.children;
-            const index = siblings?.indexOf(token);
-            // @ts-ignore
-            const prev = siblings?.at(index - 1);
-            // @ts-ignore
-            const next = siblings?.at(index + 1);
-            return !(
-              prev &&
-              next &&
-              (prev.type === "data") &&
-              (next.type === "data") &&
-              prev.text.endsWith("<") &&
-              next.text.startsWith(">")
-            );
-          }
-          return false;
-        },
-        (token) => {
-          // Ignore content of inline HTML tags
-          const { children } = token;
-          const result = [];
-          for (let i = 0; i < children.length; i++) {
-            const current = children[i];
-            const openTagInfo = getHtmlTagInfo(current);
-            if (openTagInfo && !openTagInfo.close) {
-              let count = 1;
-              for (let j = i + 1; j < children.length; j++) {
-                const candidate = children[j];
-                const closeTagInfo = getHtmlTagInfo(candidate);
-                if (closeTagInfo && (openTagInfo.name === closeTagInfo.name)) {
-                  if (closeTagInfo.close) {
-                    count--;
-                    if (count === 0) {
-                      i = j;
-                      break;
-                    }
-                  } else {
-                    count++;
-                  }
-                }
-              }
-            } else {
-              result.push(current);
-            }
-          }
-          return result;
-        }
-      )
-    );
-    for (const token of literalAutolinks(params.parsers.micromark.tokens)) {
-      const range = [
-        token.startColumn,
-        token.endColumn - token.startColumn
-      ];
-      const fixInfo = {
-        "editColumn": range[0],
-        "deleteCount": range[1],
-        "insertText": `<${token.text}>`
-      };
-      addErrorContext(
-        onError,
-        token.startLine,
-        token.text,
-        undefined,
-        undefined,
-        range,
-        fixInfo
-      );
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 1458:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD035", "hr-style" ],
-  "description": "Horizontal rule style",
-  "tags": [ "hr" ],
-  "parser": "micromark",
-  "function": function MD035(params, onError) {
-    let style = String(params.config.style || "consistent").trim();
-    const thematicBreaks = filterByTypesCached([ "thematicBreak" ]);
-    for (const token of thematicBreaks) {
-      const { startLine, text } = token;
-      if (style === "consistent") {
-        style = text;
-      }
-      addErrorDetailIf(onError, startLine, style, text);
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 8255:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext, allPunctuation } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-/** @typedef {import("../helpers/micromark-helpers.cjs").TokenType} TokenType */
-/** @type {TokenType[][]} */
-const emphasisTypes = [
-  [ "emphasis", "emphasisText" ],
-  [ "strong", "strongText" ]
-];
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD036", "no-emphasis-as-heading" ],
-  "description": "Emphasis used instead of a heading",
-  "tags": [ "headings", "emphasis" ],
-  "parser": "micromark",
-  "function": function MD036(params, onError) {
-    let punctuation = params.config.punctuation;
-    punctuation = String((punctuation === undefined) ? allPunctuation : punctuation);
-    const punctuationRe = new RegExp("[" + punctuation + "]$");
-    const paragraphTokens =
-      filterByTypesCached([ "paragraph" ])
-        .filter((token) =>
-          (token.parent?.type === "content") && !token.parent?.parent && (token.children.length === 1)
-        );
-    for (const emphasisType of emphasisTypes) {
-      const textTokens = getDescendantsByType(paragraphTokens, emphasisType);
-      for (const textToken of textTokens) {
-        if (
-          (textToken.children.length === 1) &&
-          (textToken.children[0].type === "data") &&
-          !punctuationRe.test(textToken.text)
-        ) {
-          addErrorContext(onError, textToken.startLine, textToken.text);
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 6168:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError } = __nccwpck_require__(8307);
-const { filterByPredicate, inHtmlFlow } = __nccwpck_require__(1670);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD037", "no-space-in-emphasis" ],
-  "description": "Spaces inside emphasis markers",
-  "tags": [ "whitespace", "emphasis" ],
-  "parser": "micromark",
-  "function": function MD037(params, onError) {
-
-    // Initialize variables
-    const { lines, parsers } = params;
-    const emphasisTokensByMarker = new Map();
-    for (const marker of [ "_", "__", "___", "*", "**", "***" ]) {
-      emphasisTokensByMarker.set(marker, []);
-    }
-    const tokens = filterByPredicate(
-      parsers.micromark.tokens,
-      (token) => token.children.some((child) => child.type === "data")
-    );
-    for (const token of tokens) {
-
-      // Build lists of bare tokens for each emphasis marker type
-      for (const emphasisTokens of emphasisTokensByMarker.values()) {
-        emphasisTokens.length = 0;
-      }
-      for (const child of token.children) {
-        const { text, type } = child;
-        if ((type === "data") && (text.length <= 3)) {
-          const emphasisTokens = emphasisTokensByMarker.get(text);
-          if (emphasisTokens && !inHtmlFlow(child)) {
-            emphasisTokens.push(child);
-          }
-        }
-      }
-
-      // Process bare tokens for each emphasis marker type
-      for (const entry of emphasisTokensByMarker.entries()) {
-        const [ marker, emphasisTokens ] = entry;
-        for (let i = 0; i + 1 < emphasisTokens.length; i += 2) {
-
-          // Process start token of start/end pair
-          const startToken = emphasisTokens[i];
-          const startLine = lines[startToken.startLine - 1];
-          const startSlice = startLine.slice(startToken.endColumn - 1);
-          const startMatch = startSlice.match(/^\s+\S/);
-          if (startMatch) {
-            const [ startSpaceCharacter ] = startMatch;
-            const startContext = `${marker}${startSpaceCharacter}`;
-            addError(
-              onError,
-              startToken.startLine,
-              undefined,
-              startContext,
-              [ startToken.startColumn, startContext.length ],
-              {
-                "editColumn": startToken.endColumn,
-                "deleteCount": startSpaceCharacter.length - 1
-              }
-            );
-          }
-
-          // Process end token of start/end pair
-          const endToken = emphasisTokens[i + 1];
-          const endLine = lines[endToken.startLine - 1];
-          const endSlice = endLine.slice(0, endToken.startColumn - 1);
-          const endMatch = endSlice.match(/\S\s+$/);
-          if (endMatch) {
-            const [ endSpaceCharacter ] = endMatch;
-            const endContext = `${endSpaceCharacter}${marker}`;
-            addError(
-              onError,
-              endToken.startLine,
-              undefined,
-              endContext,
-              [ endToken.endColumn - endContext.length, endContext.length ],
-              {
-                "editColumn":
-                  endToken.startColumn - (endSpaceCharacter.length - 1),
-                "deleteCount": endSpaceCharacter.length - 1
-              }
-            );
-          }
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 2821:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const leftSpaceRe = /^\s(?:[^`]|$)/;
-const rightSpaceRe = /[^`]\s$/;
-const trimCodeText = (text, start, end) => {
-  text = text.replace(/^\s+$/, "");
-  if (start) {
-    text = text.replace(/^\s+?(\s`|\S)/, "$1");
-  }
-  if (end) {
-    text = text.replace(/(`\s|\S)\s+$/, "$1");
-  }
-  return text;
-};
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD038", "no-space-in-code" ],
-  "description": "Spaces inside code span elements",
-  "tags": [ "whitespace", "code" ],
-  "parser": "micromark",
-  "function": function MD038(params, onError) {
-    const codeTexts = filterByTypesCached([ "codeText" ]);
-    for (const codeText of codeTexts) {
-      const sequences = getDescendantsByType(codeText, [ "codeTextSequence" ]);
-      const startSequence = sequences[0];
-      const endSequence = sequences[sequences.length - 1];
-      const datas = getDescendantsByType(codeText, [ "codeTextData" ]);
-      const startData = datas[0];
-      const endData = datas[datas.length - 1];
-      if (startSequence && endSequence && startData && endData) {
-        const spaceLeft = leftSpaceRe.test(startData.text);
-        const spaceRight = rightSpaceRe.test(endData.text);
-        if (spaceLeft || spaceRight) {
-          let lineNumber = startSequence.startLine;
-          let range = undefined;
-          let fixInfo = undefined;
-          if (startSequence.startLine === endSequence.endLine) {
-            range = [
-              startSequence.startColumn,
-              endSequence.endColumn - startSequence.startColumn
-            ];
-            fixInfo = {
-              "editColumn": startSequence.endColumn,
-              "deleteCount": endSequence.startColumn - startSequence.endColumn,
-              "insertText": trimCodeText(startData.text, true, true)
-            };
-          } else if (spaceLeft && (startSequence.endLine === startData.startLine)) {
-            range = [
-              startSequence.startColumn,
-              startData.endColumn - startSequence.startColumn
-            ];
-            fixInfo = {
-              "editColumn": startSequence.endColumn,
-              "deleteCount": startData.endColumn - startData.startColumn,
-              "insertText": trimCodeText(startData.text, true, false)
-            };
-          } else if (spaceRight && (endData.text.trim().length > 0)) {
-            lineNumber = endSequence.endLine;
-            range = [
-              endData.startColumn,
-              endSequence.endColumn - endData.startColumn
-            ];
-            fixInfo = {
-              "editColumn": endData.startColumn,
-              "deleteCount": endData.endColumn - endData.startColumn,
-              "insertText": trimCodeText(endData.text, false, true)
-            };
-          }
-          if (range) {
-            const context = params
-              .lines[lineNumber - 1]
-              .substring(range[0] - 1, range[0] - 1 + range[1]);
-            addErrorContext(
-              onError,
-              lineNumber,
-              context,
-              spaceLeft,
-              spaceRight,
-              range,
-              fixInfo
-            );
-          }
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 3862:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { getReferenceLinkImageData, filterByTypesCached } = __nccwpck_require__(5791);
-
-/**
- * Adds an error for a label space issue.
- *
- * @param {import("./markdownlint").RuleOnError} onError Error-reporting callback.
- * @param {import("../helpers/micromark-helpers.cjs").Token} label Label token.
- * @param {import("../helpers/micromark-helpers.cjs").Token} labelText LabelText token.
- * @param {boolean} isStart True iff error is at the start of the link.
- */
-function addLabelSpaceError(onError, label, labelText, isStart) {
-  const match = labelText.text.match(isStart ? /^[^\S\r\n]+/ : /[^\S\r\n]+$/);
-  const range = match ?
-    [
-      (isStart ? (labelText.startColumn) : (labelText.endColumn - match[0].length)),
-      match[0].length
-    ] :
-    undefined;
-  addErrorContext(
-    onError,
-    isStart ? (labelText.startLine + (match ? 0 : 1)) : (labelText.endLine - (match ? 0 : 1)),
-    label.text.replace(/\s+/g, " "),
-    isStart,
-    !isStart,
-    range,
-    range ?
-      {
-        "editColumn": range[0],
-        "deleteCount": range[1]
-      } :
-      undefined
-  );
-}
-
-/**
- * Determines if a link is a valid link (and not a fake shortcut link due to parser tricks).
- *
- * @param {import("../helpers/micromark-helpers.cjs").Token} label Label token.
- * @param {import("../helpers/micromark-helpers.cjs").Token} labelText LabelText token.
- * @param {Map<string, any>} definitions Map of link definitions.
- * @returns {boolean} True iff the link is valid.
- */
-function validLink(label, labelText, definitions) {
-  return (label.parent?.children.length !== 1) || definitions.has(labelText.text.trim());
-}
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD039", "no-space-in-links" ],
-  "description": "Spaces inside link text",
-  "tags": [ "whitespace", "links" ],
-  "parser": "micromark",
-  "function": function MD039(params, onError) {
-    const { definitions } = getReferenceLinkImageData();
-    const labels = filterByTypesCached([ "label" ])
-      .filter((label) => label.parent?.type === "link");
-    for (const label of labels) {
-      const labelTexts = label.children.filter((child) => child.type === "labelText");
-      for (const labelText of labelTexts) {
-        if (
-          (labelText.text.trimStart().length !== labelText.text.length) &&
-          validLink(label, labelText, definitions)
-        ) {
-          addLabelSpaceError(onError, label, labelText, true);
-        }
-        if (
-          (labelText.text.trimEnd().length !== labelText.text.length) &&
-          validLink(label, labelText, definitions)
-        ) {
-          addLabelSpaceError(onError, label, labelText, false);
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 878:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, addErrorContext } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD040", "fenced-code-language" ],
-  "description": "Fenced code blocks should have a language specified",
-  "tags": [ "code", "language" ],
-  "parser": "micromark",
-  "function": function MD040(params, onError) {
-    let allowed = params.config.allowed_languages;
-    allowed = Array.isArray(allowed) ? allowed : [];
-    const languageOnly = !!params.config.language_only;
-    const fencedCodes = filterByTypesCached([ "codeFenced" ]);
-    for (const fencedCode of fencedCodes) {
-      const openingFence = getDescendantsByType(fencedCode, [ "codeFencedFence" ])[0];
-      const { startLine, text } = openingFence;
-      const info = getDescendantsByType(openingFence, [ "codeFencedFenceInfo" ])[0]?.text;
-      if (!info) {
-        addErrorContext(onError, startLine, text);
-      } else if ((allowed.length > 0) && !allowed.includes(info)) {
-        addError(onError, startLine, `"${info}" is not allowed`);
-      }
-      if (languageOnly && getDescendantsByType(openingFence, [ "codeFencedFenceMeta" ]).length > 0) {
-        addError(onError, startLine, `Info string contains more than language: "${text}"`);
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 797:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext, frontMatterHasTitle } = __nccwpck_require__(8307);
-const { filterByTypes, getHeadingLevel, getHtmlTagInfo, isHtmlFlowComment, nonContentTokens } =
-  __nccwpck_require__(1670);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD041", "first-line-heading", "first-line-h1" ],
-  "description": "First line in a file should be a top-level heading",
-  "tags": [ "headings" ],
-  "parser": "micromark",
-  "function": function MD041(params, onError) {
-    const level = Number(params.config.level || 1);
-    if (!frontMatterHasTitle(params.frontMatterLines, params.config.front_matter_title)) {
-      params.parsers.micromark.tokens
-        .filter((token) => !nonContentTokens.has(token.type) && !isHtmlFlowComment(token))
-        .every((token) => {
-          let isError = true;
-          if ((token.type === "atxHeading") || (token.type === "setextHeading")) {
-            isError = (getHeadingLevel(token) !== level);
-          } else if (token.type === "htmlFlow") {
-            const htmlTexts = filterByTypes(token.children, [ "htmlText" ], true);
-            const tagInfo = (htmlTexts.length > 0) && getHtmlTagInfo(htmlTexts[0]);
-            isError = !tagInfo || (tagInfo.name.toLowerCase() !== `h${level}`);
-          }
-          if (isError) {
-            addErrorContext(onError, token.startLine, params.lines[token.startLine - 1]);
-          }
-          return false;
-        });
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 2676:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(1670);
-const { getReferenceLinkImageData, filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD042", "no-empty-links" ],
-  "description": "No empty links",
-  "tags": [ "links" ],
-  "parser": "micromark",
-  "function": function MD042(params, onError) {
-    const { definitions } = getReferenceLinkImageData();
-    const isReferenceDefinitionHash = (token) => {
-      const definition = definitions.get(token.text.trim());
-      return (definition && (definition[1] === "#"));
-    };
-    const links = filterByTypesCached([ "link" ]);
-    for (const link of links) {
-      const labelText = getDescendantsByType(link, [ "label", "labelText" ]);
-      const reference = getDescendantsByType(link, [ "reference" ]);
-      const resource = getDescendantsByType(link, [ "resource" ]);
-      const referenceString = getDescendantsByType(reference, [ "referenceString" ]);
-      const resourceDestinationString = getDescendantsByType(resource, [ "resourceDestination", [ "resourceDestinationLiteral", "resourceDestinationRaw" ], "resourceDestinationString" ]);
-      const hasLabelText = labelText.length > 0;
-      const hasReference = reference.length > 0;
-      const hasResource = resource.length > 0;
-      const hasReferenceString = referenceString.length > 0;
-      const hasResourceDestinationString = resourceDestinationString.length > 0;
-      let error = false;
-      if (
-        hasLabelText &&
-        ((!hasReference && !hasResource) || (hasReference && !hasReferenceString))
-      ) {
-        error = isReferenceDefinitionHash(labelText[0]);
-      } else if (hasReferenceString && !hasResourceDestinationString) {
-        error = isReferenceDefinitionHash(referenceString[0]);
-      } else if (!hasReferenceString && hasResourceDestinationString) {
-        error = (resourceDestinationString[0].text.trim() === "#");
-      } else if (!hasReferenceString && !hasResourceDestinationString) {
-        error = true;
-      }
-      if (error) {
-        addErrorContext(
-          onError,
-          link.startLine,
-          link.text,
-          undefined,
-          undefined,
-          [ link.startColumn, link.endColumn - link.startColumn ]
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 4584:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext, addErrorDetailIf } = __nccwpck_require__(8307);
-const { getHeadingLevel, getHeadingText } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD043", "required-headings" ],
-  "description": "Required heading structure",
-  "tags": [ "headings" ],
-  "parser": "micromark",
-  "function": function MD043(params, onError) {
-    const requiredHeadings = params.config.headings;
-    if (!Array.isArray(requiredHeadings)) {
-      // Nothing to check; avoid doing any work
-      return;
-    }
-    const matchCase = params.config.match_case || false;
-    let i = 0;
-    let matchAny = false;
-    let hasError = false;
-    let anyHeadings = false;
-    const getExpected = () => requiredHeadings[i++] || "[None]";
-    const handleCase = (str) => (matchCase ? str : str.toLowerCase());
-    for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
-      if (!hasError) {
-        const headingText = getHeadingText(heading);
-        const headingLevel = getHeadingLevel(heading);
-        anyHeadings = true;
-        const actual = `${"".padEnd(headingLevel, "#")} ${headingText}`;
-        const expected = getExpected();
-        if (expected === "*") {
-          const nextExpected = getExpected();
-          if (handleCase(nextExpected) !== handleCase(actual)) {
-            matchAny = true;
-            i--;
-          }
-        } else if (expected === "+") {
-          matchAny = true;
-        } else if (handleCase(expected) === handleCase(actual)) {
-          matchAny = false;
-        } else if (matchAny) {
-          i--;
-        } else {
-          addErrorDetailIf(
-            onError,
-            heading.startLine,
-            expected,
-            actual
-          );
-          hasError = true;
-        }
-      }
-    }
-    const extraHeadings = requiredHeadings.length - i;
-    if (
-      !hasError &&
-      ((extraHeadings > 1) ||
-        ((extraHeadings === 1) && (requiredHeadings[i] !== "*"))) &&
-      (anyHeadings || !requiredHeadings.every((heading) => heading === "*"))
-    ) {
-      addErrorContext(
-        onError,
-        params.lines.length,
-        requiredHeadings[i]
-      );
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 466:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf, escapeForRegExp, hasOverlap } = __nccwpck_require__(8307);
-const { filterByPredicate, filterByTypes } = __nccwpck_require__(1670);
-const { parse } = __nccwpck_require__(7132);
-
-const ignoredChildTypes = new Set(
-  [ "codeFencedFence", "definition", "reference", "resource" ]
-);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD044", "proper-names" ],
-  "description": "Proper names should have the correct capitalization",
-  "tags": [ "spelling" ],
-  "parser": "micromark",
-  "function": function MD044(params, onError) {
-    let names = params.config.names;
-    names = Array.isArray(names) ? names : [];
-    names.sort((a, b) => (b.length - a.length) || a.localeCompare(b));
-    if (names.length === 0) {
-      // Nothing to check; avoid doing any work
-      return;
-    }
-    const codeBlocks = params.config.code_blocks;
-    const includeCodeBlocks =
-      (codeBlocks === undefined) ? true : !!codeBlocks;
-    const htmlElements = params.config.html_elements;
-    const includeHtmlElements =
-      (htmlElements === undefined) ? true : !!htmlElements;
-    const scannedTypes = new Set([ "data" ]);
-    if (includeCodeBlocks) {
-      scannedTypes.add("codeFlowValue");
-      scannedTypes.add("codeTextData");
-    }
-    if (includeHtmlElements) {
-      scannedTypes.add("htmlFlowData");
-      scannedTypes.add("htmlTextData");
-    }
-    const contentTokens =
-      filterByPredicate(
-        params.parsers.micromark.tokens,
-        (token) => scannedTypes.has(token.type),
-        (token) => (
-          token.children.filter((t) => !ignoredChildTypes.has(t.type))
-        )
-      );
-    /** @type {import("../helpers").FileRange[]} */
-    const exclusions = [];
-    const scannedTokens = new Set();
-    for (const name of names) {
-      const escapedName = escapeForRegExp(name);
-      const startNamePattern = /^\W/.test(name) ? "" : "\\b_*";
-      const endNamePattern = /\W$/.test(name) ? "" : "_*\\b";
-      const namePattern = `(${startNamePattern})(${escapedName})${endNamePattern}`;
-      const nameRe = new RegExp(namePattern, "gi");
-      for (const token of contentTokens) {
-        let match = null;
-        while ((match = nameRe.exec(token.text)) !== null) {
-          const [ , leftMatch, nameMatch ] = match;
-          const column = token.startColumn + match.index + leftMatch.length;
-          const length = nameMatch.length;
-          const lineNumber = token.startLine;
-          /** @type {import("../helpers").FileRange} */
-          const nameRange = {
-            "startLine": lineNumber,
-            "startColumn": column,
-            "endLine": lineNumber,
-            "endColumn": column + length - 1
-          };
-          if (
-            !names.includes(nameMatch) &&
-            !exclusions.some((exclusion) => hasOverlap(exclusion, nameRange))
-          ) {
-            /** @type {import("../helpers").FileRange[]} */
-            let autolinkRanges = [];
-            if (!scannedTokens.has(token)) {
-              autolinkRanges = filterByTypes(parse(token.text), [ "literalAutolink" ])
-                .map((tok) => ({
-                  "startLine": lineNumber,
-                  "startColumn": token.startColumn + tok.startColumn - 1,
-                  "endLine": lineNumber,
-                  "endColumn": token.endColumn + tok.endColumn - 1
-                }));
-              exclusions.push(...autolinkRanges);
-              scannedTokens.add(token);
-            }
-            if (!autolinkRanges.some((autolinkRange) => hasOverlap(autolinkRange, nameRange))) {
-              addErrorDetailIf(
-                onError,
-                token.startLine,
-                name,
-                nameMatch,
-                undefined,
-                undefined,
-                [ column, length ],
-                {
-                  "editColumn": column,
-                  "deleteCount": length,
-                  "insertText": name
-                }
-              );
-            }
-          }
-          exclusions.push(nameRange);
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 193:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, getHtmlAttributeRe, nextLinesRe } = __nccwpck_require__(8307);
-const { getHtmlTagInfo, getDescendantsByType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const altRe = getHtmlAttributeRe("alt");
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD045", "no-alt-text" ],
-  "description": "Images should have alternate text (alt text)",
-  "tags": [ "accessibility", "images" ],
-  "parser": "micromark",
-  "function": function MD045(params, onError) {
-    // Process Markdown images
-    const images = filterByTypesCached([ "image" ]);
-    for (const image of images) {
-      const labelTexts = getDescendantsByType(image, [ "label", "labelText" ]);
-      if (labelTexts.some((labelText) => labelText.text.length === 0)) {
-        const range = (image.startLine === image.endLine) ?
-          [ image.startColumn, image.endColumn - image.startColumn ] :
-          undefined;
-        addError(
-          onError,
-          image.startLine,
-          undefined,
-          undefined,
-          range
-        );
-      }
-    }
-
-    // Process HTML images
-    const htmlTexts = filterByTypesCached([ "htmlText" ], true);
-    for (const htmlText of htmlTexts) {
-      const { startColumn, startLine, text } = htmlText;
-      const htmlTagInfo = getHtmlTagInfo(htmlText);
-      if (
-        htmlTagInfo &&
-        !htmlTagInfo.close &&
-        (htmlTagInfo.name.toLowerCase() === "img") &&
-        !altRe.test(text)
-      ) {
-        const range = [
-          startColumn,
-          text.replace(nextLinesRe, "").length
-        ];
-        addError(
-          onError,
-          startLine,
-          undefined,
-          undefined,
-          range
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 56:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const tokenTypeToStyle = {
-  "codeFenced": "fenced",
-  "codeIndented": "indented"
-};
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD046", "code-block-style" ],
-  "description": "Code block style",
-  "tags": [ "code" ],
-  "parser": "micromark",
-  "function": function MD046(params, onError) {
-    let expectedStyle = String(params.config.style || "consistent");
-    for (const token of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
-      const { startLine, type } = token;
-      if (expectedStyle === "consistent") {
-        expectedStyle = tokenTypeToStyle[type];
-      }
-      addErrorDetailIf(
-        onError,
-        startLine,
-        expectedStyle,
-        tokenTypeToStyle[type]);
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 1375:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, isBlankLine } = __nccwpck_require__(8307);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD047", "single-trailing-newline" ],
-  "description": "Files should end with a single newline character",
-  "tags": [ "blank_lines" ],
-  "parser": "none",
-  "function": function MD047(params, onError) {
-    const lastLineNumber = params.lines.length;
-    const lastLine = params.lines[lastLineNumber - 1];
-    if (!isBlankLine(lastLine)) {
-      addError(
-        onError,
-        lastLineNumber,
-        undefined,
-        undefined,
-        [ lastLine.length, 1 ],
-        {
-          "insertText": "\n",
-          "editColumn": lastLine.length + 1
-        }
-      );
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 7750:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-/**
- * Return the string representation of a fence markup character.
- *
- * @param {string} markup Fence string.
- * @returns {"tilde" | "backtick"} String representation.
- */
-function fencedCodeBlockStyleFor(markup) {
-  switch (markup[0]) {
-    case "~":
-      return "tilde";
-    default:
-      return "backtick";
-  }
-};
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD048", "code-fence-style" ],
-  "description": "Code fence style",
-  "tags": [ "code" ],
-  "parser": "micromark",
-  "function": function MD048(params, onError) {
-    const style = String(params.config.style || "consistent");
-    let expectedStyle = style;
-    const codeFenceds = filterByTypesCached([ "codeFenced" ]);
-    for (const codeFenced of codeFenceds) {
-      const codeFencedFenceSequence =
-        getDescendantsByType(codeFenced, [ "codeFencedFence", "codeFencedFenceSequence" ])[0];
-      const { startLine, text } = codeFencedFenceSequence;
-      if (expectedStyle === "consistent") {
-        expectedStyle = fencedCodeBlockStyleFor(text);
-      }
-      addErrorDetailIf(
-        onError,
-        startLine,
-        expectedStyle,
-        fencedCodeBlockStyleFor(text)
-      );
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 2530:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError } = __nccwpck_require__(8307);
-const { filterByPredicate, getDescendantsByType } = __nccwpck_require__(1670);
-
-const intrawordRe = /^\w$/;
-
-/**
- * Return the string representation of a emphasis or strong markup character.
- *
- * @param {string} markup Emphasis or strong string.
- * @returns {"asterisk" | "underscore"} String representation.
- */
-function emphasisOrStrongStyleFor(markup) {
-  switch (markup[0]) {
-    case "*":
-      return "asterisk";
-    default:
-      return "underscore";
-  }
-};
-
-/**
- * @param {import("./markdownlint").RuleParams} params Rule parameters.
- * @param {import("./markdownlint").RuleOnError} onError Error-reporting callback.
- * @param {import("markdownlint-micromark").TokenType} type Token type.
- * @param {import("markdownlint-micromark").TokenType} typeSequence Token sequence type.
- * @param {"*" | "**"} asterisk Asterisk kind.
- * @param {"_" | "__"} underline Underline kind.
- * @param {"asterisk" | "consistent" | "underscore"} style Style string.
- */
-const impl =
-  (params, onError, type, typeSequence, asterisk, underline, style = "consistent") => {
-    const { lines, parsers } = params;
-    const emphasisTokens = filterByPredicate(
-      parsers.micromark.tokens,
-      (token) => token.type === type,
-      (token) => ((token.type === "htmlFlow") ? [] : token.children)
-    );
-    for (const token of emphasisTokens) {
-      const sequences = getDescendantsByType(token, [ typeSequence ]);
-      const startSequence = sequences[0];
-      const endSequence = sequences[sequences.length - 1];
-      if (startSequence && endSequence) {
-        const markupStyle = emphasisOrStrongStyleFor(startSequence.text);
-        if (style === "consistent") {
-          style = markupStyle;
-        }
-        if (style !== markupStyle) {
-          const underscoreIntraword = (style === "underscore") && (
-            intrawordRe.test(
-              lines[startSequence.startLine - 1][startSequence.startColumn - 2]
-            ) ||
-            intrawordRe.test(
-              lines[endSequence.endLine - 1][endSequence.endColumn - 1]
-            )
-          );
-          if (!underscoreIntraword) {
-            for (const sequence of [ startSequence, endSequence ]) {
-              addError(
-                onError,
-                sequence.startLine,
-                `Expected: ${style}; Actual: ${markupStyle}`,
-                undefined,
-                [ sequence.startColumn, sequence.text.length ],
-                {
-                  "editColumn": sequence.startColumn,
-                  "deleteCount": sequence.text.length,
-                  "insertText": (style === "asterisk") ? asterisk : underline
-                }
-              );
-            }
-          }
-        }
-      }
-    }
-  };
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule[] */
-module.exports = [
-  {
-    "names": [ "MD049", "emphasis-style" ],
-    "description": "Emphasis style",
-    "tags": [ "emphasis" ],
-    "parser": "micromark",
-    "function": function MD049(params, onError) {
-      return impl(
-        params,
-        onError,
-        "emphasis",
-        "emphasisSequence",
-        "*",
-        "_",
-        params.config.style || undefined
-      );
-    }
-  },
-  {
-    "names": [ "MD050", "strong-style" ],
-    "description": "Strong style",
-    "tags": [ "emphasis" ],
-    "parser": "micromark",
-    "function": function MD050(params, onError) {
-      return impl(
-        params,
-        onError,
-        "strong",
-        "strongSequence",
-        "**",
-        "__",
-        params.config.style || undefined
-      );
-    }
-  }
-];
-
-
-/***/ }),
-
-/***/ 5716:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, getHtmlAttributeRe } = __nccwpck_require__(8307);
-const { filterByPredicate, filterByTypes, getHtmlTagInfo } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// Regular expression for identifying HTML anchor names
-const idRe = getHtmlAttributeRe("id");
-const nameRe = getHtmlAttributeRe("name");
-const anchorRe = /\{(#[a-z\d]+(?:[-_][a-z\d]+)*)\}/gu;
-const lineFragmentRe = /^#(?:L\d+(?:C\d+)?-L\d+(?:C\d+)?|L\d+)$/;
-
-// Sets for filtering heading tokens during conversion
-const childrenExclude = new Set([ "image", "reference", "resource" ]);
-const tokensInclude = new Set(
-  [ "characterEscapeValue", "codeTextData", "data", "mathTextData" ]
-);
-
-/**
- * Converts a Markdown heading into an HTML fragment according to the rules
- * used by GitHub.
- *
- * @param {import("../helpers/micromark-helpers.cjs").Token} headingText Heading text token.
- * @returns {string} Fragment string for heading.
- */
-function convertHeadingToHTMLFragment(headingText) {
-  const inlineText =
-    filterByPredicate(
-      headingText.children,
-      (token) => tokensInclude.has(token.type),
-      (token) => (childrenExclude.has(token.type) ? [] : token.children)
-    )
-      .map((token) => token.text)
-      .join("");
-  return "#" + encodeURIComponent(
-    inlineText
-      .toLowerCase()
-      // RegExp source with Ruby's \p{Word} expanded into its General Categories
-      // https://github.com/gjtorikian/html-pipeline/blob/main/lib/html/pipeline/toc_filter.rb
-      // https://ruby-doc.org/core-3.0.2/Regexp.html
-      .replace(
-        /[^\p{Letter}\p{Mark}\p{Number}\p{Connector_Punctuation}\- ]/gu,
-        ""
-      )
-      .replace(/ /gu, "-")
-  );
-}
-
-/**
- * Unescapes the text of a String-type micromark Token.
- *
- * @param {import("../helpers/micromark-helpers.cjs").Token} token String-type micromark Token.
- * @returns {string} Unescaped token text.
- */
-function unescapeStringTokenText(token) {
-  return filterByTypes(token.children, [ "characterEscapeValue", "data" ])
-    .map((child) => child.text)
-    .join("");
-}
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD051", "link-fragments" ],
-  "description": "Link fragments should be valid",
-  "tags": [ "links" ],
-  "parser": "micromark",
-  "function": function MD051(params, onError) {
-    const ignoreCase = params.config.ignore_case || false;
-    const fragments = new Map();
-
-    // Process headings
-    const headingTexts = filterByTypesCached([ "atxHeadingText", "setextHeadingText" ]);
-    for (const headingText of headingTexts) {
-      const fragment = convertHeadingToHTMLFragment(headingText);
-      if (fragment !== "#") {
-        const count = fragments.get(fragment) || 0;
-        if (count) {
-          fragments.set(`${fragment}-${count}`, 0);
-        }
-        fragments.set(fragment, count + 1);
-        let match = null;
-        while ((match = anchorRe.exec(headingText.text)) !== null) {
-          const [ , anchor ] = match;
-          if (!fragments.has(anchor)) {
-            fragments.set(anchor, 1);
-          }
-        }
-      }
-    }
-
-    // Process HTML anchors
-    for (const token of filterByTypesCached([ "htmlText" ], true)) {
-      const htmlTagInfo = getHtmlTagInfo(token);
-      if (htmlTagInfo && !htmlTagInfo.close) {
-        const anchorMatch = idRe.exec(token.text) ||
-          (htmlTagInfo.name.toLowerCase() === "a" && nameRe.exec(token.text));
-        if (anchorMatch && anchorMatch.length > 0) {
-          fragments.set(`#${anchorMatch[1]}`, 0);
-        }
-      }
-    }
-
-    // Process link and definition fragments
-    // eslint-disable-next-line jsdoc/valid-types
-    /** @type import("../helpers/micromark-helpers.cjs").TokenType[][] */
-    const parentChilds = [
-      [ "link", "resourceDestinationString" ],
-      [ "definition", "definitionDestinationString" ]
-    ];
-    for (const [ parentType, definitionType ] of parentChilds) {
-      const links = filterByTypesCached([ parentType ]);
-      for (const link of links) {
-        const definitions = filterByTypes(link.children, [ definitionType ]);
-        for (const definition of definitions) {
-          const { endColumn, startColumn } = definition;
-          const text = unescapeStringTokenText(definition);
-          const encodedText = `#${encodeURIComponent(text.slice(1))}`;
-          if (
-            (text.length > 1) &&
-            text.startsWith("#") &&
-            !fragments.has(encodedText) &&
-            !lineFragmentRe.test(encodedText)
-          ) {
-            let context = undefined;
-            let range = undefined;
-            let fixInfo = undefined;
-            if (link.startLine === link.endLine) {
-              context = link.text;
-              range = [ link.startColumn, link.endColumn - link.startColumn ];
-              fixInfo = {
-                "editColumn": startColumn,
-                "deleteCount": endColumn - startColumn
-              };
-            }
-            const textLower = text.toLowerCase();
-            const mixedCaseKey = [ ...fragments.keys() ]
-              .find((key) => textLower === key.toLowerCase());
-            if (mixedCaseKey) {
-              // @ts-ignore
-              (fixInfo || {}).insertText = mixedCaseKey;
-              if (!ignoreCase && (mixedCaseKey !== text)) {
-                addError(
-                  onError,
-                  link.startLine,
-                  `Expected: ${mixedCaseKey}; Actual: ${text}`,
-                  context,
-                  range,
-                  fixInfo
-                );
-              }
-            } else {
-              addError(
-                onError,
-                link.startLine,
-                undefined,
-                context,
-                range
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 3597:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError } = __nccwpck_require__(8307);
-const { getReferenceLinkImageData } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD052", "reference-links-images" ],
-  "description":
-    "Reference links and images should use a label that is defined",
-  "tags": [ "images", "links" ],
-  "parser": "none",
-  "function": function MD052(params, onError) {
-    const { config, lines } = params;
-    const shortcutSyntax = config.shortcut_syntax || false;
-    const { definitions, references, shortcuts } = getReferenceLinkImageData();
-    const entries = shortcutSyntax ?
-      [ ...references.entries(), ...shortcuts.entries() ] :
-      references.entries();
-    // Look for links/images that use an undefined link reference
-    for (const reference of entries) {
-      const [ label, datas ] = reference;
-      if (!definitions.has(label)) {
-        for (const data of datas) {
-          const [ lineIndex, index, length ] = data;
-          // Context will be incomplete if reporting for a multi-line link
-          const context = lines[lineIndex].slice(index, index + length);
-          addError(
-            onError,
-            lineIndex + 1,
-            `Missing link or image reference definition: "${label}"`,
-            context,
-            [ index + 1, context.length ]
-          );
-        }
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 4286:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addError, ellipsify } = __nccwpck_require__(8307);
-const { getReferenceLinkImageData } = __nccwpck_require__(5791);
-
-const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD053", "link-image-reference-definitions" ],
-  "description": "Link and image reference definitions should be needed",
-  "tags": [ "images", "links" ],
-  "parser": "none",
-  "function": function MD053(params, onError) {
-    const ignored = new Set(params.config.ignored_definitions || [ "//" ]);
-    const lines = params.lines;
-    const { references, shortcuts, definitions, duplicateDefinitions } =
-      getReferenceLinkImageData();
-    const singleLineDefinition = (line) => (
-      line.replace(linkReferenceDefinitionRe, "").trim().length > 0
-    );
-    const deleteFixInfo = {
-      "deleteCount": -1
-    };
-    // Look for unused link references (unreferenced by any link/image)
-    for (const definition of definitions.entries()) {
-      const [ label, [ lineIndex ] ] = definition;
-      if (
-        !ignored.has(label) &&
-        !references.has(label) &&
-        !shortcuts.has(label)
-      ) {
-        const line = lines[lineIndex];
-        addError(
-          onError,
-          lineIndex + 1,
-          `Unused link or image reference definition: "${label}"`,
-          ellipsify(line),
-          [ 1, line.length ],
-          singleLineDefinition(line) ? deleteFixInfo : undefined
-        );
-      }
-    }
-    // Look for duplicate link references (defined more than once)
-    for (const duplicateDefinition of duplicateDefinitions) {
-      const [ label, lineIndex ] = duplicateDefinition;
-      if (!ignored.has(label)) {
-        const line = lines[lineIndex];
-        addError(
-          onError,
-          lineIndex + 1,
-          `Duplicate link or image reference definition: "${label}"`,
-          ellipsify(line),
-          [ 1, line.length ],
-          singleLineDefinition(line) ? deleteFixInfo : undefined
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 5439:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext, nextLinesRe } = __nccwpck_require__(8307);
-const { getDescendantsByType } = __nccwpck_require__(1670);
-const { getReferenceLinkImageData, filterByTypesCached } = __nccwpck_require__(5791);
-
-const backslashEscapeRe = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g;
-const removeBackslashEscapes = (text) => text.replace(backslashEscapeRe, "$1");
-const autolinkDisallowedRe = /[ <>]/;
-const autolinkAble = (destination) => {
-  try {
-    // eslint-disable-next-line no-new
-    new URL(destination);
-  } catch {
-    // Not an absolute URL
-    return false;
-  }
-  return !autolinkDisallowedRe.test(destination);
-};
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD054", "link-image-style" ],
-  "description": "Link and image style",
-  "tags": [ "images", "links" ],
-  "parser": "micromark",
-  "function": (params, onError) => {
-    const config = params.config;
-    const autolink = (config.autolink === undefined) || !!config.autolink;
-    const inline = (config.inline === undefined) || !!config.inline;
-    const full = (config.full === undefined) || !!config.full;
-    const collapsed = (config.collapsed === undefined) || !!config.collapsed;
-    const shortcut = (config.shortcut === undefined) || !!config.shortcut;
-    const urlInline = (config.url_inline === undefined) || !!config.url_inline;
-    if (autolink && inline && full && collapsed && shortcut && urlInline) {
-      // Everything allowed, nothing to check
-      return;
-    }
-    const { definitions } = getReferenceLinkImageData();
-    const links = filterByTypesCached([ "autolink", "image", "link" ]);
-    for (const link of links) {
-      let label = null;
-      let destination = null;
-      const {
-        endColumn, endLine, startColumn, startLine, text, type
-      } = link;
-      const image = (type === "image");
-      let isError = false;
-      if (type === "autolink") {
-        // link kind is an autolink
-        destination = getDescendantsByType(link, [ [ "autolinkEmail", "autolinkProtocol" ] ])[0]?.text;
-        label = destination;
-        isError = !autolink && Boolean(destination);
-      } else {
-        // link type is "image" or "link"
-        label = getDescendantsByType(link, [ "label", "labelText" ])[0].text;
-        destination =
-          getDescendantsByType(link, [ "resource", "resourceDestination", [ "resourceDestinationLiteral", "resourceDestinationRaw" ], "resourceDestinationString" ])[0]?.text;
-        if (destination) {
-          // link kind is an inline link
-          const title = getDescendantsByType(link, [ "resource", "resourceTitle", "resourceTitleString" ])[0]?.text;
-          isError = !inline || (
-            !urlInline &&
-            autolink &&
-            !image &&
-            !title &&
-            (label === destination) &&
-            autolinkAble(destination)
-          );
-        } else {
-          // link kind is a full/collapsed/shortcut reference link
-          const isShortcut = getDescendantsByType(link, [ "reference" ]).length === 0;
-          const referenceString = getDescendantsByType(link, [ "reference", "referenceString" ])[0]?.text;
-          const isCollapsed = (referenceString === undefined);
-          const definition = definitions.get(referenceString || label);
-          destination = definition && definition[1];
-          isError = destination &&
-            (isShortcut ? !shortcut : (isCollapsed ? !collapsed : !full));
-        }
-      }
-      if (isError) {
-        let range = undefined;
-        let fixInfo = undefined;
-        if (startLine === endLine) {
-          range = [ startColumn, endColumn - startColumn ];
-          let insertText = null;
-          const canInline = (inline && label);
-          const canAutolink = (autolink && !image && autolinkAble(destination));
-          if (canInline && (urlInline || !canAutolink)) {
-            // Most useful form
-            const prefix = (image ? "!" : "");
-            // @ts-ignore
-            const escapedLabel = label.replace(/[[\]]/g, "\\$&");
-            const escapedDestination = destination.replace(/[()]/g, "\\$&");
-            insertText = `${prefix}[${escapedLabel}](${escapedDestination})`;
-          } else if (canAutolink) {
-            // Simplest form
-            insertText = `<${removeBackslashEscapes(destination)}>`;
-          }
-          if (insertText) {
-            fixInfo = {
-              "editColumn": range[0],
-              insertText,
-              "deleteCount": range[1]
-            };
-          }
-        }
-        addErrorContext(
-          onError,
-          startLine,
-          text.replace(nextLinesRe, ""),
-          undefined,
-          undefined,
-          range,
-          fixInfo
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 1512:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const whitespaceTypes = new Set([ "linePrefix", "whitespace" ]);
-const ignoreWhitespace = (tokens) => tokens.filter(
-  (token) => !whitespaceTypes.has(token.type)
-);
-const firstOrNothing = (items) => items[0];
-const lastOrNothing = (items) => items[items.length - 1];
-const makeRange = (start, end) => [ start, end - start + 1 ];
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD055", "table-pipe-style" ],
-  "description": "Table pipe style",
-  "tags": [ "table" ],
-  "parser": "micromark",
-  "function": function MD055(params, onError) {
-    const style = String(params.config.style || "consistent");
-    let expectedStyle = style;
-    let expectedLeadingPipe =
-      ((expectedStyle !== "no_leading_or_trailing") && (expectedStyle !== "trailing_only"));
-    let expectedTrailingPipe =
-      ((expectedStyle !== "no_leading_or_trailing") && (expectedStyle !== "leading_only"));
-    const rows = filterByTypesCached([ "tableDelimiterRow", "tableRow" ]);
-    for (const row of rows) {
-      // The following uses of first/lastOrNothing lack fallback handling
-      // because it seems not to be possible (i.e., 0% coverage)
-      const firstCell = firstOrNothing(row.children);
-      const leadingToken = firstOrNothing(ignoreWhitespace(firstCell.children));
-      const actualLeadingPipe = (leadingToken.type === "tableCellDivider");
-      const lastCell = lastOrNothing(row.children);
-      const trailingToken = lastOrNothing(ignoreWhitespace(lastCell.children));
-      const actualTrailingPipe = (trailingToken.type === "tableCellDivider");
-      const actualStyle = actualLeadingPipe ?
-        (actualTrailingPipe ? "leading_and_trailing" : "leading_only") :
-        (actualTrailingPipe ? "trailing_only" : "no_leading_or_trailing");
-      if (expectedStyle === "consistent") {
-        expectedStyle = actualStyle;
-        expectedLeadingPipe = actualLeadingPipe;
-        expectedTrailingPipe = actualTrailingPipe;
-      }
-      if (actualLeadingPipe !== expectedLeadingPipe) {
-        addErrorDetailIf(
-          onError,
-          firstCell.startLine,
-          expectedStyle,
-          actualStyle,
-          `${expectedLeadingPipe ? "Missing" : "Unexpected"} leading pipe`,
-          undefined,
-          makeRange(row.startColumn, firstCell.startColumn)
-        );
-      }
-      if (actualTrailingPipe !== expectedTrailingPipe) {
-        addErrorDetailIf(
-          onError,
-          lastCell.endLine,
-          expectedStyle,
-          actualStyle,
-          `${expectedTrailingPipe ? "Missing" : "Unexpected"} trailing pipe`,
-          undefined,
-          makeRange(lastCell.endColumn - 1, row.endColumn - 1)
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 5841:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorDetailIf } = __nccwpck_require__(8307);
-const { getParentOfType } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-const makeRange = (start, end) => [ start, end - start + 1 ];
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD056", "table-column-count" ],
-  "description": "Table column count",
-  "tags": [ "table" ],
-  "parser": "micromark",
-  "function": function MD056(params, onError) {
-    const rows = filterByTypesCached([ "tableDelimiterRow", "tableRow" ]);
-    let expectedCount = 0;
-    let currentTable = null;
-    for (const row of rows) {
-      const table = getParentOfType(row, [ "table" ]);
-      if (currentTable !== table) {
-        expectedCount = 0;
-        currentTable = table;
-      }
-      const cells = row.children.filter((child) => [ "tableData", "tableDelimiter", "tableHeader" ].includes(child.type));
-      const actualCount = cells.length;
-      expectedCount ||= actualCount;
-      let detail = undefined;
-      let range = undefined;
-      if (actualCount < expectedCount) {
-        detail = "Too few cells, row will be missing data";
-        range = [ row.endColumn - 1, 1 ];
-      } else if (expectedCount < actualCount) {
-        detail = "Too many cells, extra data will be missing";
-        range = makeRange(cells[expectedCount].startColumn, row.endColumn - 1);
-      }
-      addErrorDetailIf(
-        onError,
-        row.endLine,
-        expectedCount,
-        actualCount,
-        detail,
-        undefined,
-        range
-      );
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 4259:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { addErrorContext, isBlankLine } = __nccwpck_require__(8307);
-const { getBlockQuotePrefixText } = __nccwpck_require__(1670);
-const { filterByTypesCached } = __nccwpck_require__(5791);
-
-// eslint-disable-next-line jsdoc/valid-types
-/** @type import("./markdownlint").Rule */
-module.exports = {
-  "names": [ "MD058", "blanks-around-tables" ],
-  "description": "Tables should be surrounded by blank lines",
-  "tags": [ "table" ],
-  "parser": "micromark",
-  "function": function MD058(params, onError) {
-    const { lines } = params;
-    const blockQuotePrefixes = filterByTypesCached([ "blockQuotePrefix", "linePrefix" ]);
-
-    // For every table...
-    const tables = filterByTypesCached([ "table" ]);
-    for (const table of tables) {
-
-      // Look for a blank line above the table
-      const firstLineNumber = table.startLine;
-      if (!isBlankLine(lines[firstLineNumber - 2])) {
-        addErrorContext(
-          onError,
-          firstLineNumber,
-          lines[firstLineNumber - 1].trim(),
-          undefined,
-          undefined,
-          undefined,
-          {
-            "insertText": getBlockQuotePrefixText(blockQuotePrefixes, firstLineNumber)
-          }
-        );
-      }
-
-      // Look for a blank line below the table
-      const lastLineNumber = table.endLine;
-      if (!isBlankLine(lines[lastLineNumber])) {
-        addErrorContext(
-          onError,
-          lastLineNumber,
-          lines[lastLineNumber - 1].trim(),
-          undefined,
-          undefined,
-          undefined,
-          {
-            "lineNumber": lastLineNumber + 1,
-            "insertText": getBlockQuotePrefixText(blockQuotePrefixes, lastLineNumber)
-          }
-        );
-      }
-    }
-  }
-};
-
-
-/***/ }),
-
-/***/ 5414:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { homepage, version } = __nccwpck_require__(6072);
-
-// @ts-ignore
-const [ md019, md021 ] = __nccwpck_require__(2231);
-// @ts-ignore
-const [ md049, md050 ] = __nccwpck_require__(2530);
-
-const rules = [
-  __nccwpck_require__(137),
-  // md002: Deprecated and removed
-  __nccwpck_require__(7911),
-  __nccwpck_require__(1398),
-  __nccwpck_require__(9637),
-  // md006: Deprecated and removed
-  __nccwpck_require__(1043),
-  __nccwpck_require__(3841),
-  __nccwpck_require__(7415),
-  __nccwpck_require__(16),
-  __nccwpck_require__(905),
-  __nccwpck_require__(3690),
-  __nccwpck_require__(7379),
-  __nccwpck_require__(1615),
-  md019,
-  __nccwpck_require__(8680),
-  md021,
-  __nccwpck_require__(5122),
-  __nccwpck_require__(3009),
-  __nccwpck_require__(2884),
-  __nccwpck_require__(8555),
-  __nccwpck_require__(1454),
-  __nccwpck_require__(765),
-  __nccwpck_require__(4064),
-  __nccwpck_require__(935),
-  __nccwpck_require__(2221),
-  __nccwpck_require__(5950),
-  __nccwpck_require__(8315),
-  __nccwpck_require__(4020),
-  __nccwpck_require__(9089),
-  __nccwpck_require__(1458),
-  __nccwpck_require__(8255),
-  __nccwpck_require__(6168),
-  __nccwpck_require__(2821),
-  __nccwpck_require__(3862),
-  __nccwpck_require__(878),
-  __nccwpck_require__(797),
-  __nccwpck_require__(2676),
-  __nccwpck_require__(4584),
-  __nccwpck_require__(466),
-  __nccwpck_require__(193),
-  __nccwpck_require__(56),
-  __nccwpck_require__(1375),
-  __nccwpck_require__(7750),
-  md049,
-  md050,
-  __nccwpck_require__(5716),
-  __nccwpck_require__(3597),
-  __nccwpck_require__(4286),
-  __nccwpck_require__(5439),
-  __nccwpck_require__(1512),
-  __nccwpck_require__(5841),
-  // md057: See https://github.com/markdownlint/markdownlint
-  __nccwpck_require__(4259)
-];
-for (const rule of rules) {
-  const name = rule.names[0].toLowerCase();
-  // eslint-disable-next-line dot-notation
-  rule["information"] =
-    new URL(`${homepage}/blob/v${version}/doc/${name}.md`);
-}
-module.exports = rules;
-
-
-/***/ }),
-
-/***/ 9520:
-/***/ ((__unused_webpack_module, exports) => {
-
-/*! markdownlint-micromark 0.1.12 https://github.com/DavidAnson/markdownlint */(()=>{"use strict";var e={d:(t,n)=>{for(var r in n)e.o(n,r)&&!e.o(t,r)&&Object.defineProperty(t,r,{enumerable:!0,get:n[r]})},o:(e,t)=>Object.prototype.hasOwnProperty.call(e,t),r:e=>{"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})}},t={};e.r(t),e.d(t,{directive:()=>I,gfmAutolinkLiteral:()=>B,gfmFootnote:()=>K,gfmTable:()=>ce,labelEnd:()=>dt,math:()=>be,parse:()=>Mt,postprocess:()=>Rt,preprocess:()=>Pt});var n={};e.r(n),e.d(n,{attentionMarkers:()=>zt,contentInitial:()=>Lt,disable:()=>Nt,document:()=>Et,flow:()=>At,flowInitial:()=>Dt,insideSpan:()=>Ft,string:()=>Ct,text:()=>It});const r=h(/[A-Za-z]/),i=h(/[\dA-Za-z]/),o=h(/[#-'*+\--9=?A-Z^-~]/);function c(e){return null!==e&&(e<32||127===e)}const u=h(/\d/),a=h(/[\dA-Fa-f]/),s=h(/[!-/:-@[-`{-~]/);function l(e){return null!==e&&e<-2}function f(e){return null!==e&&(e<0||32===e)}function p(e){return-2===e||-1===e||32===e}const d=h(/\p{P}|\p{S}/u),m=h(/\s/);function h(e){return function(t){return null!==t&&t>-1&&e.test(String.fromCharCode(t))}}function g(e,t,n,r){const i=r?r-1:Number.POSITIVE_INFINITY;let o=0;return function(r){return p(r)?(e.enter(n),c(r)):t(r)};function c(r){return p(r)&&o++<i?(e.consume(r),c):(e.exit(n),t(r))}}function b(e,t){let n;return function r(i){return l(i)?(e.enter("lineEnding"),e.consume(i),e.exit("lineEnding"),n=!0,r):p(i)?g(e,r,n?"linePrefix":"lineSuffix")(i):t(i)}}function x(e,t,n,o,c,u,a,s,d,m,h,x,v,k,y){let w,S;return function(t){return e.enter(o),e.enter(c),e.consume(t),e.exit(c),q};function q(t){return 35===t?(w=a,T(t)):46===t?(w=s,T(t)):58===t||95===t||r(t)?(e.enter(u),e.enter(d),e.consume(t),D):y&&p(t)?g(e,q,"whitespace")(t):!y&&f(t)?b(e,q)(t):R(t)}function T(t){const n=w+"Marker";return e.enter(u),e.enter(w),e.enter(n),e.consume(t),e.exit(n),E}function E(t){if(null===t||34===t||35===t||39===t||46===t||60===t||61===t||62===t||96===t||125===t||f(t))return n(t);const r=w+"Value";return e.enter(r),e.consume(t),L}function L(t){if(null===t||34===t||39===t||60===t||61===t||62===t||96===t)return n(t);if(35===t||46===t||125===t||f(t)){const n=w+"Value";return e.exit(n),e.exit(w),e.exit(u),q(t)}return e.consume(t),L}function D(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),D):(e.exit(d),y&&p(t)?g(e,A,"whitespace")(t):!y&&f(t)?b(e,A)(t):A(t))}function A(t){return 61===t?(e.enter(m),e.consume(t),e.exit(m),C):(e.exit(u),q(t))}function C(t){return null===t||60===t||61===t||62===t||96===t||125===t||y&&l(t)?n(t):34===t||39===t?(e.enter(h),e.enter(v),e.consume(t),e.exit(v),S=t,F):y&&p(t)?g(e,C,"whitespace")(t):!y&&f(t)?b(e,C)(t):(e.enter(x),e.enter(k),e.consume(t),S=void 0,I)}function I(t){return null===t||34===t||39===t||60===t||61===t||62===t||96===t?n(t):125===t||f(t)?(e.exit(k),e.exit(x),e.exit(u),q(t)):(e.consume(t),I)}function F(t){return t===S?(e.enter(v),e.consume(t),e.exit(v),e.exit(h),e.exit(u),M):(e.enter(x),z(t))}function z(t){return t===S?(e.exit(x),F(t)):null===t?n(t):l(t)?y?n(t):b(e,z)(t):(e.enter(k),e.consume(t),N)}function N(t){return t===S||null===t||l(t)?(e.exit(k),z(t)):(e.consume(t),N)}function M(e){return 125===e||f(e)?q(e):R(e)}function R(r){return 125===r?(e.enter(c),e.consume(r),e.exit(c),e.exit(o),t):n(r)}}function v(e,t,n,r,i,o,c){let u,a=0,s=0;return function(t){return e.enter(r),e.enter(i),e.consume(t),e.exit(i),f};function f(n){return 93===n?(e.enter(i),e.consume(n),e.exit(i),e.exit(r),t):(e.enter(o),p(n))}function p(t){if(93===t&&!s)return h(t);const n=e.enter("chunkText",{contentType:"text",previous:u});return u&&(u.next=n),u=n,d(t)}function d(t){return null===t||a>999||91===t&&++s>32?n(t):93!==t||s--?l(t)?c?n(t):(e.consume(t),e.exit("chunkText"),p):(e.consume(t),92===t?m:d):(e.exit("chunkText"),h(t))}function m(t){return 91===t||92===t||93===t?(e.consume(t),a++,d):d(t)}function h(n){return e.exit(o),e.enter(i),e.consume(n),e.exit(i),e.exit(r),t}}function k(e,t,n,o){const c=this;return function(t){return r(t)?(e.enter(o),e.consume(t),u):n(t)};function u(r){return 45===r||95===r||i(r)?(e.consume(r),u):(e.exit(o),45===c.previous||95===c.previous?n(r):t(r))}}const y={tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1],o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0;let c,u=0;return function(t){return e.enter("directiveContainer"),e.enter("directiveContainerFence"),e.enter("directiveContainerSequence"),a(t)};function a(t){return 58===t?(e.consume(t),u++,a):u<3?n(t):(e.exit("directiveContainerSequence"),k.call(r,e,s,n,"directiveContainerName")(t))}function s(t){return 91===t?e.attempt(w,f,f)(t):f(t)}function f(t){return 123===t?e.attempt(S,p,p)(t):p(t)}function p(t){return g(e,d,"whitespace")(t)}function d(i){return e.exit("directiveContainerFence"),null===i?D(i):l(i)?r.interrupt?t(i):e.attempt(q,m,D)(i):n(i)}function m(t){return null===t?D(t):l(t)?e.check(q,y,D)(t):(e.enter("directiveContainerContent"),h(t))}function h(t){return e.attempt({tokenize:A,partial:!0},L,o?g(e,b,"linePrefix",o+1):b)(t)}function b(t){return null===t?L(t):l(t)?e.check(q,v,L)(t):v(t)}function x(t){if(null===t){const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,L(t)}return l(t)?e.check(q,T,E)(t):(e.consume(t),x)}function v(t){const n=e.enter("chunkDocument",{contentType:"document",previous:c});return c&&(c.next=n),c=n,x(t)}function y(t){return e.enter("directiveContainerContent"),h(t)}function T(t){e.consume(t);const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,h}function E(t){const n=e.exit("chunkDocument");return r.parser.lazy[n.start.line]=!1,L(t)}function L(t){return e.exit("directiveContainerContent"),D(t)}function D(n){return e.exit("directiveContainer"),t(n)}function A(e,t,n){let i=0;return g(e,(function(t){return e.enter("directiveContainerFence"),e.enter("directiveContainerSequence"),o(t)}),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4);function o(t){return 58===t?(e.consume(t),i++,o):i<u?n(t):(e.exit("directiveContainerSequence"),g(e,c,"whitespace")(t))}function c(r){return null===r||l(r)?(e.exit("directiveContainerFence"),t(r)):n(r)}}},concrete:!0},w={tokenize:function(e,t,n){return v(e,t,n,"directiveContainerLabel","directiveContainerLabelMarker","directiveContainerLabelString",!0)},partial:!0},S={tokenize:function(e,t,n){return x(e,t,n,"directiveContainerAttributes","directiveContainerAttributesMarker","directiveContainerAttribute","directiveContainerAttributeId","directiveContainerAttributeClass","directiveContainerAttributeName","directiveContainerAttributeInitializerMarker","directiveContainerAttributeValueLiteral","directiveContainerAttributeValue","directiveContainerAttributeValueMarker","directiveContainerAttributeValueData",!0)},partial:!0},q={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},T={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("directiveLeaf"),e.enter("directiveLeafSequence"),e.consume(t),i};function i(t){return 58===t?(e.consume(t),e.exit("directiveLeafSequence"),k.call(r,e,o,n,"directiveLeafName")):n(t)}function o(t){return 91===t?e.attempt(E,c,c)(t):c(t)}function c(t){return 123===t?e.attempt(L,u,u)(t):u(t)}function u(t){return g(e,a,"whitespace")(t)}function a(r){return null===r||l(r)?(e.exit("directiveLeaf"),t(r)):n(r)}}},E={tokenize:function(e,t,n){return v(e,t,n,"directiveLeafLabel","directiveLeafLabelMarker","directiveLeafLabelString",!0)},partial:!0},L={tokenize:function(e,t,n){return x(e,t,n,"directiveLeafAttributes","directiveLeafAttributesMarker","directiveLeafAttribute","directiveLeafAttributeId","directiveLeafAttributeClass","directiveLeafAttributeName","directiveLeafAttributeInitializerMarker","directiveLeafAttributeValueLiteral","directiveLeafAttributeValue","directiveLeafAttributeValueMarker","directiveLeafAttributeValueData",!0)},partial:!0},D={tokenize:function(e,t,n){const r=this;return function(t){return e.enter("directiveText"),e.enter("directiveTextMarker"),e.consume(t),e.exit("directiveTextMarker"),k.call(r,e,i,n,"directiveTextName")};function i(t){return 58===t?n(t):91===t?e.attempt(A,o,o)(t):o(t)}function o(t){return 123===t?e.attempt(C,c,c)(t):c(t)}function c(n){return e.exit("directiveText"),t(n)}},previous:function(e){return 58!==e||"characterEscape"===this.events[this.events.length-1][1].type}},A={tokenize:function(e,t,n){return v(e,t,n,"directiveTextLabel","directiveTextLabelMarker","directiveTextLabelString")},partial:!0},C={tokenize:function(e,t,n){return x(e,t,n,"directiveTextAttributes","directiveTextAttributesMarker","directiveTextAttribute","directiveTextAttributeId","directiveTextAttributeClass","directiveTextAttributeName","directiveTextAttributeInitializerMarker","directiveTextAttributeValueLiteral","directiveTextAttributeValue","directiveTextAttributeValueMarker","directiveTextAttributeValueData")},partial:!0};function I(){return{text:{58:D},flow:{58:[y,T]}}}const F={tokenize:function(e,t,n){let r=0;return function t(o){return(87===o||119===o)&&r<3?(r++,e.consume(o),t):46===o&&3===r?(e.consume(o),i):n(o)};function i(e){return null===e?n(e):t(e)}},partial:!0},z={tokenize:function(e,t,n){let r,i,o;return c;function c(t){return 46===t||95===t?e.check(M,a,u)(t):null===t||f(t)||m(t)||45!==t&&d(t)?a(t):(o=!0,e.consume(t),c)}function u(t){return 95===t?r=!0:(i=r,r=void 0),e.consume(t),c}function a(e){return i||r||!o?n(e):t(e)}},partial:!0},N={tokenize:function(e,t){let n=0,r=0;return i;function i(c){return 40===c?(n++,e.consume(c),i):41===c&&r<n?o(c):33===c||34===c||38===c||39===c||41===c||42===c||44===c||46===c||58===c||59===c||60===c||63===c||93===c||95===c||126===c?e.check(M,t,o)(c):null===c||f(c)||m(c)?t(c):(e.consume(c),i)}function o(t){return 41===t&&r++,e.consume(t),i}},partial:!0},M={tokenize:function(e,t,n){return i;function i(r){return 33===r||34===r||39===r||41===r||42===r||44===r||46===r||58===r||59===r||63===r||95===r||126===r?(e.consume(r),i):38===r?(e.consume(r),c):93===r?(e.consume(r),o):60===r||null===r||f(r)||m(r)?t(r):n(r)}function o(e){return null===e||40===e||91===e||f(e)||m(e)?t(e):i(e)}function c(e){return r(e)?u(e):n(e)}function u(t){return 59===t?(e.consume(t),i):r(t)?(e.consume(t),u):n(t)}},partial:!0},R={tokenize:function(e,t,n){return function(t){return e.consume(t),r};function r(e){return i(e)?n(e):t(e)}},partial:!0},O={name:"wwwAutolink",tokenize:function(e,t,n){const r=this;return function(t){return 87!==t&&119!==t||!H.call(r,r.previous)||Q(r.events)?n(t):(e.enter("literalAutolink"),e.enter("literalAutolinkWww"),e.check(F,e.attempt(z,e.attempt(N,i),n),n)(t))};function i(n){return e.exit("literalAutolinkWww"),e.exit("literalAutolink"),t(n)}},previous:H},P={name:"protocolAutolink",tokenize:function(e,t,n){const i=this;let o="",u=!1;return function(t){return 72!==t&&104!==t||!U.call(i,i.previous)||Q(i.events)?n(t):(e.enter("literalAutolink"),e.enter("literalAutolinkHttp"),o+=String.fromCodePoint(t),e.consume(t),a)};function a(t){if(r(t)&&o.length<5)return o+=String.fromCodePoint(t),e.consume(t),a;if(58===t){const n=o.toLowerCase();if("http"===n||"https"===n)return e.consume(t),s}return n(t)}function s(t){return 47===t?(e.consume(t),u?l:(u=!0,s)):n(t)}function l(t){return null===t||c(t)||f(t)||m(t)||d(t)?n(t):e.attempt(z,e.attempt(N,p),n)(t)}function p(n){return e.exit("literalAutolinkHttp"),e.exit("literalAutolink"),t(n)}},previous:U},V={name:"emailAutolink",tokenize:function(e,t,n){const o=this;let c,u;return function(t){return Y(t)&&G.call(o,o.previous)&&!Q(o.events)?(e.enter("literalAutolink"),e.enter("literalAutolinkEmail"),a(t)):n(t)};function a(t){return Y(t)?(e.consume(t),a):64===t?(e.consume(t),s):n(t)}function s(t){return 46===t?e.check(R,f,l)(t):45===t||95===t||i(t)?(u=!0,e.consume(t),s):f(t)}function l(t){return e.consume(t),c=!0,s}function f(i){return u&&c&&r(o.previous)?(e.exit("literalAutolinkEmail"),e.exit("literalAutolink"),t(i)):n(i)}},previous:G},_={};function B(){return{text:_}}let j=48;for(;j<123;)_[j]=V,j++,58===j?j=65:91===j&&(j=97);function H(e){return null===e||40===e||42===e||95===e||91===e||93===e||126===e||f(e)}function U(e){return!r(e)}function G(e){return!(47===e||Y(e))}function Y(e){return 43===e||45===e||46===e||95===e||i(e)}function Q(e){let t=e.length,n=!1;for(;t--;){const r=e[t][1];if(("labelLink"===r.type||"labelImage"===r.type)&&!r._balanced){n=!0;break}if(r._gfmAutolinkLiteralWalkedInto){n=!1;break}}return e.length>0&&!n&&(e[e.length-1][1]._gfmAutolinkLiteralWalkedInto=!0),n}_[43]=V,_[45]=V,_[46]=V,_[95]=V,_[72]=[V,P],_[104]=[V,P],_[87]=[V,O],_[119]=[V,O];const W={tokenize:function(e,t,n){return function(t){return p(t)?g(e,r,"linePrefix")(t):r(t)};function r(e){return null===e||l(e)?t(e):n(e)}},partial:!0};function Z(e){return e.replace(/[\t\n\r ]+/g," ").replace(/^ | $/g,"").toLowerCase().toUpperCase()}const J={tokenize:function(e,t,n){const r=this;return g(e,(function(e){const i=r.events[r.events.length-1];return i&&"gfmFootnoteDefinitionIndent"===i[1].type&&4===i[2].sliceSerialize(i[1],!0).length?t(e):n(e)}),"gfmFootnoteDefinitionIndent",5)},partial:!0};function K(){return{document:{91:{name:"gfmFootnoteDefinition",tokenize:te,continuation:{tokenize:ne},exit:re}},text:{91:{name:"gfmFootnoteCall",tokenize:ee},93:{name:"gfmPotentialFootnoteCall",add:"after",tokenize:X,resolveTo:$}}}}function X(e,t,n){const r=this;let i=r.events.length;const o=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let c;for(;i--;){const e=r.events[i][1];if("labelImage"===e.type){c=e;break}if("gfmFootnoteCall"===e.type||"labelLink"===e.type||"label"===e.type||"image"===e.type||"link"===e.type)break}return function(i){if(!c||!c._balanced)return n(i);const u=Z(r.sliceSerialize({start:c.end,end:r.now()}));return 94===u.codePointAt(0)&&o.includes(u.slice(1))?(e.enter("gfmFootnoteCallLabelMarker"),e.consume(i),e.exit("gfmFootnoteCallLabelMarker"),t(i)):n(i)}}function $(e,t){let n,r=e.length;for(;r--;)if("labelImage"===e[r][1].type&&"enter"===e[r][0]){n=e[r][1];break}e[r+1][1].type="data",e[r+3][1].type="gfmFootnoteCallLabelMarker";const i={type:"gfmFootnoteCall",start:Object.assign({},e[r+3][1].start),end:Object.assign({},e[e.length-1][1].end)},o={type:"gfmFootnoteCallMarker",start:Object.assign({},e[r+3][1].end),end:Object.assign({},e[r+3][1].end)};o.end.column++,o.end.offset++,o.end._bufferIndex++;const c={type:"gfmFootnoteCallString",start:Object.assign({},o.end),end:Object.assign({},e[e.length-1][1].start)},u={type:"chunkString",contentType:"string",start:Object.assign({},c.start),end:Object.assign({},c.end)},a=[e[r+1],e[r+2],["enter",i,t],e[r+3],e[r+4],["enter",o,t],["exit",o,t],["enter",c,t],["enter",u,t],["exit",u,t],["exit",c,t],e[e.length-2],e[e.length-1],["exit",i,t]];return e.splice(r,e.length-r+1,...a),e}function ee(e,t,n){const r=this,i=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let o,c=0;return function(t){return e.enter("gfmFootnoteCall"),e.enter("gfmFootnoteCallLabelMarker"),e.consume(t),e.exit("gfmFootnoteCallLabelMarker"),u};function u(t){return 94!==t?n(t):(e.enter("gfmFootnoteCallMarker"),e.consume(t),e.exit("gfmFootnoteCallMarker"),e.enter("gfmFootnoteCallString"),e.enter("chunkString").contentType="string",a)}function a(u){if(c>999||93===u&&!o||null===u||91===u||f(u))return n(u);if(93===u){e.exit("chunkString");const o=e.exit("gfmFootnoteCallString");return i.includes(Z(r.sliceSerialize(o)))?(e.enter("gfmFootnoteCallLabelMarker"),e.consume(u),e.exit("gfmFootnoteCallLabelMarker"),e.exit("gfmFootnoteCall"),t):n(u)}return f(u)||(o=!0),c++,e.consume(u),92===u?s:a}function s(t){return 91===t||92===t||93===t?(e.consume(t),c++,a):a(t)}}function te(e,t,n){const r=this,i=r.parser.gfmFootnotes||(r.parser.gfmFootnotes=[]);let o,c,u=0;return function(t){return e.enter("gfmFootnoteDefinition")._container=!0,e.enter("gfmFootnoteDefinitionLabel"),e.enter("gfmFootnoteDefinitionLabelMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionLabelMarker"),a};function a(t){return 94===t?(e.enter("gfmFootnoteDefinitionMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionMarker"),e.enter("gfmFootnoteDefinitionLabelString"),e.enter("chunkString").contentType="string",s):n(t)}function s(t){if(u>999||93===t&&!c||null===t||91===t||f(t))return n(t);if(93===t){e.exit("chunkString");const n=e.exit("gfmFootnoteDefinitionLabelString");return o=Z(r.sliceSerialize(n)),e.enter("gfmFootnoteDefinitionLabelMarker"),e.consume(t),e.exit("gfmFootnoteDefinitionLabelMarker"),e.exit("gfmFootnoteDefinitionLabel"),p}return f(t)||(c=!0),u++,e.consume(t),92===t?l:s}function l(t){return 91===t||92===t||93===t?(e.consume(t),u++,s):s(t)}function p(t){return 58===t?(e.enter("definitionMarker"),e.consume(t),e.exit("definitionMarker"),i.includes(o)||i.push(o),g(e,d,"gfmFootnoteDefinitionWhitespace")):n(t)}function d(e){return t(e)}}function ne(e,t,n){return e.check(W,t,e.attempt(J,t,n))}function re(e){e.exit("gfmFootnoteDefinition")}class ie{constructor(){this.map=[]}add(e,t,n){!function(e,t,n,r){let i=0;if(0!==n||0!==r.length){for(;i<e.map.length;){if(e.map[i][0]===t)return e.map[i][1]+=n,void e.map[i][2].push(...r);i+=1}e.map.push([t,n,r])}}(this,e,t,n)}consume(e){if(this.map.sort((function(e,t){return e[0]-t[0]})),0===this.map.length)return;let t=this.map.length;const n=[];for(;t>0;)t-=1,n.push(e.slice(this.map[t][0]+this.map[t][1]),this.map[t][2]),e.length=this.map[t][0];n.push([...e]),e.length=0;let r=n.pop();for(;r;)e.push(...r),r=n.pop();this.map.length=0}}function oe(e,t){let n=!1;const r=[];for(;t<e.length;){const i=e[t];if(n){if("enter"===i[0])"tableContent"===i[1].type&&r.push("tableDelimiterMarker"===e[t+1][1].type?"left":"none");else if("tableContent"===i[1].type){if("tableDelimiterMarker"===e[t-1][1].type){const e=r.length-1;r[e]="left"===r[e]?"center":"right"}}else if("tableDelimiterRow"===i[1].type)break}else"enter"===i[0]&&"tableDelimiterRow"===i[1].type&&(n=!0);t+=1}return r}function ce(){return{flow:{null:{name:"table",tokenize:ue,resolveAll:ae}}}}function ue(e,t,n){const r=this;let i,o=0,c=0;return function(e){let t=r.events.length-1;for(;t>-1;){const e=r.events[t][1].type;if("lineEnding"!==e&&"linePrefix"!==e)break;t--}const i=t>-1?r.events[t][1].type:null,o="tableHead"===i||"tableRow"===i?q:u;return o===q&&r.parser.lazy[r.now().line]?n(e):o(e)};function u(t){return e.enter("tableHead"),e.enter("tableRow"),function(e){return 124===e||(i=!0,c+=1),a(e)}(t)}function a(t){return null===t?n(t):l(t)?c>1?(c=0,r.interrupt=!0,e.exit("tableRow"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),m):n(t):p(t)?g(e,a,"whitespace")(t):(c+=1,i&&(i=!1,o+=1),124===t?(e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),i=!0,a):(e.enter("data"),s(t)))}function s(t){return null===t||124===t||f(t)?(e.exit("data"),a(t)):(e.consume(t),92===t?d:s)}function d(t){return 92===t||124===t?(e.consume(t),s):s(t)}function m(t){return r.interrupt=!1,r.parser.lazy[r.now().line]?n(t):(e.enter("tableDelimiterRow"),i=!1,p(t)?g(e,h,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):h(t))}function h(t){return 45===t||58===t?x(t):124===t?(i=!0,e.enter("tableCellDivider"),e.consume(t),e.exit("tableCellDivider"),b):S(t)}function b(t){return p(t)?g(e,x,"whitespace")(t):x(t)}function x(t){return 58===t?(c+=1,i=!0,e.enter("tableDelimiterMarker"),e.consume(t),e.exit("tableDelimiterMarker"),v):45===t?(c+=1,v(t)):null===t||l(t)?w(t):S(t)}function v(t){return 45===t?(e.enter("tableDelimiterFiller"),k(t)):S(t)}function k(t){return 45===t?(e.consume(t),k):58===t?(i=!0,e.exit("tableDelimiterFiller"),e.enter("tableDelimiterMarker"),e.consume(t),e.exit("tableDelimiterMarker"),y):(e.exit("tableDelimiterFiller"),y(t))}function y(t){return p(t)?g(e,w,"whitespace")(t):w(t)}function w(n){return 124===n?h(n):(null===n||l(n))&&i&&o===c?(e.exit("tableDelimiterRow"),e.exit("tableHead"),t(n)):S(n)}function S(e){return n(e)}function q(t){return e.enter("tableRow"),T(t)}function T(n){return 124===n?(e.enter("tableCellDivider"),e.consume(n),e.exit("tableCellDivider"),T):null===n||l(n)?(e.exit("tableRow"),t(n)):p(n)?g(e,T,"whitespace")(n):(e.enter("data"),E(n))}function E(t){return null===t||124===t||f(t)?(e.exit("data"),T(t)):(e.consume(t),92===t?L:E)}function L(t){return 92===t||124===t?(e.consume(t),E):E(t)}}function ae(e,t){let n,r,i,o=-1,c=!0,u=0,a=[0,0,0,0],s=[0,0,0,0],l=!1,f=0;const p=new ie;for(;++o<e.length;){const d=e[o],m=d[1];"enter"===d[0]?"tableHead"===m.type?(l=!1,0!==f&&(le(p,t,f,n,r),r=void 0,f=0),n={type:"table",start:Object.assign({},m.start),end:Object.assign({},m.end)},p.add(o,0,[["enter",n,t]])):"tableRow"===m.type||"tableDelimiterRow"===m.type?(c=!0,i=void 0,a=[0,0,0,0],s=[0,o+1,0,0],l&&(l=!1,r={type:"tableBody",start:Object.assign({},m.start),end:Object.assign({},m.end)},p.add(o,0,[["enter",r,t]])),u="tableDelimiterRow"===m.type?2:r?3:1):!u||"data"!==m.type&&"tableDelimiterMarker"!==m.type&&"tableDelimiterFiller"!==m.type?"tableCellDivider"===m.type&&(c?c=!1:(0!==a[1]&&(s[0]=s[1],i=se(p,t,a,u,void 0,i)),a=s,s=[a[1],o,0,0])):(c=!1,0===s[2]&&(0!==a[1]&&(s[0]=s[1],i=se(p,t,a,u,void 0,i),a=[0,0,0,0]),s[2]=o)):"tableHead"===m.type?(l=!0,f=o):"tableRow"===m.type||"tableDelimiterRow"===m.type?(f=o,0!==a[1]?(s[0]=s[1],i=se(p,t,a,u,o,i)):0!==s[1]&&(i=se(p,t,s,u,o,i)),u=0):!u||"data"!==m.type&&"tableDelimiterMarker"!==m.type&&"tableDelimiterFiller"!==m.type||(s[3]=o)}for(0!==f&&le(p,t,f,n,r),p.consume(t.events),o=-1;++o<t.events.length;){const e=t.events[o];"enter"===e[0]&&"table"===e[1].type&&(e[1]._align=oe(t.events,o))}return e}function se(e,t,n,r,i,o){const c=1===r?"tableHeader":2===r?"tableDelimiter":"tableData";0!==n[0]&&(o.end=Object.assign({},fe(t.events,n[0])),e.add(n[0],0,[["exit",o,t]]));const u=fe(t.events,n[1]);if(o={type:c,start:Object.assign({},u),end:Object.assign({},u)},e.add(n[1],0,[["enter",o,t]]),0!==n[2]){const i=fe(t.events,n[2]),o=fe(t.events,n[3]),c={type:"tableContent",start:Object.assign({},i),end:Object.assign({},o)};if(e.add(n[2],0,[["enter",c,t]]),2!==r){const r=t.events[n[2]],i=t.events[n[3]];if(r[1].end=Object.assign({},i[1].end),r[1].type="chunkText",r[1].contentType="text",n[3]>n[2]+1){const t=n[2]+1,r=n[3]-n[2]-1;e.add(t,r,[])}}e.add(n[3]+1,0,[["exit",c,t]])}return void 0!==i&&(o.end=Object.assign({},fe(t.events,i)),e.add(i,0,[["exit",o,t]]),o=void 0),o}function le(e,t,n,r,i){const o=[],c=fe(t.events,n);i&&(i.end=Object.assign({},c),o.push(["exit",i,t])),r.end=Object.assign({},c),o.push(["exit",r,t]),e.add(n+1,0,o)}function fe(e,t){const n=e[t],r="enter"===n[0]?"start":"end";return n[1][r]}const pe={tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1],o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0;let c=0;return function(t){return e.enter("mathFlow"),e.enter("mathFlowFence"),e.enter("mathFlowFenceSequence"),u(t)};function u(t){return 36===t?(e.consume(t),c++,u):c<2?n(t):(e.exit("mathFlowFenceSequence"),g(e,a,"whitespace")(t))}function a(t){return null===t||l(t)?f(t):(e.enter("mathFlowFenceMeta"),e.enter("chunkString",{contentType:"string"}),s(t))}function s(t){return null===t||l(t)?(e.exit("chunkString"),e.exit("mathFlowFenceMeta"),f(t)):36===t?n(t):(e.consume(t),s)}function f(n){return e.exit("mathFlowFence"),r.interrupt?t(n):e.attempt(de,p,b)(n)}function p(t){return e.attempt({tokenize:x,partial:!0},b,d)(t)}function d(t){return(o?g(e,m,"linePrefix",o+1):m)(t)}function m(t){return null===t?b(t):l(t)?e.attempt(de,p,b)(t):(e.enter("mathFlowValue"),h(t))}function h(t){return null===t||l(t)?(e.exit("mathFlowValue"),m(t)):(e.consume(t),h)}function b(n){return e.exit("mathFlow"),t(n)}function x(e,t,n){let i=0;return g(e,(function(t){return e.enter("mathFlowFence"),e.enter("mathFlowFenceSequence"),o(t)}),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4);function o(t){return 36===t?(i++,e.consume(t),o):i<c?n(t):(e.exit("mathFlowFenceSequence"),g(e,u,"whitespace")(t))}function u(r){return null===r||l(r)?(e.exit("mathFlowFence"),t(r)):n(r)}}},concrete:!0,name:"mathFlow"},de={tokenize:function(e,t,n){const r=this;return function(n){return null===n?t(n):(e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),i)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0};function me(e){let t=(e||{}).singleDollarTextMath;return null==t&&(t=!0),{tokenize:function(e,n,r){let i,o,c=0;return function(t){return e.enter("mathText"),e.enter("mathTextSequence"),u(t)};function u(n){return 36===n?(e.consume(n),c++,u):c<2&&!t?r(n):(e.exit("mathTextSequence"),a(n))}function a(t){return null===t?r(t):36===t?(o=e.enter("mathTextSequence"),i=0,f(t)):32===t?(e.enter("space"),e.consume(t),e.exit("space"),a):l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),a):(e.enter("mathTextData"),s(t))}function s(t){return null===t||32===t||36===t||l(t)?(e.exit("mathTextData"),a(t)):(e.consume(t),s)}function f(t){return 36===t?(e.consume(t),i++,f):i===c?(e.exit("mathTextSequence"),e.exit("mathText"),n(t)):(o.type="mathTextData",s(t))}},resolve:he,previous:ge,name:"mathText"}}function he(e){let t,n,r=e.length-4,i=3;if(!("lineEnding"!==e[i][1].type&&"space"!==e[i][1].type||"lineEnding"!==e[r][1].type&&"space"!==e[r][1].type))for(t=i;++t<r;)if("mathTextData"===e[t][1].type){e[r][1].type="mathTextPadding",e[i][1].type="mathTextPadding",i+=2,r-=2;break}for(t=i-1,r++;++t<=r;)void 0===n?t!==r&&"lineEnding"!==e[t][1].type&&(n=t):t!==r&&"lineEnding"!==e[t][1].type||(e[n][1].type="mathTextData",t!==n+2&&(e[n][1].end=e[t-1][1].end,e.splice(n+2,t-n-2),r-=t-n-2,t=n+2),n=void 0);return e}function ge(e){return 36!==e||"characterEscape"===this.events[this.events.length-1][1].type}function be(e){return{flow:{36:pe},text:{36:me(e)}}}function xe(e,t,n,r){const i=e.length;let o,c=0;if(t=t<0?-t>i?0:i+t:t>i?i:t,n=n>0?n:0,r.length<1e4)o=Array.from(r),o.unshift(t,n),e.splice(...o);else for(n&&e.splice(t,n);c<r.length;)o=r.slice(c,c+1e4),o.unshift(t,0),e.splice(...o),c+=1e4,t+=1e4}function ve(e,t){return e.length>0?(xe(e,e.length,0,t),e):t}const ke={}.hasOwnProperty;function ye(e,t){let n;for(n in t){const r=(ke.call(e,n)?e[n]:void 0)||(e[n]={}),i=t[n];let o;if(i)for(o in i){ke.call(r,o)||(r[o]=[]);const e=i[o];we(r[o],Array.isArray(e)?e:e?[e]:[])}}}function we(e,t){let n=-1;const r=[];for(;++n<t.length;)("after"===t[n].add?e:r).push(t[n]);xe(e,0,0,r)}const Se={tokenize:function(e){const t=e.attempt(this.parser.constructs.contentInitial,(function(n){if(null!==n)return e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),g(e,t,"linePrefix");e.consume(n)}),(function(t){return e.enter("paragraph"),r(t)}));let n;return t;function r(t){const r=e.enter("chunkText",{contentType:"text",previous:n});return n&&(n.next=r),n=r,i(t)}function i(t){return null===t?(e.exit("chunkText"),e.exit("paragraph"),void e.consume(t)):l(t)?(e.consume(t),e.exit("chunkText"),r):(e.consume(t),i)}}},qe={tokenize:function(e){const t=this,n=[];let r,i,o,c=0;return u;function u(r){if(c<n.length){const i=n[c];return t.containerState=i[1],e.attempt(i[0].continuation,a,s)(r)}return s(r)}function a(e){if(c++,t.containerState._closeFlow){t.containerState._closeFlow=void 0,r&&v();const n=t.events.length;let i,o=n;for(;o--;)if("exit"===t.events[o][0]&&"chunkFlow"===t.events[o][1].type){i=t.events[o][1].end;break}x(c);let u=n;for(;u<t.events.length;)t.events[u][1].end=Object.assign({},i),u++;return xe(t.events,o+1,0,t.events.slice(n)),t.events.length=u,s(e)}return u(e)}function s(i){if(c===n.length){if(!r)return d(i);if(r.currentConstruct&&r.currentConstruct.concrete)return h(i);t.interrupt=Boolean(r.currentConstruct&&!r._gfmTableDynamicInterruptHack)}return t.containerState={},e.check(Te,f,p)(i)}function f(e){return r&&v(),x(c),d(e)}function p(e){return t.parser.lazy[t.now().line]=c!==n.length,o=t.now().offset,h(e)}function d(n){return t.containerState={},e.attempt(Te,m,h)(n)}function m(e){return c++,n.push([t.currentConstruct,t.containerState]),d(e)}function h(n){return null===n?(r&&v(),x(0),void e.consume(n)):(r=r||t.parser.flow(t.now()),e.enter("chunkFlow",{contentType:"flow",previous:i,_tokenizer:r}),g(n))}function g(n){return null===n?(b(e.exit("chunkFlow"),!0),x(0),void e.consume(n)):l(n)?(e.consume(n),b(e.exit("chunkFlow")),c=0,t.interrupt=void 0,u):(e.consume(n),g)}function b(e,n){const u=t.sliceStream(e);if(n&&u.push(null),e.previous=i,i&&(i.next=e),i=e,r.defineSkip(e.start),r.write(u),t.parser.lazy[e.start.line]){let e=r.events.length;for(;e--;)if(r.events[e][1].start.offset<o&&(!r.events[e][1].end||r.events[e][1].end.offset>o))return;const n=t.events.length;let i,u,a=n;for(;a--;)if("exit"===t.events[a][0]&&"chunkFlow"===t.events[a][1].type){if(i){u=t.events[a][1].end;break}i=!0}for(x(c),e=n;e<t.events.length;)t.events[e][1].end=Object.assign({},u),e++;xe(t.events,a+1,0,t.events.slice(n)),t.events.length=e}}function x(r){let i=n.length;for(;i-- >r;){const r=n[i];t.containerState=r[1],r[0].exit.call(t,e)}n.length=r}function v(){r.write([null]),i=void 0,r=void 0,t.containerState._closeFlow=void 0}}},Te={tokenize:function(e,t,n){return g(e,e.attempt(this.parser.constructs.document,t,n),"linePrefix",this.parser.constructs.disable.null.includes("codeIndented")?void 0:4)}};class Ee{constructor(e){this.left=e?[...e]:[],this.right=[]}get(e){if(e<0||e>=this.left.length+this.right.length)throw new RangeError("Cannot access index `"+e+"` in a splice buffer of size `"+(this.left.length+this.right.length)+"`");return e<this.left.length?this.left[e]:this.right[this.right.length-e+this.left.length-1]}get length(){return this.left.length+this.right.length}shift(){return this.setCursor(0),this.right.pop()}slice(e,t){const n=null==t?Number.POSITIVE_INFINITY:t;return n<this.left.length?this.left.slice(e,n):e>this.left.length?this.right.slice(this.right.length-n+this.left.length,this.right.length-e+this.left.length).reverse():this.left.slice(e).concat(this.right.slice(this.right.length-n+this.left.length).reverse())}splice(e,t,n){const r=t||0;this.setCursor(Math.trunc(e));const i=this.right.splice(this.right.length-r,Number.POSITIVE_INFINITY);return n&&Le(this.left,n),i.reverse()}pop(){return this.setCursor(Number.POSITIVE_INFINITY),this.left.pop()}push(e){this.setCursor(Number.POSITIVE_INFINITY),this.left.push(e)}pushMany(e){this.setCursor(Number.POSITIVE_INFINITY),Le(this.left,e)}unshift(e){this.setCursor(0),this.right.push(e)}unshiftMany(e){this.setCursor(0),Le(this.right,e.reverse())}setCursor(e){if(!(e===this.left.length||e>this.left.length&&0===this.right.length||e<0&&0===this.left.length))if(e<this.left.length){const t=this.left.splice(e,Number.POSITIVE_INFINITY);Le(this.right,t.reverse())}else{const t=this.right.splice(this.left.length+this.right.length-e,Number.POSITIVE_INFINITY);Le(this.left,t.reverse())}}}function Le(e,t){let n=0;if(t.length<1e4)e.push(...t);else for(;n<t.length;)e.push(...t.slice(n,n+1e4)),n+=1e4}function De(e){const t={};let n,r,i,o,c,u,a,s=-1;const l=new Ee(e);for(;++s<l.length;){for(;s in t;)s=t[s];if(n=l.get(s),s&&"chunkFlow"===n[1].type&&"listItemPrefix"===l.get(s-1)[1].type&&(u=n[1]._tokenizer.events,i=0,i<u.length&&"lineEndingBlank"===u[i][1].type&&(i+=2),i<u.length&&"content"===u[i][1].type))for(;++i<u.length&&"content"!==u[i][1].type;)"chunkText"===u[i][1].type&&(u[i][1]._isInFirstContentOfListItem=!0,i++);if("enter"===n[0])n[1].contentType&&(Object.assign(t,Ae(l,s)),s=t[s],a=!0);else if(n[1]._container){for(i=s,r=void 0;i--&&(o=l.get(i),"lineEnding"===o[1].type||"lineEndingBlank"===o[1].type);)"enter"===o[0]&&(r&&(l.get(r)[1].type="lineEndingBlank"),o[1].type="lineEnding",r=i);r&&(n[1].end=Object.assign({},l.get(r)[1].start),c=l.slice(r,s),c.unshift(n),l.splice(r,s-r+1,c))}}return xe(e,0,Number.POSITIVE_INFINITY,l.slice(0)),!a}function Ae(e,t){const n=e.get(t)[1],r=e.get(t)[2];let i=t-1;const o=[],c=n._tokenizer||r.parser[n.contentType](n.start),u=c.events,a=[],s={};let l,f,p=-1,d=n,m=0,h=0;const g=[h];for(;d;){for(;e.get(++i)[1]!==d;);o.push(i),d._tokenizer||(l=r.sliceStream(d),d.next||l.push(null),f&&c.defineSkip(d.start),d._isInFirstContentOfListItem&&(c._gfmTasklistFirstContentOfListItem=!0),c.write(l),d._isInFirstContentOfListItem&&(c._gfmTasklistFirstContentOfListItem=void 0)),f=d,d=d.next}for(d=n;++p<u.length;)"exit"===u[p][0]&&"enter"===u[p-1][0]&&u[p][1].type===u[p-1][1].type&&u[p][1].start.line!==u[p][1].end.line&&(h=p+1,g.push(h),d._tokenizer=void 0,d.previous=void 0,d=d.next);for(c.events=[],d?(d._tokenizer=void 0,d.previous=void 0):g.pop(),p=g.length;p--;){const t=u.slice(g[p],g[p+1]),n=o.pop();a.push([n,n+t.length-1]),e.splice(n,2,t)}for(a.reverse(),p=-1;++p<a.length;)s[m+a[p][0]]=m+a[p][1],m+=a[p][1]-a[p][0]-1;return s}const Ce={tokenize:function(e,t){let n;return function(t){return e.enter("content"),n=e.enter("chunkContent",{contentType:"content"}),r(t)};function r(t){return null===t?i(t):l(t)?e.check(Ie,o,i)(t):(e.consume(t),r)}function i(n){return e.exit("chunkContent"),e.exit("content"),t(n)}function o(t){return e.consume(t),e.exit("chunkContent"),n.next=e.enter("chunkContent",{contentType:"content",previous:n}),n=n.next,r}},resolve:function(e){return De(e),e}},Ie={tokenize:function(e,t,n){const r=this;return function(t){return e.exit("chunkContent"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),g(e,i,"linePrefix")};function i(i){if(null===i||l(i))return n(i);const o=r.events[r.events.length-1];return!r.parser.constructs.disable.null.includes("codeIndented")&&o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?t(i):e.interrupt(r.parser.constructs.flow,n,t)(i)}},partial:!0},Fe={tokenize:function(e){const t=this,n=e.attempt(W,(function(r){if(null!==r)return e.enter("lineEndingBlank"),e.consume(r),e.exit("lineEndingBlank"),t.currentConstruct=void 0,n;e.consume(r)}),e.attempt(this.parser.constructs.flowInitial,r,g(e,e.attempt(this.parser.constructs.flow,r,e.attempt(Ce,r)),"linePrefix")));return n;function r(r){if(null!==r)return e.enter("lineEnding"),e.consume(r),e.exit("lineEnding"),t.currentConstruct=void 0,n;e.consume(r)}}},ze={resolveAll:Oe()},Ne=Re("string"),Me=Re("text");function Re(e){return{tokenize:function(t){const n=this,r=this.parser.constructs[e],i=t.attempt(r,o,c);return o;function o(e){return a(e)?i(e):c(e)}function c(e){if(null!==e)return t.enter("data"),t.consume(e),u;t.consume(e)}function u(e){return a(e)?(t.exit("data"),i(e)):(t.consume(e),u)}function a(e){if(null===e)return!0;const t=r[e];let i=-1;if(t)for(;++i<t.length;){const e=t[i];if(!e.previous||e.previous.call(n,n.previous))return!0}return!1}},resolveAll:Oe("text"===e?Pe:void 0)}}function Oe(e){return function(t,n){let r,i=-1;for(;++i<=t.length;)void 0===r?t[i]&&"data"===t[i][1].type&&(r=i,i++):t[i]&&"data"===t[i][1].type||(i!==r+2&&(t[r][1].end=t[i-1][1].end,t.splice(r+2,i-r-2),i=r+2),r=void 0);return e?e(t,n):t}}function Pe(e,t){let n=0;for(;++n<=e.length;)if((n===e.length||"lineEnding"===e[n][1].type)&&"data"===e[n-1][1].type){const r=e[n-1][1],i=t.sliceStream(r);let o,c=i.length,u=-1,a=0;for(;c--;){const e=i[c];if("string"==typeof e){for(u=e.length;32===e.charCodeAt(u-1);)a++,u--;if(u)break;u=-1}else if(-2===e)o=!0,a++;else if(-1!==e){c++;break}}if(a){const i={type:n===e.length||o||a<2?"lineSuffix":"hardBreakTrailing",start:{line:r.end.line,column:r.end.column-a,offset:r.end.offset-a,_index:r.start._index+c,_bufferIndex:c?u:r.start._bufferIndex+u},end:Object.assign({},r.end)};r.end=Object.assign({},i.start),r.start.offset===r.end.offset?Object.assign(r,i):(e.splice(n,0,["enter",i,t],["exit",i,t]),n+=2)}n++}return e}function Ve(e,t,n){const r=[];let i=-1;for(;++i<e.length;){const o=e[i].resolveAll;o&&!r.includes(o)&&(t=o(t,n),r.push(o))}return t}function _e(e,t,n){let r=Object.assign(n?Object.assign({},n):{line:1,column:1,offset:0},{_index:0,_bufferIndex:-1});const i={},o=[];let c=[],u=[],a=!0;const s={consume:function(e){l(e)?(r.line++,r.column=1,r.offset+=-3===e?2:1,k()):-1!==e&&(r.column++,r.offset++),r._bufferIndex<0?r._index++:(r._bufferIndex++,r._bufferIndex===c[r._index].length&&(r._bufferIndex=-1,r._index++)),f.previous=e,a=!0},enter:function(e,t){const n=t||{};return n.type=e,n.start=h(),f.events.push(["enter",n,f]),u.push(n),n},exit:function(e){const t=u.pop();return t.end=h(),f.events.push(["exit",t,f]),t},attempt:x((function(e,t){v(e,t.from)})),check:x(b),interrupt:x(b,{interrupt:!0})},f={previous:null,code:null,containerState:{},events:[],parser:e,sliceStream:m,sliceSerialize:function(e,t){return function(e,t){let n=-1;const r=[];let i;for(;++n<e.length;){const o=e[n];let c;if("string"==typeof o)c=o;else switch(o){case-5:c="\r";break;case-4:c="\n";break;case-3:c="\r\n";break;case-2:c=t?" ":"\t";break;case-1:if(!t&&i)continue;c=" ";break;default:c=String.fromCharCode(o)}i=-2===o,r.push(c)}return r.join("")}(m(e),t)},now:h,defineSkip:function(e){i[e.line]=e.column,k()},write:function(e){return c=ve(c,e),function(){let e;for(;r._index<c.length;){const t=c[r._index];if("string"==typeof t)for(e=r._index,r._bufferIndex<0&&(r._bufferIndex=0);r._index===e&&r._bufferIndex<t.length;)g(t.charCodeAt(r._bufferIndex));else g(t)}}(),null!==c[c.length-1]?[]:(v(t,0),f.events=Ve(o,f.events,f),f.events)}};let p,d=t.tokenize.call(f,s);return t.resolveAll&&o.push(t),f;function m(e){return function(e,t){const n=t.start._index,r=t.start._bufferIndex,i=t.end._index,o=t.end._bufferIndex;let c;if(n===i)c=[e[n].slice(r,o)];else{if(c=e.slice(n,i),r>-1){const e=c[0];"string"==typeof e?c[0]=e.slice(r):c.shift()}o>0&&c.push(e[i].slice(0,o))}return c}(c,e)}function h(){const{line:e,column:t,offset:n,_index:i,_bufferIndex:o}=r;return{line:e,column:t,offset:n,_index:i,_bufferIndex:o}}function g(e){a=void 0,p=e,d=d(e)}function b(e,t){t.restore()}function x(e,t){return function(n,i,o){let c,l,p,d;return Array.isArray(n)?g(n):"tokenize"in n?g([n]):(m=n,function(e){const t=null!==e&&m[e],n=null!==e&&m.null;return g([...Array.isArray(t)?t:t?[t]:[],...Array.isArray(n)?n:n?[n]:[]])(e)});var m;function g(e){return c=e,l=0,0===e.length?o:b(e[l])}function b(e){return function(n){return d=function(){const e=h(),t=f.previous,n=f.currentConstruct,i=f.events.length,o=Array.from(u);return{restore:function(){r=e,f.previous=t,f.currentConstruct=n,f.events.length=i,u=o,k()},from:i}}(),p=e,e.partial||(f.currentConstruct=e),e.name&&f.parser.constructs.disable.null.includes(e.name)?v():e.tokenize.call(t?Object.assign(Object.create(f),t):f,s,x,v)(n)}}function x(t){return a=!0,e(p,d),i}function v(e){return a=!0,d.restore(),++l<c.length?b(c[l]):o}}}function v(e,t){e.resolveAll&&!o.includes(e)&&o.push(e),e.resolve&&xe(f.events,t,f.events.length-t,e.resolve(f.events.slice(t),f)),e.resolveTo&&(f.events=e.resolveTo(f.events,f))}function k(){r.line in i&&r.column<2&&(r.column=i[r.line],r.offset+=i[r.line]-1)}}const Be={name:"thematicBreak",tokenize:function(e,t,n){let r,i=0;return function(t){return e.enter("thematicBreak"),function(e){return r=e,o(e)}(t)};function o(o){return o===r?(e.enter("thematicBreakSequence"),c(o)):i>=3&&(null===o||l(o))?(e.exit("thematicBreak"),t(o)):n(o)}function c(t){return t===r?(e.consume(t),i++,c):(e.exit("thematicBreakSequence"),p(t)?g(e,o,"whitespace")(t):o(t))}}},je={name:"list",tokenize:function(e,t,n){const r=this,i=r.events[r.events.length-1];let o=i&&"linePrefix"===i[1].type?i[2].sliceSerialize(i[1],!0).length:0,c=0;return function(t){const i=r.containerState.type||(42===t||43===t||45===t?"listUnordered":"listOrdered");if("listUnordered"===i?!r.containerState.marker||t===r.containerState.marker:u(t)){if(r.containerState.type||(r.containerState.type=i,e.enter(i,{_container:!0})),"listUnordered"===i)return e.enter("listItemPrefix"),42===t||45===t?e.check(Be,n,s)(t):s(t);if(!r.interrupt||49===t)return e.enter("listItemPrefix"),e.enter("listItemValue"),a(t)}return n(t)};function a(t){return u(t)&&++c<10?(e.consume(t),a):(!r.interrupt||c<2)&&(r.containerState.marker?t===r.containerState.marker:41===t||46===t)?(e.exit("listItemValue"),s(t)):n(t)}function s(t){return e.enter("listItemMarker"),e.consume(t),e.exit("listItemMarker"),r.containerState.marker=r.containerState.marker||t,e.check(W,r.interrupt?n:l,e.attempt(He,d,f))}function l(e){return r.containerState.initialBlankLine=!0,o++,d(e)}function f(t){return p(t)?(e.enter("listItemPrefixWhitespace"),e.consume(t),e.exit("listItemPrefixWhitespace"),d):n(t)}function d(n){return r.containerState.size=o+r.sliceSerialize(e.exit("listItemPrefix"),!0).length,t(n)}},continuation:{tokenize:function(e,t,n){const r=this;return r.containerState._closeFlow=void 0,e.check(W,(function(n){return r.containerState.furtherBlankLines=r.containerState.furtherBlankLines||r.containerState.initialBlankLine,g(e,t,"listItemIndent",r.containerState.size+1)(n)}),(function(n){return r.containerState.furtherBlankLines||!p(n)?(r.containerState.furtherBlankLines=void 0,r.containerState.initialBlankLine=void 0,i(n)):(r.containerState.furtherBlankLines=void 0,r.containerState.initialBlankLine=void 0,e.attempt(Ue,t,i)(n))}));function i(i){return r.containerState._closeFlow=!0,r.interrupt=void 0,g(e,e.attempt(je,t,n),"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(i)}}},exit:function(e){e.exit(this.containerState.type)}},He={tokenize:function(e,t,n){const r=this;return g(e,(function(e){const i=r.events[r.events.length-1];return!p(e)&&i&&"listItemPrefixWhitespace"===i[1].type?t(e):n(e)}),"listItemPrefixWhitespace",r.parser.constructs.disable.null.includes("codeIndented")?void 0:5)},partial:!0},Ue={tokenize:function(e,t,n){const r=this;return g(e,(function(e){const i=r.events[r.events.length-1];return i&&"listItemIndent"===i[1].type&&i[2].sliceSerialize(i[1],!0).length===r.containerState.size?t(e):n(e)}),"listItemIndent",r.containerState.size+1)},partial:!0},Ge={name:"blockQuote",tokenize:function(e,t,n){const r=this;return function(t){if(62===t){const n=r.containerState;return n.open||(e.enter("blockQuote",{_container:!0}),n.open=!0),e.enter("blockQuotePrefix"),e.enter("blockQuoteMarker"),e.consume(t),e.exit("blockQuoteMarker"),i}return n(t)};function i(n){return p(n)?(e.enter("blockQuotePrefixWhitespace"),e.consume(n),e.exit("blockQuotePrefixWhitespace"),e.exit("blockQuotePrefix"),t):(e.exit("blockQuotePrefix"),t(n))}},continuation:{tokenize:function(e,t,n){const r=this;return function(t){return p(t)?g(e,i,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):i(t)};function i(r){return e.attempt(Ge,t,n)(r)}}},exit:function(e){e.exit("blockQuote")}};function Ye(e,t,n,r,i,o,u,a,s){const p=s||Number.POSITIVE_INFINITY;let d=0;return function(t){return 60===t?(e.enter(r),e.enter(i),e.enter(o),e.consume(t),e.exit(o),m):null===t||32===t||41===t||c(t)?n(t):(e.enter(r),e.enter(u),e.enter(a),e.enter("chunkString",{contentType:"string"}),b(t))};function m(n){return 62===n?(e.enter(o),e.consume(n),e.exit(o),e.exit(i),e.exit(r),t):(e.enter(a),e.enter("chunkString",{contentType:"string"}),h(n))}function h(t){return 62===t?(e.exit("chunkString"),e.exit(a),m(t)):null===t||60===t||l(t)?n(t):(e.consume(t),92===t?g:h)}function g(t){return 60===t||62===t||92===t?(e.consume(t),h):h(t)}function b(i){return d||null!==i&&41!==i&&!f(i)?d<p&&40===i?(e.consume(i),d++,b):41===i?(e.consume(i),d--,b):null===i||32===i||40===i||c(i)?n(i):(e.consume(i),92===i?x:b):(e.exit("chunkString"),e.exit(a),e.exit(u),e.exit(r),t(i))}function x(t){return 40===t||41===t||92===t?(e.consume(t),b):b(t)}}function Qe(e,t,n,r,i,o){const c=this;let u,a=0;return function(t){return e.enter(r),e.enter(i),e.consume(t),e.exit(i),e.enter(o),s};function s(p){return a>999||null===p||91===p||93===p&&!u||94===p&&!a&&"_hiddenFootnoteSupport"in c.parser.constructs?n(p):93===p?(e.exit(o),e.enter(i),e.consume(p),e.exit(i),e.exit(r),t):l(p)?(e.enter("lineEnding"),e.consume(p),e.exit("lineEnding"),s):(e.enter("chunkString",{contentType:"string"}),f(p))}function f(t){return null===t||91===t||93===t||l(t)||a++>999?(e.exit("chunkString"),s(t)):(e.consume(t),u||(u=!p(t)),92===t?d:f)}function d(t){return 91===t||92===t||93===t?(e.consume(t),a++,f):f(t)}}function We(e,t,n,r,i,o){let c;return function(t){return 34===t||39===t||40===t?(e.enter(r),e.enter(i),e.consume(t),e.exit(i),c=40===t?41:t,u):n(t)};function u(n){return n===c?(e.enter(i),e.consume(n),e.exit(i),e.exit(r),t):(e.enter(o),a(n))}function a(t){return t===c?(e.exit(o),u(c)):null===t?n(t):l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),g(e,a,"linePrefix")):(e.enter("chunkString",{contentType:"string"}),s(t))}function s(t){return t===c||null===t||l(t)?(e.exit("chunkString"),a(t)):(e.consume(t),92===t?f:s)}function f(t){return t===c||92===t?(e.consume(t),s):s(t)}}const Ze={name:"definition",tokenize:function(e,t,n){const r=this;let i;return function(t){return e.enter("definition"),function(t){return Qe.call(r,e,o,n,"definitionLabel","definitionLabelMarker","definitionLabelString")(t)}(t)};function o(t){return i=Z(r.sliceSerialize(r.events[r.events.length-1][1]).slice(1,-1)),58===t?(e.enter("definitionMarker"),e.consume(t),e.exit("definitionMarker"),c):n(t)}function c(t){return f(t)?b(e,u)(t):u(t)}function u(t){return Ye(e,a,n,"definitionDestination","definitionDestinationLiteral","definitionDestinationLiteralMarker","definitionDestinationRaw","definitionDestinationString")(t)}function a(t){return e.attempt(Je,s,s)(t)}function s(t){return p(t)?g(e,d,"whitespace")(t):d(t)}function d(o){return null===o||l(o)?(e.exit("definition"),r.parser.defined.push(i),t(o)):n(o)}}},Je={tokenize:function(e,t,n){return function(t){return f(t)?b(e,r)(t):n(t)};function r(t){return We(e,i,n,"definitionTitle","definitionTitleMarker","definitionTitleString")(t)}function i(t){return p(t)?g(e,o,"whitespace")(t):o(t)}function o(e){return null===e||l(e)?t(e):n(e)}},partial:!0},Ke={name:"codeIndented",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("codeIndented"),g(e,i,"linePrefix",5)(t)};function i(e){const t=r.events[r.events.length-1];return t&&"linePrefix"===t[1].type&&t[2].sliceSerialize(t[1],!0).length>=4?o(e):n(e)}function o(t){return null===t?u(t):l(t)?e.attempt(Xe,o,u)(t):(e.enter("codeFlowValue"),c(t))}function c(t){return null===t||l(t)?(e.exit("codeFlowValue"),o(t)):(e.consume(t),c)}function u(n){return e.exit("codeIndented"),t(n)}}},Xe={tokenize:function(e,t,n){const r=this;return i;function i(t){return r.parser.lazy[r.now().line]?n(t):l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i):g(e,o,"linePrefix",5)(t)}function o(e){const o=r.events[r.events.length-1];return o&&"linePrefix"===o[1].type&&o[2].sliceSerialize(o[1],!0).length>=4?t(e):l(e)?i(e):n(e)}},partial:!0},$e={name:"headingAtx",tokenize:function(e,t,n){let r=0;return function(t){return e.enter("atxHeading"),function(t){return e.enter("atxHeadingSequence"),i(t)}(t)};function i(t){return 35===t&&r++<6?(e.consume(t),i):null===t||f(t)?(e.exit("atxHeadingSequence"),o(t)):n(t)}function o(n){return 35===n?(e.enter("atxHeadingSequence"),c(n)):null===n||l(n)?(e.exit("atxHeading"),t(n)):p(n)?g(e,o,"whitespace")(n):(e.enter("atxHeadingText"),u(n))}function c(t){return 35===t?(e.consume(t),c):(e.exit("atxHeadingSequence"),o(t))}function u(t){return null===t||35===t||f(t)?(e.exit("atxHeadingText"),o(t)):(e.consume(t),u)}},resolve:function(e,t){let n,r,i=e.length-2,o=3;return"whitespace"===e[o][1].type&&(o+=2),i-2>o&&"whitespace"===e[i][1].type&&(i-=2),"atxHeadingSequence"===e[i][1].type&&(o===i-1||i-4>o&&"whitespace"===e[i-2][1].type)&&(i-=o+1===i?2:4),i>o&&(n={type:"atxHeadingText",start:e[o][1].start,end:e[i][1].end},r={type:"chunkText",start:e[o][1].start,end:e[i][1].end,contentType:"text"},xe(e,o,i-o+1,[["enter",n,t],["enter",r,t],["exit",r,t],["exit",n,t]])),e}},et={name:"setextUnderline",tokenize:function(e,t,n){const r=this;let i;return function(t){let c,u=r.events.length;for(;u--;)if("lineEnding"!==r.events[u][1].type&&"linePrefix"!==r.events[u][1].type&&"content"!==r.events[u][1].type){c="paragraph"===r.events[u][1].type;break}return r.parser.lazy[r.now().line]||!r.interrupt&&!c?n(t):(e.enter("setextHeadingLine"),i=t,function(t){return e.enter("setextHeadingLineSequence"),o(t)}(t))};function o(t){return t===i?(e.consume(t),o):(e.exit("setextHeadingLineSequence"),p(t)?g(e,c,"lineSuffix")(t):c(t))}function c(r){return null===r||l(r)?(e.exit("setextHeadingLine"),t(r)):n(r)}},resolveTo:function(e,t){let n,r,i,o=e.length;for(;o--;)if("enter"===e[o][0]){if("content"===e[o][1].type){n=o;break}"paragraph"===e[o][1].type&&(r=o)}else"content"===e[o][1].type&&e.splice(o,1),i||"definition"!==e[o][1].type||(i=o);const c={type:"setextHeading",start:Object.assign({},e[r][1].start),end:Object.assign({},e[e.length-1][1].end)};return e[r][1].type="setextHeadingText",i?(e.splice(r,0,["enter",c,t]),e.splice(i+1,0,["exit",e[n][1],t]),e[n][1].end=Object.assign({},e[i][1].end)):e[n][1]=c,e.push(["exit",c,t]),e}},tt=["address","article","aside","base","basefont","blockquote","body","caption","center","col","colgroup","dd","details","dialog","dir","div","dl","dt","fieldset","figcaption","figure","footer","form","frame","frameset","h1","h2","h3","h4","h5","h6","head","header","hr","html","iframe","legend","li","link","main","menu","menuitem","nav","noframes","ol","optgroup","option","p","param","search","section","summary","table","tbody","td","tfoot","th","thead","title","tr","track","ul"],nt=["pre","script","style","textarea"],rt={name:"htmlFlow",tokenize:function(e,t,n){const o=this;let c,u,a,s,d;return function(t){return function(t){return e.enter("htmlFlow"),e.enter("htmlFlowData"),e.consume(t),m}(t)};function m(i){return 33===i?(e.consume(i),h):47===i?(e.consume(i),u=!0,x):63===i?(e.consume(i),c=3,o.interrupt?t:V):r(i)?(e.consume(i),a=String.fromCharCode(i),v):n(i)}function h(i){return 45===i?(e.consume(i),c=2,g):91===i?(e.consume(i),c=5,s=0,b):r(i)?(e.consume(i),c=4,o.interrupt?t:V):n(i)}function g(r){return 45===r?(e.consume(r),o.interrupt?t:V):n(r)}function b(r){return r==="CDATA[".charCodeAt(s++)?(e.consume(r),6===s?o.interrupt?t:I:b):n(r)}function x(t){return r(t)?(e.consume(t),a=String.fromCharCode(t),v):n(t)}function v(r){if(null===r||47===r||62===r||f(r)){const i=47===r,s=a.toLowerCase();return i||u||!nt.includes(s)?tt.includes(a.toLowerCase())?(c=6,i?(e.consume(r),k):o.interrupt?t(r):I(r)):(c=7,o.interrupt&&!o.parser.lazy[o.now().line]?n(r):u?y(r):w(r)):(c=1,o.interrupt?t(r):I(r))}return 45===r||i(r)?(e.consume(r),a+=String.fromCharCode(r),v):n(r)}function k(r){return 62===r?(e.consume(r),o.interrupt?t:I):n(r)}function y(t){return p(t)?(e.consume(t),y):A(t)}function w(t){return 47===t?(e.consume(t),A):58===t||95===t||r(t)?(e.consume(t),S):p(t)?(e.consume(t),w):A(t)}function S(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),S):q(t)}function q(t){return 61===t?(e.consume(t),T):p(t)?(e.consume(t),q):w(t)}function T(t){return null===t||60===t||61===t||62===t||96===t?n(t):34===t||39===t?(e.consume(t),d=t,E):p(t)?(e.consume(t),T):L(t)}function E(t){return t===d?(e.consume(t),d=null,D):null===t||l(t)?n(t):(e.consume(t),E)}function L(t){return null===t||34===t||39===t||47===t||60===t||61===t||62===t||96===t||f(t)?q(t):(e.consume(t),L)}function D(e){return 47===e||62===e||p(e)?w(e):n(e)}function A(t){return 62===t?(e.consume(t),C):n(t)}function C(t){return null===t||l(t)?I(t):p(t)?(e.consume(t),C):n(t)}function I(t){return 45===t&&2===c?(e.consume(t),M):60===t&&1===c?(e.consume(t),R):62===t&&4===c?(e.consume(t),_):63===t&&3===c?(e.consume(t),V):93===t&&5===c?(e.consume(t),P):!l(t)||6!==c&&7!==c?null===t||l(t)?(e.exit("htmlFlowData"),F(t)):(e.consume(t),I):(e.exit("htmlFlowData"),e.check(it,B,F)(t))}function F(t){return e.check(ot,z,B)(t)}function z(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),N}function N(t){return null===t||l(t)?F(t):(e.enter("htmlFlowData"),I(t))}function M(t){return 45===t?(e.consume(t),V):I(t)}function R(t){return 47===t?(e.consume(t),a="",O):I(t)}function O(t){if(62===t){const n=a.toLowerCase();return nt.includes(n)?(e.consume(t),_):I(t)}return r(t)&&a.length<8?(e.consume(t),a+=String.fromCharCode(t),O):I(t)}function P(t){return 93===t?(e.consume(t),V):I(t)}function V(t){return 62===t?(e.consume(t),_):45===t&&2===c?(e.consume(t),V):I(t)}function _(t){return null===t||l(t)?(e.exit("htmlFlowData"),B(t)):(e.consume(t),_)}function B(n){return e.exit("htmlFlow"),t(n)}},resolveTo:function(e){let t=e.length;for(;t--&&("enter"!==e[t][0]||"htmlFlow"!==e[t][1].type););return t>1&&"linePrefix"===e[t-2][1].type&&(e[t][1].start=e[t-2][1].start,e[t+1][1].start=e[t-2][1].start,e.splice(t-2,2)),e},concrete:!0},it={tokenize:function(e,t,n){return function(r){return e.enter("lineEnding"),e.consume(r),e.exit("lineEnding"),e.attempt(W,t,n)}},partial:!0},ot={tokenize:function(e,t,n){const r=this;return function(t){return l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i):n(t)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},ct={tokenize:function(e,t,n){const r=this;return function(t){return null===t?n(t):(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),i)};function i(e){return r.parser.lazy[r.now().line]?n(e):t(e)}},partial:!0},ut={name:"codeFenced",tokenize:function(e,t,n){const r=this,i={tokenize:function(e,t,n){let i=0;return function(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),c};function c(t){return e.enter("codeFencedFence"),p(t)?g(e,a,"linePrefix",r.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):a(t)}function a(t){return t===o?(e.enter("codeFencedFenceSequence"),s(t)):n(t)}function s(t){return t===o?(i++,e.consume(t),s):i>=u?(e.exit("codeFencedFenceSequence"),p(t)?g(e,f,"whitespace")(t):f(t)):n(t)}function f(r){return null===r||l(r)?(e.exit("codeFencedFence"),t(r)):n(r)}},partial:!0};let o,c=0,u=0;return function(t){return function(t){const n=r.events[r.events.length-1];return c=n&&"linePrefix"===n[1].type?n[2].sliceSerialize(n[1],!0).length:0,o=t,e.enter("codeFenced"),e.enter("codeFencedFence"),e.enter("codeFencedFenceSequence"),a(t)}(t)};function a(t){return t===o?(u++,e.consume(t),a):u<3?n(t):(e.exit("codeFencedFenceSequence"),p(t)?g(e,s,"whitespace")(t):s(t))}function s(n){return null===n||l(n)?(e.exit("codeFencedFence"),r.interrupt?t(n):e.check(ct,h,y)(n)):(e.enter("codeFencedFenceInfo"),e.enter("chunkString",{contentType:"string"}),f(n))}function f(t){return null===t||l(t)?(e.exit("chunkString"),e.exit("codeFencedFenceInfo"),s(t)):p(t)?(e.exit("chunkString"),e.exit("codeFencedFenceInfo"),g(e,d,"whitespace")(t)):96===t&&t===o?n(t):(e.consume(t),f)}function d(t){return null===t||l(t)?s(t):(e.enter("codeFencedFenceMeta"),e.enter("chunkString",{contentType:"string"}),m(t))}function m(t){return null===t||l(t)?(e.exit("chunkString"),e.exit("codeFencedFenceMeta"),s(t)):96===t&&t===o?n(t):(e.consume(t),m)}function h(t){return e.attempt(i,y,b)(t)}function b(t){return e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),x}function x(t){return c>0&&p(t)?g(e,v,"linePrefix",c+1)(t):v(t)}function v(t){return null===t||l(t)?e.check(ct,h,y)(t):(e.enter("codeFlowValue"),k(t))}function k(t){return null===t||l(t)?(e.exit("codeFlowValue"),v(t)):(e.consume(t),k)}function y(n){return e.exit("codeFenced"),t(n)}},concrete:!0},at={AElig:"Æ",AMP:"&",Aacute:"Á",Abreve:"Ă",Acirc:"Â",Acy:"А",Afr:"𝔄",Agrave:"À",Alpha:"Α",Amacr:"Ā",And:"⩓",Aogon:"Ą",Aopf:"𝔸",ApplyFunction:"⁡",Aring:"Å",Ascr:"𝒜",Assign:"≔",Atilde:"Ã",Auml:"Ä",Backslash:"∖",Barv:"⫧",Barwed:"⌆",Bcy:"Б",Because:"∵",Bernoullis:"ℬ",Beta:"Β",Bfr:"𝔅",Bopf:"𝔹",Breve:"˘",Bscr:"ℬ",Bumpeq:"≎",CHcy:"Ч",COPY:"©",Cacute:"Ć",Cap:"⋒",CapitalDifferentialD:"ⅅ",Cayleys:"ℭ",Ccaron:"Č",Ccedil:"Ç",Ccirc:"Ĉ",Cconint:"∰",Cdot:"Ċ",Cedilla:"¸",CenterDot:"·",Cfr:"ℭ",Chi:"Χ",CircleDot:"⊙",CircleMinus:"⊖",CirclePlus:"⊕",CircleTimes:"⊗",ClockwiseContourIntegral:"∲",CloseCurlyDoubleQuote:"”",CloseCurlyQuote:"’",Colon:"∷",Colone:"⩴",Congruent:"≡",Conint:"∯",ContourIntegral:"∮",Copf:"ℂ",Coproduct:"∐",CounterClockwiseContourIntegral:"∳",Cross:"⨯",Cscr:"𝒞",Cup:"⋓",CupCap:"≍",DD:"ⅅ",DDotrahd:"⤑",DJcy:"Ђ",DScy:"Ѕ",DZcy:"Џ",Dagger:"‡",Darr:"↡",Dashv:"⫤",Dcaron:"Ď",Dcy:"Д",Del:"∇",Delta:"Δ",Dfr:"𝔇",DiacriticalAcute:"´",DiacriticalDot:"˙",DiacriticalDoubleAcute:"˝",DiacriticalGrave:"`",DiacriticalTilde:"˜",Diamond:"⋄",DifferentialD:"ⅆ",Dopf:"𝔻",Dot:"¨",DotDot:"⃜",DotEqual:"≐",DoubleContourIntegral:"∯",DoubleDot:"¨",DoubleDownArrow:"⇓",DoubleLeftArrow:"⇐",DoubleLeftRightArrow:"⇔",DoubleLeftTee:"⫤",DoubleLongLeftArrow:"⟸",DoubleLongLeftRightArrow:"⟺",DoubleLongRightArrow:"⟹",DoubleRightArrow:"⇒",DoubleRightTee:"⊨",DoubleUpArrow:"⇑",DoubleUpDownArrow:"⇕",DoubleVerticalBar:"∥",DownArrow:"↓",DownArrowBar:"⤓",DownArrowUpArrow:"⇵",DownBreve:"̑",DownLeftRightVector:"⥐",DownLeftTeeVector:"⥞",DownLeftVector:"↽",DownLeftVectorBar:"⥖",DownRightTeeVector:"⥟",DownRightVector:"⇁",DownRightVectorBar:"⥗",DownTee:"⊤",DownTeeArrow:"↧",Downarrow:"⇓",Dscr:"𝒟",Dstrok:"Đ",ENG:"Ŋ",ETH:"Ð",Eacute:"É",Ecaron:"Ě",Ecirc:"Ê",Ecy:"Э",Edot:"Ė",Efr:"𝔈",Egrave:"È",Element:"∈",Emacr:"Ē",EmptySmallSquare:"◻",EmptyVerySmallSquare:"▫",Eogon:"Ę",Eopf:"𝔼",Epsilon:"Ε",Equal:"⩵",EqualTilde:"≂",Equilibrium:"⇌",Escr:"ℰ",Esim:"⩳",Eta:"Η",Euml:"Ë",Exists:"∃",ExponentialE:"ⅇ",Fcy:"Ф",Ffr:"𝔉",FilledSmallSquare:"◼",FilledVerySmallSquare:"▪",Fopf:"𝔽",ForAll:"∀",Fouriertrf:"ℱ",Fscr:"ℱ",GJcy:"Ѓ",GT:">",Gamma:"Γ",Gammad:"Ϝ",Gbreve:"Ğ",Gcedil:"Ģ",Gcirc:"Ĝ",Gcy:"Г",Gdot:"Ġ",Gfr:"𝔊",Gg:"⋙",Gopf:"𝔾",GreaterEqual:"≥",GreaterEqualLess:"⋛",GreaterFullEqual:"≧",GreaterGreater:"⪢",GreaterLess:"≷",GreaterSlantEqual:"⩾",GreaterTilde:"≳",Gscr:"𝒢",Gt:"≫",HARDcy:"Ъ",Hacek:"ˇ",Hat:"^",Hcirc:"Ĥ",Hfr:"ℌ",HilbertSpace:"ℋ",Hopf:"ℍ",HorizontalLine:"─",Hscr:"ℋ",Hstrok:"Ħ",HumpDownHump:"≎",HumpEqual:"≏",IEcy:"Е",IJlig:"Ĳ",IOcy:"Ё",Iacute:"Í",Icirc:"Î",Icy:"И",Idot:"İ",Ifr:"ℑ",Igrave:"Ì",Im:"ℑ",Imacr:"Ī",ImaginaryI:"ⅈ",Implies:"⇒",Int:"∬",Integral:"∫",Intersection:"⋂",InvisibleComma:"⁣",InvisibleTimes:"⁢",Iogon:"Į",Iopf:"𝕀",Iota:"Ι",Iscr:"ℐ",Itilde:"Ĩ",Iukcy:"І",Iuml:"Ï",Jcirc:"Ĵ",Jcy:"Й",Jfr:"𝔍",Jopf:"𝕁",Jscr:"𝒥",Jsercy:"Ј",Jukcy:"Є",KHcy:"Х",KJcy:"Ќ",Kappa:"Κ",Kcedil:"Ķ",Kcy:"К",Kfr:"𝔎",Kopf:"𝕂",Kscr:"𝒦",LJcy:"Љ",LT:"<",Lacute:"Ĺ",Lambda:"Λ",Lang:"⟪",Laplacetrf:"ℒ",Larr:"↞",Lcaron:"Ľ",Lcedil:"Ļ",Lcy:"Л",LeftAngleBracket:"⟨",LeftArrow:"←",LeftArrowBar:"⇤",LeftArrowRightArrow:"⇆",LeftCeiling:"⌈",LeftDoubleBracket:"⟦",LeftDownTeeVector:"⥡",LeftDownVector:"⇃",LeftDownVectorBar:"⥙",LeftFloor:"⌊",LeftRightArrow:"↔",LeftRightVector:"⥎",LeftTee:"⊣",LeftTeeArrow:"↤",LeftTeeVector:"⥚",LeftTriangle:"⊲",LeftTriangleBar:"⧏",LeftTriangleEqual:"⊴",LeftUpDownVector:"⥑",LeftUpTeeVector:"⥠",LeftUpVector:"↿",LeftUpVectorBar:"⥘",LeftVector:"↼",LeftVectorBar:"⥒",Leftarrow:"⇐",Leftrightarrow:"⇔",LessEqualGreater:"⋚",LessFullEqual:"≦",LessGreater:"≶",LessLess:"⪡",LessSlantEqual:"⩽",LessTilde:"≲",Lfr:"𝔏",Ll:"⋘",Lleftarrow:"⇚",Lmidot:"Ŀ",LongLeftArrow:"⟵",LongLeftRightArrow:"⟷",LongRightArrow:"⟶",Longleftarrow:"⟸",Longleftrightarrow:"⟺",Longrightarrow:"⟹",Lopf:"𝕃",LowerLeftArrow:"↙",LowerRightArrow:"↘",Lscr:"ℒ",Lsh:"↰",Lstrok:"Ł",Lt:"≪",Map:"⤅",Mcy:"М",MediumSpace:" ",Mellintrf:"ℳ",Mfr:"𝔐",MinusPlus:"∓",Mopf:"𝕄",Mscr:"ℳ",Mu:"Μ",NJcy:"Њ",Nacute:"Ń",Ncaron:"Ň",Ncedil:"Ņ",Ncy:"Н",NegativeMediumSpace:"​",NegativeThickSpace:"​",NegativeThinSpace:"​",NegativeVeryThinSpace:"​",NestedGreaterGreater:"≫",NestedLessLess:"≪",NewLine:"\n",Nfr:"𝔑",NoBreak:"⁠",NonBreakingSpace:" ",Nopf:"ℕ",Not:"⫬",NotCongruent:"≢",NotCupCap:"≭",NotDoubleVerticalBar:"∦",NotElement:"∉",NotEqual:"≠",NotEqualTilde:"≂̸",NotExists:"∄",NotGreater:"≯",NotGreaterEqual:"≱",NotGreaterFullEqual:"≧̸",NotGreaterGreater:"≫̸",NotGreaterLess:"≹",NotGreaterSlantEqual:"⩾̸",NotGreaterTilde:"≵",NotHumpDownHump:"≎̸",NotHumpEqual:"≏̸",NotLeftTriangle:"⋪",NotLeftTriangleBar:"⧏̸",NotLeftTriangleEqual:"⋬",NotLess:"≮",NotLessEqual:"≰",NotLessGreater:"≸",NotLessLess:"≪̸",NotLessSlantEqual:"⩽̸",NotLessTilde:"≴",NotNestedGreaterGreater:"⪢̸",NotNestedLessLess:"⪡̸",NotPrecedes:"⊀",NotPrecedesEqual:"⪯̸",NotPrecedesSlantEqual:"⋠",NotReverseElement:"∌",NotRightTriangle:"⋫",NotRightTriangleBar:"⧐̸",NotRightTriangleEqual:"⋭",NotSquareSubset:"⊏̸",NotSquareSubsetEqual:"⋢",NotSquareSuperset:"⊐̸",NotSquareSupersetEqual:"⋣",NotSubset:"⊂⃒",NotSubsetEqual:"⊈",NotSucceeds:"⊁",NotSucceedsEqual:"⪰̸",NotSucceedsSlantEqual:"⋡",NotSucceedsTilde:"≿̸",NotSuperset:"⊃⃒",NotSupersetEqual:"⊉",NotTilde:"≁",NotTildeEqual:"≄",NotTildeFullEqual:"≇",NotTildeTilde:"≉",NotVerticalBar:"∤",Nscr:"𝒩",Ntilde:"Ñ",Nu:"Ν",OElig:"Œ",Oacute:"Ó",Ocirc:"Ô",Ocy:"О",Odblac:"Ő",Ofr:"𝔒",Ograve:"Ò",Omacr:"Ō",Omega:"Ω",Omicron:"Ο",Oopf:"𝕆",OpenCurlyDoubleQuote:"“",OpenCurlyQuote:"‘",Or:"⩔",Oscr:"𝒪",Oslash:"Ø",Otilde:"Õ",Otimes:"⨷",Ouml:"Ö",OverBar:"‾",OverBrace:"⏞",OverBracket:"⎴",OverParenthesis:"⏜",PartialD:"∂",Pcy:"П",Pfr:"𝔓",Phi:"Φ",Pi:"Π",PlusMinus:"±",Poincareplane:"ℌ",Popf:"ℙ",Pr:"⪻",Precedes:"≺",PrecedesEqual:"⪯",PrecedesSlantEqual:"≼",PrecedesTilde:"≾",Prime:"″",Product:"∏",Proportion:"∷",Proportional:"∝",Pscr:"𝒫",Psi:"Ψ",QUOT:'"',Qfr:"𝔔",Qopf:"ℚ",Qscr:"𝒬",RBarr:"⤐",REG:"®",Racute:"Ŕ",Rang:"⟫",Rarr:"↠",Rarrtl:"⤖",Rcaron:"Ř",Rcedil:"Ŗ",Rcy:"Р",Re:"ℜ",ReverseElement:"∋",ReverseEquilibrium:"⇋",ReverseUpEquilibrium:"⥯",Rfr:"ℜ",Rho:"Ρ",RightAngleBracket:"⟩",RightArrow:"→",RightArrowBar:"⇥",RightArrowLeftArrow:"⇄",RightCeiling:"⌉",RightDoubleBracket:"⟧",RightDownTeeVector:"⥝",RightDownVector:"⇂",RightDownVectorBar:"⥕",RightFloor:"⌋",RightTee:"⊢",RightTeeArrow:"↦",RightTeeVector:"⥛",RightTriangle:"⊳",RightTriangleBar:"⧐",RightTriangleEqual:"⊵",RightUpDownVector:"⥏",RightUpTeeVector:"⥜",RightUpVector:"↾",RightUpVectorBar:"⥔",RightVector:"⇀",RightVectorBar:"⥓",Rightarrow:"⇒",Ropf:"ℝ",RoundImplies:"⥰",Rrightarrow:"⇛",Rscr:"ℛ",Rsh:"↱",RuleDelayed:"⧴",SHCHcy:"Щ",SHcy:"Ш",SOFTcy:"Ь",Sacute:"Ś",Sc:"⪼",Scaron:"Š",Scedil:"Ş",Scirc:"Ŝ",Scy:"С",Sfr:"𝔖",ShortDownArrow:"↓",ShortLeftArrow:"←",ShortRightArrow:"→",ShortUpArrow:"↑",Sigma:"Σ",SmallCircle:"∘",Sopf:"𝕊",Sqrt:"√",Square:"□",SquareIntersection:"⊓",SquareSubset:"⊏",SquareSubsetEqual:"⊑",SquareSuperset:"⊐",SquareSupersetEqual:"⊒",SquareUnion:"⊔",Sscr:"𝒮",Star:"⋆",Sub:"⋐",Subset:"⋐",SubsetEqual:"⊆",Succeeds:"≻",SucceedsEqual:"⪰",SucceedsSlantEqual:"≽",SucceedsTilde:"≿",SuchThat:"∋",Sum:"∑",Sup:"⋑",Superset:"⊃",SupersetEqual:"⊇",Supset:"⋑",THORN:"Þ",TRADE:"™",TSHcy:"Ћ",TScy:"Ц",Tab:"\t",Tau:"Τ",Tcaron:"Ť",Tcedil:"Ţ",Tcy:"Т",Tfr:"𝔗",Therefore:"∴",Theta:"Θ",ThickSpace:"  ",ThinSpace:" ",Tilde:"∼",TildeEqual:"≃",TildeFullEqual:"≅",TildeTilde:"≈",Topf:"𝕋",TripleDot:"⃛",Tscr:"𝒯",Tstrok:"Ŧ",Uacute:"Ú",Uarr:"↟",Uarrocir:"⥉",Ubrcy:"Ў",Ubreve:"Ŭ",Ucirc:"Û",Ucy:"У",Udblac:"Ű",Ufr:"𝔘",Ugrave:"Ù",Umacr:"Ū",UnderBar:"_",UnderBrace:"⏟",UnderBracket:"⎵",UnderParenthesis:"⏝",Union:"⋃",UnionPlus:"⊎",Uogon:"Ų",Uopf:"𝕌",UpArrow:"↑",UpArrowBar:"⤒",UpArrowDownArrow:"⇅",UpDownArrow:"↕",UpEquilibrium:"⥮",UpTee:"⊥",UpTeeArrow:"↥",Uparrow:"⇑",Updownarrow:"⇕",UpperLeftArrow:"↖",UpperRightArrow:"↗",Upsi:"ϒ",Upsilon:"Υ",Uring:"Ů",Uscr:"𝒰",Utilde:"Ũ",Uuml:"Ü",VDash:"⊫",Vbar:"⫫",Vcy:"В",Vdash:"⊩",Vdashl:"⫦",Vee:"⋁",Verbar:"‖",Vert:"‖",VerticalBar:"∣",VerticalLine:"|",VerticalSeparator:"❘",VerticalTilde:"≀",VeryThinSpace:" ",Vfr:"𝔙",Vopf:"𝕍",Vscr:"𝒱",Vvdash:"⊪",Wcirc:"Ŵ",Wedge:"⋀",Wfr:"𝔚",Wopf:"𝕎",Wscr:"𝒲",Xfr:"𝔛",Xi:"Ξ",Xopf:"𝕏",Xscr:"𝒳",YAcy:"Я",YIcy:"Ї",YUcy:"Ю",Yacute:"Ý",Ycirc:"Ŷ",Ycy:"Ы",Yfr:"𝔜",Yopf:"𝕐",Yscr:"𝒴",Yuml:"Ÿ",ZHcy:"Ж",Zacute:"Ź",Zcaron:"Ž",Zcy:"З",Zdot:"Ż",ZeroWidthSpace:"​",Zeta:"Ζ",Zfr:"ℨ",Zopf:"ℤ",Zscr:"𝒵",aacute:"á",abreve:"ă",ac:"∾",acE:"∾̳",acd:"∿",acirc:"â",acute:"´",acy:"а",aelig:"æ",af:"⁡",afr:"𝔞",agrave:"à",alefsym:"ℵ",aleph:"ℵ",alpha:"α",amacr:"ā",amalg:"⨿",amp:"&",and:"∧",andand:"⩕",andd:"⩜",andslope:"⩘",andv:"⩚",ang:"∠",ange:"⦤",angle:"∠",angmsd:"∡",angmsdaa:"⦨",angmsdab:"⦩",angmsdac:"⦪",angmsdad:"⦫",angmsdae:"⦬",angmsdaf:"⦭",angmsdag:"⦮",angmsdah:"⦯",angrt:"∟",angrtvb:"⊾",angrtvbd:"⦝",angsph:"∢",angst:"Å",angzarr:"⍼",aogon:"ą",aopf:"𝕒",ap:"≈",apE:"⩰",apacir:"⩯",ape:"≊",apid:"≋",apos:"'",approx:"≈",approxeq:"≊",aring:"å",ascr:"𝒶",ast:"*",asymp:"≈",asympeq:"≍",atilde:"ã",auml:"ä",awconint:"∳",awint:"⨑",bNot:"⫭",backcong:"≌",backepsilon:"϶",backprime:"‵",backsim:"∽",backsimeq:"⋍",barvee:"⊽",barwed:"⌅",barwedge:"⌅",bbrk:"⎵",bbrktbrk:"⎶",bcong:"≌",bcy:"б",bdquo:"„",becaus:"∵",because:"∵",bemptyv:"⦰",bepsi:"϶",bernou:"ℬ",beta:"β",beth:"ℶ",between:"≬",bfr:"𝔟",bigcap:"⋂",bigcirc:"◯",bigcup:"⋃",bigodot:"⨀",bigoplus:"⨁",bigotimes:"⨂",bigsqcup:"⨆",bigstar:"★",bigtriangledown:"▽",bigtriangleup:"△",biguplus:"⨄",bigvee:"⋁",bigwedge:"⋀",bkarow:"⤍",blacklozenge:"⧫",blacksquare:"▪",blacktriangle:"▴",blacktriangledown:"▾",blacktriangleleft:"◂",blacktriangleright:"▸",blank:"␣",blk12:"▒",blk14:"░",blk34:"▓",block:"█",bne:"=⃥",bnequiv:"≡⃥",bnot:"⌐",bopf:"𝕓",bot:"⊥",bottom:"⊥",bowtie:"⋈",boxDL:"╗",boxDR:"╔",boxDl:"╖",boxDr:"╓",boxH:"═",boxHD:"╦",boxHU:"╩",boxHd:"╤",boxHu:"╧",boxUL:"╝",boxUR:"╚",boxUl:"╜",boxUr:"╙",boxV:"║",boxVH:"╬",boxVL:"╣",boxVR:"╠",boxVh:"╫",boxVl:"╢",boxVr:"╟",boxbox:"⧉",boxdL:"╕",boxdR:"╒",boxdl:"┐",boxdr:"┌",boxh:"─",boxhD:"╥",boxhU:"╨",boxhd:"┬",boxhu:"┴",boxminus:"⊟",boxplus:"⊞",boxtimes:"⊠",boxuL:"╛",boxuR:"╘",boxul:"┘",boxur:"└",boxv:"│",boxvH:"╪",boxvL:"╡",boxvR:"╞",boxvh:"┼",boxvl:"┤",boxvr:"├",bprime:"‵",breve:"˘",brvbar:"¦",bscr:"𝒷",bsemi:"⁏",bsim:"∽",bsime:"⋍",bsol:"\\",bsolb:"⧅",bsolhsub:"⟈",bull:"•",bullet:"•",bump:"≎",bumpE:"⪮",bumpe:"≏",bumpeq:"≏",cacute:"ć",cap:"∩",capand:"⩄",capbrcup:"⩉",capcap:"⩋",capcup:"⩇",capdot:"⩀",caps:"∩︀",caret:"⁁",caron:"ˇ",ccaps:"⩍",ccaron:"č",ccedil:"ç",ccirc:"ĉ",ccups:"⩌",ccupssm:"⩐",cdot:"ċ",cedil:"¸",cemptyv:"⦲",cent:"¢",centerdot:"·",cfr:"𝔠",chcy:"ч",check:"✓",checkmark:"✓",chi:"χ",cir:"○",cirE:"⧃",circ:"ˆ",circeq:"≗",circlearrowleft:"↺",circlearrowright:"↻",circledR:"®",circledS:"Ⓢ",circledast:"⊛",circledcirc:"⊚",circleddash:"⊝",cire:"≗",cirfnint:"⨐",cirmid:"⫯",cirscir:"⧂",clubs:"♣",clubsuit:"♣",colon:":",colone:"≔",coloneq:"≔",comma:",",commat:"@",comp:"∁",compfn:"∘",complement:"∁",complexes:"ℂ",cong:"≅",congdot:"⩭",conint:"∮",copf:"𝕔",coprod:"∐",copy:"©",copysr:"℗",crarr:"↵",cross:"✗",cscr:"𝒸",csub:"⫏",csube:"⫑",csup:"⫐",csupe:"⫒",ctdot:"⋯",cudarrl:"⤸",cudarrr:"⤵",cuepr:"⋞",cuesc:"⋟",cularr:"↶",cularrp:"⤽",cup:"∪",cupbrcap:"⩈",cupcap:"⩆",cupcup:"⩊",cupdot:"⊍",cupor:"⩅",cups:"∪︀",curarr:"↷",curarrm:"⤼",curlyeqprec:"⋞",curlyeqsucc:"⋟",curlyvee:"⋎",curlywedge:"⋏",curren:"¤",curvearrowleft:"↶",curvearrowright:"↷",cuvee:"⋎",cuwed:"⋏",cwconint:"∲",cwint:"∱",cylcty:"⌭",dArr:"⇓",dHar:"⥥",dagger:"†",daleth:"ℸ",darr:"↓",dash:"‐",dashv:"⊣",dbkarow:"⤏",dblac:"˝",dcaron:"ď",dcy:"д",dd:"ⅆ",ddagger:"‡",ddarr:"⇊",ddotseq:"⩷",deg:"°",delta:"δ",demptyv:"⦱",dfisht:"⥿",dfr:"𝔡",dharl:"⇃",dharr:"⇂",diam:"⋄",diamond:"⋄",diamondsuit:"♦",diams:"♦",die:"¨",digamma:"ϝ",disin:"⋲",div:"÷",divide:"÷",divideontimes:"⋇",divonx:"⋇",djcy:"ђ",dlcorn:"⌞",dlcrop:"⌍",dollar:"$",dopf:"𝕕",dot:"˙",doteq:"≐",doteqdot:"≑",dotminus:"∸",dotplus:"∔",dotsquare:"⊡",doublebarwedge:"⌆",downarrow:"↓",downdownarrows:"⇊",downharpoonleft:"⇃",downharpoonright:"⇂",drbkarow:"⤐",drcorn:"⌟",drcrop:"⌌",dscr:"𝒹",dscy:"ѕ",dsol:"⧶",dstrok:"đ",dtdot:"⋱",dtri:"▿",dtrif:"▾",duarr:"⇵",duhar:"⥯",dwangle:"⦦",dzcy:"џ",dzigrarr:"⟿",eDDot:"⩷",eDot:"≑",eacute:"é",easter:"⩮",ecaron:"ě",ecir:"≖",ecirc:"ê",ecolon:"≕",ecy:"э",edot:"ė",ee:"ⅇ",efDot:"≒",efr:"𝔢",eg:"⪚",egrave:"è",egs:"⪖",egsdot:"⪘",el:"⪙",elinters:"⏧",ell:"ℓ",els:"⪕",elsdot:"⪗",emacr:"ē",empty:"∅",emptyset:"∅",emptyv:"∅",emsp13:" ",emsp14:" ",emsp:" ",eng:"ŋ",ensp:" ",eogon:"ę",eopf:"𝕖",epar:"⋕",eparsl:"⧣",eplus:"⩱",epsi:"ε",epsilon:"ε",epsiv:"ϵ",eqcirc:"≖",eqcolon:"≕",eqsim:"≂",eqslantgtr:"⪖",eqslantless:"⪕",equals:"=",equest:"≟",equiv:"≡",equivDD:"⩸",eqvparsl:"⧥",erDot:"≓",erarr:"⥱",escr:"ℯ",esdot:"≐",esim:"≂",eta:"η",eth:"ð",euml:"ë",euro:"€",excl:"!",exist:"∃",expectation:"ℰ",exponentiale:"ⅇ",fallingdotseq:"≒",fcy:"ф",female:"♀",ffilig:"ﬃ",fflig:"ﬀ",ffllig:"ﬄ",ffr:"𝔣",filig:"ﬁ",fjlig:"fj",flat:"♭",fllig:"ﬂ",fltns:"▱",fnof:"ƒ",fopf:"𝕗",forall:"∀",fork:"⋔",forkv:"⫙",fpartint:"⨍",frac12:"½",frac13:"⅓",frac14:"¼",frac15:"⅕",frac16:"⅙",frac18:"⅛",frac23:"⅔",frac25:"⅖",frac34:"¾",frac35:"⅗",frac38:"⅜",frac45:"⅘",frac56:"⅚",frac58:"⅝",frac78:"⅞",frasl:"⁄",frown:"⌢",fscr:"𝒻",gE:"≧",gEl:"⪌",gacute:"ǵ",gamma:"γ",gammad:"ϝ",gap:"⪆",gbreve:"ğ",gcirc:"ĝ",gcy:"г",gdot:"ġ",ge:"≥",gel:"⋛",geq:"≥",geqq:"≧",geqslant:"⩾",ges:"⩾",gescc:"⪩",gesdot:"⪀",gesdoto:"⪂",gesdotol:"⪄",gesl:"⋛︀",gesles:"⪔",gfr:"𝔤",gg:"≫",ggg:"⋙",gimel:"ℷ",gjcy:"ѓ",gl:"≷",glE:"⪒",gla:"⪥",glj:"⪤",gnE:"≩",gnap:"⪊",gnapprox:"⪊",gne:"⪈",gneq:"⪈",gneqq:"≩",gnsim:"⋧",gopf:"𝕘",grave:"`",gscr:"ℊ",gsim:"≳",gsime:"⪎",gsiml:"⪐",gt:">",gtcc:"⪧",gtcir:"⩺",gtdot:"⋗",gtlPar:"⦕",gtquest:"⩼",gtrapprox:"⪆",gtrarr:"⥸",gtrdot:"⋗",gtreqless:"⋛",gtreqqless:"⪌",gtrless:"≷",gtrsim:"≳",gvertneqq:"≩︀",gvnE:"≩︀",hArr:"⇔",hairsp:" ",half:"½",hamilt:"ℋ",hardcy:"ъ",harr:"↔",harrcir:"⥈",harrw:"↭",hbar:"ℏ",hcirc:"ĥ",hearts:"♥",heartsuit:"♥",hellip:"…",hercon:"⊹",hfr:"𝔥",hksearow:"⤥",hkswarow:"⤦",hoarr:"⇿",homtht:"∻",hookleftarrow:"↩",hookrightarrow:"↪",hopf:"𝕙",horbar:"―",hscr:"𝒽",hslash:"ℏ",hstrok:"ħ",hybull:"⁃",hyphen:"‐",iacute:"í",ic:"⁣",icirc:"î",icy:"и",iecy:"е",iexcl:"¡",iff:"⇔",ifr:"𝔦",igrave:"ì",ii:"ⅈ",iiiint:"⨌",iiint:"∭",iinfin:"⧜",iiota:"℩",ijlig:"ĳ",imacr:"ī",image:"ℑ",imagline:"ℐ",imagpart:"ℑ",imath:"ı",imof:"⊷",imped:"Ƶ",in:"∈",incare:"℅",infin:"∞",infintie:"⧝",inodot:"ı",int:"∫",intcal:"⊺",integers:"ℤ",intercal:"⊺",intlarhk:"⨗",intprod:"⨼",iocy:"ё",iogon:"į",iopf:"𝕚",iota:"ι",iprod:"⨼",iquest:"¿",iscr:"𝒾",isin:"∈",isinE:"⋹",isindot:"⋵",isins:"⋴",isinsv:"⋳",isinv:"∈",it:"⁢",itilde:"ĩ",iukcy:"і",iuml:"ï",jcirc:"ĵ",jcy:"й",jfr:"𝔧",jmath:"ȷ",jopf:"𝕛",jscr:"𝒿",jsercy:"ј",jukcy:"є",kappa:"κ",kappav:"ϰ",kcedil:"ķ",kcy:"к",kfr:"𝔨",kgreen:"ĸ",khcy:"х",kjcy:"ќ",kopf:"𝕜",kscr:"𝓀",lAarr:"⇚",lArr:"⇐",lAtail:"⤛",lBarr:"⤎",lE:"≦",lEg:"⪋",lHar:"⥢",lacute:"ĺ",laemptyv:"⦴",lagran:"ℒ",lambda:"λ",lang:"⟨",langd:"⦑",langle:"⟨",lap:"⪅",laquo:"«",larr:"←",larrb:"⇤",larrbfs:"⤟",larrfs:"⤝",larrhk:"↩",larrlp:"↫",larrpl:"⤹",larrsim:"⥳",larrtl:"↢",lat:"⪫",latail:"⤙",late:"⪭",lates:"⪭︀",lbarr:"⤌",lbbrk:"❲",lbrace:"{",lbrack:"[",lbrke:"⦋",lbrksld:"⦏",lbrkslu:"⦍",lcaron:"ľ",lcedil:"ļ",lceil:"⌈",lcub:"{",lcy:"л",ldca:"⤶",ldquo:"“",ldquor:"„",ldrdhar:"⥧",ldrushar:"⥋",ldsh:"↲",le:"≤",leftarrow:"←",leftarrowtail:"↢",leftharpoondown:"↽",leftharpoonup:"↼",leftleftarrows:"⇇",leftrightarrow:"↔",leftrightarrows:"⇆",leftrightharpoons:"⇋",leftrightsquigarrow:"↭",leftthreetimes:"⋋",leg:"⋚",leq:"≤",leqq:"≦",leqslant:"⩽",les:"⩽",lescc:"⪨",lesdot:"⩿",lesdoto:"⪁",lesdotor:"⪃",lesg:"⋚︀",lesges:"⪓",lessapprox:"⪅",lessdot:"⋖",lesseqgtr:"⋚",lesseqqgtr:"⪋",lessgtr:"≶",lesssim:"≲",lfisht:"⥼",lfloor:"⌊",lfr:"𝔩",lg:"≶",lgE:"⪑",lhard:"↽",lharu:"↼",lharul:"⥪",lhblk:"▄",ljcy:"љ",ll:"≪",llarr:"⇇",llcorner:"⌞",llhard:"⥫",lltri:"◺",lmidot:"ŀ",lmoust:"⎰",lmoustache:"⎰",lnE:"≨",lnap:"⪉",lnapprox:"⪉",lne:"⪇",lneq:"⪇",lneqq:"≨",lnsim:"⋦",loang:"⟬",loarr:"⇽",lobrk:"⟦",longleftarrow:"⟵",longleftrightarrow:"⟷",longmapsto:"⟼",longrightarrow:"⟶",looparrowleft:"↫",looparrowright:"↬",lopar:"⦅",lopf:"𝕝",loplus:"⨭",lotimes:"⨴",lowast:"∗",lowbar:"_",loz:"◊",lozenge:"◊",lozf:"⧫",lpar:"(",lparlt:"⦓",lrarr:"⇆",lrcorner:"⌟",lrhar:"⇋",lrhard:"⥭",lrm:"‎",lrtri:"⊿",lsaquo:"‹",lscr:"𝓁",lsh:"↰",lsim:"≲",lsime:"⪍",lsimg:"⪏",lsqb:"[",lsquo:"‘",lsquor:"‚",lstrok:"ł",lt:"<",ltcc:"⪦",ltcir:"⩹",ltdot:"⋖",lthree:"⋋",ltimes:"⋉",ltlarr:"⥶",ltquest:"⩻",ltrPar:"⦖",ltri:"◃",ltrie:"⊴",ltrif:"◂",lurdshar:"⥊",luruhar:"⥦",lvertneqq:"≨︀",lvnE:"≨︀",mDDot:"∺",macr:"¯",male:"♂",malt:"✠",maltese:"✠",map:"↦",mapsto:"↦",mapstodown:"↧",mapstoleft:"↤",mapstoup:"↥",marker:"▮",mcomma:"⨩",mcy:"м",mdash:"—",measuredangle:"∡",mfr:"𝔪",mho:"℧",micro:"µ",mid:"∣",midast:"*",midcir:"⫰",middot:"·",minus:"−",minusb:"⊟",minusd:"∸",minusdu:"⨪",mlcp:"⫛",mldr:"…",mnplus:"∓",models:"⊧",mopf:"𝕞",mp:"∓",mscr:"𝓂",mstpos:"∾",mu:"μ",multimap:"⊸",mumap:"⊸",nGg:"⋙̸",nGt:"≫⃒",nGtv:"≫̸",nLeftarrow:"⇍",nLeftrightarrow:"⇎",nLl:"⋘̸",nLt:"≪⃒",nLtv:"≪̸",nRightarrow:"⇏",nVDash:"⊯",nVdash:"⊮",nabla:"∇",nacute:"ń",nang:"∠⃒",nap:"≉",napE:"⩰̸",napid:"≋̸",napos:"ŉ",napprox:"≉",natur:"♮",natural:"♮",naturals:"ℕ",nbsp:" ",nbump:"≎̸",nbumpe:"≏̸",ncap:"⩃",ncaron:"ň",ncedil:"ņ",ncong:"≇",ncongdot:"⩭̸",ncup:"⩂",ncy:"н",ndash:"–",ne:"≠",neArr:"⇗",nearhk:"⤤",nearr:"↗",nearrow:"↗",nedot:"≐̸",nequiv:"≢",nesear:"⤨",nesim:"≂̸",nexist:"∄",nexists:"∄",nfr:"𝔫",ngE:"≧̸",nge:"≱",ngeq:"≱",ngeqq:"≧̸",ngeqslant:"⩾̸",nges:"⩾̸",ngsim:"≵",ngt:"≯",ngtr:"≯",nhArr:"⇎",nharr:"↮",nhpar:"⫲",ni:"∋",nis:"⋼",nisd:"⋺",niv:"∋",njcy:"њ",nlArr:"⇍",nlE:"≦̸",nlarr:"↚",nldr:"‥",nle:"≰",nleftarrow:"↚",nleftrightarrow:"↮",nleq:"≰",nleqq:"≦̸",nleqslant:"⩽̸",nles:"⩽̸",nless:"≮",nlsim:"≴",nlt:"≮",nltri:"⋪",nltrie:"⋬",nmid:"∤",nopf:"𝕟",not:"¬",notin:"∉",notinE:"⋹̸",notindot:"⋵̸",notinva:"∉",notinvb:"⋷",notinvc:"⋶",notni:"∌",notniva:"∌",notnivb:"⋾",notnivc:"⋽",npar:"∦",nparallel:"∦",nparsl:"⫽⃥",npart:"∂̸",npolint:"⨔",npr:"⊀",nprcue:"⋠",npre:"⪯̸",nprec:"⊀",npreceq:"⪯̸",nrArr:"⇏",nrarr:"↛",nrarrc:"⤳̸",nrarrw:"↝̸",nrightarrow:"↛",nrtri:"⋫",nrtrie:"⋭",nsc:"⊁",nsccue:"⋡",nsce:"⪰̸",nscr:"𝓃",nshortmid:"∤",nshortparallel:"∦",nsim:"≁",nsime:"≄",nsimeq:"≄",nsmid:"∤",nspar:"∦",nsqsube:"⋢",nsqsupe:"⋣",nsub:"⊄",nsubE:"⫅̸",nsube:"⊈",nsubset:"⊂⃒",nsubseteq:"⊈",nsubseteqq:"⫅̸",nsucc:"⊁",nsucceq:"⪰̸",nsup:"⊅",nsupE:"⫆̸",nsupe:"⊉",nsupset:"⊃⃒",nsupseteq:"⊉",nsupseteqq:"⫆̸",ntgl:"≹",ntilde:"ñ",ntlg:"≸",ntriangleleft:"⋪",ntrianglelefteq:"⋬",ntriangleright:"⋫",ntrianglerighteq:"⋭",nu:"ν",num:"#",numero:"№",numsp:" ",nvDash:"⊭",nvHarr:"⤄",nvap:"≍⃒",nvdash:"⊬",nvge:"≥⃒",nvgt:">⃒",nvinfin:"⧞",nvlArr:"⤂",nvle:"≤⃒",nvlt:"<⃒",nvltrie:"⊴⃒",nvrArr:"⤃",nvrtrie:"⊵⃒",nvsim:"∼⃒",nwArr:"⇖",nwarhk:"⤣",nwarr:"↖",nwarrow:"↖",nwnear:"⤧",oS:"Ⓢ",oacute:"ó",oast:"⊛",ocir:"⊚",ocirc:"ô",ocy:"о",odash:"⊝",odblac:"ő",odiv:"⨸",odot:"⊙",odsold:"⦼",oelig:"œ",ofcir:"⦿",ofr:"𝔬",ogon:"˛",ograve:"ò",ogt:"⧁",ohbar:"⦵",ohm:"Ω",oint:"∮",olarr:"↺",olcir:"⦾",olcross:"⦻",oline:"‾",olt:"⧀",omacr:"ō",omega:"ω",omicron:"ο",omid:"⦶",ominus:"⊖",oopf:"𝕠",opar:"⦷",operp:"⦹",oplus:"⊕",or:"∨",orarr:"↻",ord:"⩝",order:"ℴ",orderof:"ℴ",ordf:"ª",ordm:"º",origof:"⊶",oror:"⩖",orslope:"⩗",orv:"⩛",oscr:"ℴ",oslash:"ø",osol:"⊘",otilde:"õ",otimes:"⊗",otimesas:"⨶",ouml:"ö",ovbar:"⌽",par:"∥",para:"¶",parallel:"∥",parsim:"⫳",parsl:"⫽",part:"∂",pcy:"п",percnt:"%",period:".",permil:"‰",perp:"⊥",pertenk:"‱",pfr:"𝔭",phi:"φ",phiv:"ϕ",phmmat:"ℳ",phone:"☎",pi:"π",pitchfork:"⋔",piv:"ϖ",planck:"ℏ",planckh:"ℎ",plankv:"ℏ",plus:"+",plusacir:"⨣",plusb:"⊞",pluscir:"⨢",plusdo:"∔",plusdu:"⨥",pluse:"⩲",plusmn:"±",plussim:"⨦",plustwo:"⨧",pm:"±",pointint:"⨕",popf:"𝕡",pound:"£",pr:"≺",prE:"⪳",prap:"⪷",prcue:"≼",pre:"⪯",prec:"≺",precapprox:"⪷",preccurlyeq:"≼",preceq:"⪯",precnapprox:"⪹",precneqq:"⪵",precnsim:"⋨",precsim:"≾",prime:"′",primes:"ℙ",prnE:"⪵",prnap:"⪹",prnsim:"⋨",prod:"∏",profalar:"⌮",profline:"⌒",profsurf:"⌓",prop:"∝",propto:"∝",prsim:"≾",prurel:"⊰",pscr:"𝓅",psi:"ψ",puncsp:" ",qfr:"𝔮",qint:"⨌",qopf:"𝕢",qprime:"⁗",qscr:"𝓆",quaternions:"ℍ",quatint:"⨖",quest:"?",questeq:"≟",quot:'"',rAarr:"⇛",rArr:"⇒",rAtail:"⤜",rBarr:"⤏",rHar:"⥤",race:"∽̱",racute:"ŕ",radic:"√",raemptyv:"⦳",rang:"⟩",rangd:"⦒",range:"⦥",rangle:"⟩",raquo:"»",rarr:"→",rarrap:"⥵",rarrb:"⇥",rarrbfs:"⤠",rarrc:"⤳",rarrfs:"⤞",rarrhk:"↪",rarrlp:"↬",rarrpl:"⥅",rarrsim:"⥴",rarrtl:"↣",rarrw:"↝",ratail:"⤚",ratio:"∶",rationals:"ℚ",rbarr:"⤍",rbbrk:"❳",rbrace:"}",rbrack:"]",rbrke:"⦌",rbrksld:"⦎",rbrkslu:"⦐",rcaron:"ř",rcedil:"ŗ",rceil:"⌉",rcub:"}",rcy:"р",rdca:"⤷",rdldhar:"⥩",rdquo:"”",rdquor:"”",rdsh:"↳",real:"ℜ",realine:"ℛ",realpart:"ℜ",reals:"ℝ",rect:"▭",reg:"®",rfisht:"⥽",rfloor:"⌋",rfr:"𝔯",rhard:"⇁",rharu:"⇀",rharul:"⥬",rho:"ρ",rhov:"ϱ",rightarrow:"→",rightarrowtail:"↣",rightharpoondown:"⇁",rightharpoonup:"⇀",rightleftarrows:"⇄",rightleftharpoons:"⇌",rightrightarrows:"⇉",rightsquigarrow:"↝",rightthreetimes:"⋌",ring:"˚",risingdotseq:"≓",rlarr:"⇄",rlhar:"⇌",rlm:"‏",rmoust:"⎱",rmoustache:"⎱",rnmid:"⫮",roang:"⟭",roarr:"⇾",robrk:"⟧",ropar:"⦆",ropf:"𝕣",roplus:"⨮",rotimes:"⨵",rpar:")",rpargt:"⦔",rppolint:"⨒",rrarr:"⇉",rsaquo:"›",rscr:"𝓇",rsh:"↱",rsqb:"]",rsquo:"’",rsquor:"’",rthree:"⋌",rtimes:"⋊",rtri:"▹",rtrie:"⊵",rtrif:"▸",rtriltri:"⧎",ruluhar:"⥨",rx:"℞",sacute:"ś",sbquo:"‚",sc:"≻",scE:"⪴",scap:"⪸",scaron:"š",sccue:"≽",sce:"⪰",scedil:"ş",scirc:"ŝ",scnE:"⪶",scnap:"⪺",scnsim:"⋩",scpolint:"⨓",scsim:"≿",scy:"с",sdot:"⋅",sdotb:"⊡",sdote:"⩦",seArr:"⇘",searhk:"⤥",searr:"↘",searrow:"↘",sect:"§",semi:";",seswar:"⤩",setminus:"∖",setmn:"∖",sext:"✶",sfr:"𝔰",sfrown:"⌢",sharp:"♯",shchcy:"щ",shcy:"ш",shortmid:"∣",shortparallel:"∥",shy:"­",sigma:"σ",sigmaf:"ς",sigmav:"ς",sim:"∼",simdot:"⩪",sime:"≃",simeq:"≃",simg:"⪞",simgE:"⪠",siml:"⪝",simlE:"⪟",simne:"≆",simplus:"⨤",simrarr:"⥲",slarr:"←",smallsetminus:"∖",smashp:"⨳",smeparsl:"⧤",smid:"∣",smile:"⌣",smt:"⪪",smte:"⪬",smtes:"⪬︀",softcy:"ь",sol:"/",solb:"⧄",solbar:"⌿",sopf:"𝕤",spades:"♠",spadesuit:"♠",spar:"∥",sqcap:"⊓",sqcaps:"⊓︀",sqcup:"⊔",sqcups:"⊔︀",sqsub:"⊏",sqsube:"⊑",sqsubset:"⊏",sqsubseteq:"⊑",sqsup:"⊐",sqsupe:"⊒",sqsupset:"⊐",sqsupseteq:"⊒",squ:"□",square:"□",squarf:"▪",squf:"▪",srarr:"→",sscr:"𝓈",ssetmn:"∖",ssmile:"⌣",sstarf:"⋆",star:"☆",starf:"★",straightepsilon:"ϵ",straightphi:"ϕ",strns:"¯",sub:"⊂",subE:"⫅",subdot:"⪽",sube:"⊆",subedot:"⫃",submult:"⫁",subnE:"⫋",subne:"⊊",subplus:"⪿",subrarr:"⥹",subset:"⊂",subseteq:"⊆",subseteqq:"⫅",subsetneq:"⊊",subsetneqq:"⫋",subsim:"⫇",subsub:"⫕",subsup:"⫓",succ:"≻",succapprox:"⪸",succcurlyeq:"≽",succeq:"⪰",succnapprox:"⪺",succneqq:"⪶",succnsim:"⋩",succsim:"≿",sum:"∑",sung:"♪",sup1:"¹",sup2:"²",sup3:"³",sup:"⊃",supE:"⫆",supdot:"⪾",supdsub:"⫘",supe:"⊇",supedot:"⫄",suphsol:"⟉",suphsub:"⫗",suplarr:"⥻",supmult:"⫂",supnE:"⫌",supne:"⊋",supplus:"⫀",supset:"⊃",supseteq:"⊇",supseteqq:"⫆",supsetneq:"⊋",supsetneqq:"⫌",supsim:"⫈",supsub:"⫔",supsup:"⫖",swArr:"⇙",swarhk:"⤦",swarr:"↙",swarrow:"↙",swnwar:"⤪",szlig:"ß",target:"⌖",tau:"τ",tbrk:"⎴",tcaron:"ť",tcedil:"ţ",tcy:"т",tdot:"⃛",telrec:"⌕",tfr:"𝔱",there4:"∴",therefore:"∴",theta:"θ",thetasym:"ϑ",thetav:"ϑ",thickapprox:"≈",thicksim:"∼",thinsp:" ",thkap:"≈",thksim:"∼",thorn:"þ",tilde:"˜",times:"×",timesb:"⊠",timesbar:"⨱",timesd:"⨰",tint:"∭",toea:"⤨",top:"⊤",topbot:"⌶",topcir:"⫱",topf:"𝕥",topfork:"⫚",tosa:"⤩",tprime:"‴",trade:"™",triangle:"▵",triangledown:"▿",triangleleft:"◃",trianglelefteq:"⊴",triangleq:"≜",triangleright:"▹",trianglerighteq:"⊵",tridot:"◬",trie:"≜",triminus:"⨺",triplus:"⨹",trisb:"⧍",tritime:"⨻",trpezium:"⏢",tscr:"𝓉",tscy:"ц",tshcy:"ћ",tstrok:"ŧ",twixt:"≬",twoheadleftarrow:"↞",twoheadrightarrow:"↠",uArr:"⇑",uHar:"⥣",uacute:"ú",uarr:"↑",ubrcy:"ў",ubreve:"ŭ",ucirc:"û",ucy:"у",udarr:"⇅",udblac:"ű",udhar:"⥮",ufisht:"⥾",ufr:"𝔲",ugrave:"ù",uharl:"↿",uharr:"↾",uhblk:"▀",ulcorn:"⌜",ulcorner:"⌜",ulcrop:"⌏",ultri:"◸",umacr:"ū",uml:"¨",uogon:"ų",uopf:"𝕦",uparrow:"↑",updownarrow:"↕",upharpoonleft:"↿",upharpoonright:"↾",uplus:"⊎",upsi:"υ",upsih:"ϒ",upsilon:"υ",upuparrows:"⇈",urcorn:"⌝",urcorner:"⌝",urcrop:"⌎",uring:"ů",urtri:"◹",uscr:"𝓊",utdot:"⋰",utilde:"ũ",utri:"▵",utrif:"▴",uuarr:"⇈",uuml:"ü",uwangle:"⦧",vArr:"⇕",vBar:"⫨",vBarv:"⫩",vDash:"⊨",vangrt:"⦜",varepsilon:"ϵ",varkappa:"ϰ",varnothing:"∅",varphi:"ϕ",varpi:"ϖ",varpropto:"∝",varr:"↕",varrho:"ϱ",varsigma:"ς",varsubsetneq:"⊊︀",varsubsetneqq:"⫋︀",varsupsetneq:"⊋︀",varsupsetneqq:"⫌︀",vartheta:"ϑ",vartriangleleft:"⊲",vartriangleright:"⊳",vcy:"в",vdash:"⊢",vee:"∨",veebar:"⊻",veeeq:"≚",vellip:"⋮",verbar:"|",vert:"|",vfr:"𝔳",vltri:"⊲",vnsub:"⊂⃒",vnsup:"⊃⃒",vopf:"𝕧",vprop:"∝",vrtri:"⊳",vscr:"𝓋",vsubnE:"⫋︀",vsubne:"⊊︀",vsupnE:"⫌︀",vsupne:"⊋︀",vzigzag:"⦚",wcirc:"ŵ",wedbar:"⩟",wedge:"∧",wedgeq:"≙",weierp:"℘",wfr:"𝔴",wopf:"𝕨",wp:"℘",wr:"≀",wreath:"≀",wscr:"𝓌",xcap:"⋂",xcirc:"◯",xcup:"⋃",xdtri:"▽",xfr:"𝔵",xhArr:"⟺",xharr:"⟷",xi:"ξ",xlArr:"⟸",xlarr:"⟵",xmap:"⟼",xnis:"⋻",xodot:"⨀",xopf:"𝕩",xoplus:"⨁",xotime:"⨂",xrArr:"⟹",xrarr:"⟶",xscr:"𝓍",xsqcup:"⨆",xuplus:"⨄",xutri:"△",xvee:"⋁",xwedge:"⋀",yacute:"ý",yacy:"я",ycirc:"ŷ",ycy:"ы",yen:"¥",yfr:"𝔶",yicy:"ї",yopf:"𝕪",yscr:"𝓎",yucy:"ю",yuml:"ÿ",zacute:"ź",zcaron:"ž",zcy:"з",zdot:"ż",zeetrf:"ℨ",zeta:"ζ",zfr:"𝔷",zhcy:"ж",zigrarr:"⇝",zopf:"𝕫",zscr:"𝓏",zwj:"‍",zwnj:"‌"},st={}.hasOwnProperty,lt={name:"characterReference",tokenize:function(e,t,n){const r=this;let o,c,s=0;return function(t){return e.enter("characterReference"),e.enter("characterReferenceMarker"),e.consume(t),e.exit("characterReferenceMarker"),l};function l(t){return 35===t?(e.enter("characterReferenceMarkerNumeric"),e.consume(t),e.exit("characterReferenceMarkerNumeric"),f):(e.enter("characterReferenceValue"),o=31,c=i,p(t))}function f(t){return 88===t||120===t?(e.enter("characterReferenceMarkerHexadecimal"),e.consume(t),e.exit("characterReferenceMarkerHexadecimal"),e.enter("characterReferenceValue"),o=6,c=a,p):(e.enter("characterReferenceValue"),o=7,c=u,p(t))}function p(u){if(59===u&&s){const o=e.exit("characterReferenceValue");return c!==i||function(e){return!!st.call(at,e)&&at[e]}(r.sliceSerialize(o))?(e.enter("characterReferenceMarker"),e.consume(u),e.exit("characterReferenceMarker"),e.exit("characterReference"),t):n(u)}return c(u)&&s++<o?(e.consume(u),p):n(u)}}},ft={name:"characterEscape",tokenize:function(e,t,n){return function(t){return e.enter("characterEscape"),e.enter("escapeMarker"),e.consume(t),e.exit("escapeMarker"),r};function r(r){return s(r)?(e.enter("characterEscapeValue"),e.consume(r),e.exit("characterEscapeValue"),e.exit("characterEscape"),t):n(r)}}},pt={name:"lineEnding",tokenize:function(e,t){return function(n){return e.enter("lineEnding"),e.consume(n),e.exit("lineEnding"),g(e,t,"linePrefix")}}},dt={name:"labelEnd",tokenize:function(e,t,n){const r=this;let i,o,c=r.events.length;for(;c--;)if(("labelImage"===r.events[c][1].type||"labelLink"===r.events[c][1].type)&&!r.events[c][1]._balanced){i=r.events[c][1];break}return function(t){return i?i._inactive?l(t):(o=r.parser.defined.includes(Z(r.sliceSerialize({start:i.end,end:r.now()}))),e.enter("labelEnd"),e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelEnd"),u):n(t)};function u(t){return 40===t?e.attempt(mt,s,o?s:l)(t):91===t?e.attempt(ht,s,o?a:l)(t):o?s(t):l(t)}function a(t){return e.attempt(gt,s,l)(t)}function s(e){return t(e)}function l(e){return i._balanced=!0,n(e)}},resolveTo:function(e,t){let n,r,i,o,c=e.length,u=0;for(;c--;)if(n=e[c][1],r){if("link"===n.type||"labelLink"===n.type&&n._inactive)break;"enter"===e[c][0]&&"labelLink"===n.type&&(n._inactive=!0)}else if(i){if("enter"===e[c][0]&&("labelImage"===n.type||"labelLink"===n.type)&&!n._balanced&&(r=c,"labelLink"!==n.type)){u=2;break}}else"labelEnd"===n.type&&(i=c);const a={type:"labelLink"===e[r][1].type?"link":"image",start:Object.assign({},e[r][1].start),end:Object.assign({},e[e.length-1][1].end)},s={type:"label",start:Object.assign({},e[r][1].start),end:Object.assign({},e[i][1].end)},l={type:"labelText",start:Object.assign({},e[r+u+2][1].end),end:Object.assign({},e[i-2][1].start)};return o=[["enter",a,t],["enter",s,t]],o=ve(o,e.slice(r+1,r+u+3)),o=ve(o,[["enter",l,t]]),o=ve(o,Ve(t.parser.constructs.insideSpan.null,e.slice(r+u+4,i-3),t)),o=ve(o,[["exit",l,t],e[i-2],e[i-1],["exit",s,t]]),o=ve(o,e.slice(i+1)),o=ve(o,[["exit",a,t]]),xe(e,r,e.length,o),e},resolveAll:function(e){let t=-1;for(;++t<e.length;){const n=e[t][1];"labelImage"!==n.type&&"labelLink"!==n.type&&"labelEnd"!==n.type||(e.splice(t+1,"labelImage"===n.type?4:2),n.type="data",t++)}return e}},mt={tokenize:function(e,t,n){return function(t){return e.enter("resource"),e.enter("resourceMarker"),e.consume(t),e.exit("resourceMarker"),r};function r(t){return f(t)?b(e,i)(t):i(t)}function i(t){return 41===t?s(t):Ye(e,o,c,"resourceDestination","resourceDestinationLiteral","resourceDestinationLiteralMarker","resourceDestinationRaw","resourceDestinationString",32)(t)}function o(t){return f(t)?b(e,u)(t):s(t)}function c(e){return n(e)}function u(t){return 34===t||39===t||40===t?We(e,a,n,"resourceTitle","resourceTitleMarker","resourceTitleString")(t):s(t)}function a(t){return f(t)?b(e,s)(t):s(t)}function s(r){return 41===r?(e.enter("resourceMarker"),e.consume(r),e.exit("resourceMarker"),e.exit("resource"),t):n(r)}}},ht={tokenize:function(e,t,n){const r=this;return function(t){return Qe.call(r,e,i,o,"reference","referenceMarker","referenceString")(t)};function i(e){return r.parser.defined.includes(Z(r.sliceSerialize(r.events[r.events.length-1][1]).slice(1,-1)))?t(e):n(e)}function o(e){return n(e)}}},gt={tokenize:function(e,t,n){return function(t){return e.enter("reference"),e.enter("referenceMarker"),e.consume(t),e.exit("referenceMarker"),r};function r(r){return 93===r?(e.enter("referenceMarker"),e.consume(r),e.exit("referenceMarker"),e.exit("reference"),t):n(r)}}},bt={name:"labelStartImage",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("labelImage"),e.enter("labelImageMarker"),e.consume(t),e.exit("labelImageMarker"),i};function i(t){return 91===t?(e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelImage"),o):n(t)}function o(e){return 94===e&&"_hiddenFootnoteSupport"in r.parser.constructs?n(e):t(e)}},resolveAll:dt.resolveAll};function xt(e){return null===e||f(e)||m(e)?1:d(e)?2:void 0}const vt={name:"attention",tokenize:function(e,t){const n=this.parser.constructs.attentionMarkers.null,r=this.previous,i=xt(r);let o;return function(t){return o=t,e.enter("attentionSequence"),c(t)};function c(u){if(u===o)return e.consume(u),c;const a=e.exit("attentionSequence"),s=xt(u),l=!s||2===s&&i||n.includes(u),f=!i||2===i&&s||n.includes(r);return a._open=Boolean(42===o?l:l&&(i||!f)),a._close=Boolean(42===o?f:f&&(s||!l)),t(u)}},resolveAll:function(e,t){let n,r,i,o,c,u,a,s,l=-1;for(;++l<e.length;)if("enter"===e[l][0]&&"attentionSequence"===e[l][1].type&&e[l][1]._close)for(n=l;n--;)if("exit"===e[n][0]&&"attentionSequence"===e[n][1].type&&e[n][1]._open&&t.sliceSerialize(e[n][1]).charCodeAt(0)===t.sliceSerialize(e[l][1]).charCodeAt(0)){if((e[n][1]._close||e[l][1]._open)&&(e[l][1].end.offset-e[l][1].start.offset)%3&&!((e[n][1].end.offset-e[n][1].start.offset+e[l][1].end.offset-e[l][1].start.offset)%3))continue;u=e[n][1].end.offset-e[n][1].start.offset>1&&e[l][1].end.offset-e[l][1].start.offset>1?2:1;const f=Object.assign({},e[n][1].end),p=Object.assign({},e[l][1].start);kt(f,-u),kt(p,u),o={type:u>1?"strongSequence":"emphasisSequence",start:f,end:Object.assign({},e[n][1].end)},c={type:u>1?"strongSequence":"emphasisSequence",start:Object.assign({},e[l][1].start),end:p},i={type:u>1?"strongText":"emphasisText",start:Object.assign({},e[n][1].end),end:Object.assign({},e[l][1].start)},r={type:u>1?"strong":"emphasis",start:Object.assign({},o.start),end:Object.assign({},c.end)},e[n][1].end=Object.assign({},o.start),e[l][1].start=Object.assign({},c.end),a=[],e[n][1].end.offset-e[n][1].start.offset&&(a=ve(a,[["enter",e[n][1],t],["exit",e[n][1],t]])),a=ve(a,[["enter",r,t],["enter",o,t],["exit",o,t],["enter",i,t]]),a=ve(a,Ve(t.parser.constructs.insideSpan.null,e.slice(n+1,l),t)),a=ve(a,[["exit",i,t],["enter",c,t],["exit",c,t],["exit",r,t]]),e[l][1].end.offset-e[l][1].start.offset?(s=2,a=ve(a,[["enter",e[l][1],t],["exit",e[l][1],t]])):s=0,xe(e,n-1,l-n+3,a),l=n+a.length-s-2;break}for(l=-1;++l<e.length;)"attentionSequence"===e[l][1].type&&(e[l][1].type="data");return e}};function kt(e,t){e.column+=t,e.offset+=t,e._bufferIndex+=t}const yt={name:"autolink",tokenize:function(e,t,n){let u=0;return function(t){return e.enter("autolink"),e.enter("autolinkMarker"),e.consume(t),e.exit("autolinkMarker"),e.enter("autolinkProtocol"),a};function a(t){return r(t)?(e.consume(t),s):64===t?n(t):p(t)}function s(e){return 43===e||45===e||46===e||i(e)?(u=1,l(e)):p(e)}function l(t){return 58===t?(e.consume(t),u=0,f):(43===t||45===t||46===t||i(t))&&u++<32?(e.consume(t),l):(u=0,p(t))}function f(r){return 62===r?(e.exit("autolinkProtocol"),e.enter("autolinkMarker"),e.consume(r),e.exit("autolinkMarker"),e.exit("autolink"),t):null===r||32===r||60===r||c(r)?n(r):(e.consume(r),f)}function p(t){return 64===t?(e.consume(t),d):o(t)?(e.consume(t),p):n(t)}function d(e){return i(e)?m(e):n(e)}function m(n){return 46===n?(e.consume(n),u=0,d):62===n?(e.exit("autolinkProtocol").type="autolinkEmail",e.enter("autolinkMarker"),e.consume(n),e.exit("autolinkMarker"),e.exit("autolink"),t):h(n)}function h(t){if((45===t||i(t))&&u++<63){const n=45===t?h:m;return e.consume(t),n}return n(t)}}},wt={name:"htmlText",tokenize:function(e,t,n){const o=this;let c,u,a;return function(t){return e.enter("htmlText"),e.enter("htmlTextData"),e.consume(t),s};function s(t){return 33===t?(e.consume(t),d):47===t?(e.consume(t),E):63===t?(e.consume(t),q):r(t)?(e.consume(t),A):n(t)}function d(t){return 45===t?(e.consume(t),m):91===t?(e.consume(t),u=0,v):r(t)?(e.consume(t),S):n(t)}function m(t){return 45===t?(e.consume(t),x):n(t)}function h(t){return null===t?n(t):45===t?(e.consume(t),b):l(t)?(a=h,P(t)):(e.consume(t),h)}function b(t){return 45===t?(e.consume(t),x):h(t)}function x(e){return 62===e?O(e):45===e?b(e):h(e)}function v(t){return t==="CDATA[".charCodeAt(u++)?(e.consume(t),6===u?k:v):n(t)}function k(t){return null===t?n(t):93===t?(e.consume(t),y):l(t)?(a=k,P(t)):(e.consume(t),k)}function y(t){return 93===t?(e.consume(t),w):k(t)}function w(t){return 62===t?O(t):93===t?(e.consume(t),w):k(t)}function S(t){return null===t||62===t?O(t):l(t)?(a=S,P(t)):(e.consume(t),S)}function q(t){return null===t?n(t):63===t?(e.consume(t),T):l(t)?(a=q,P(t)):(e.consume(t),q)}function T(e){return 62===e?O(e):q(e)}function E(t){return r(t)?(e.consume(t),L):n(t)}function L(t){return 45===t||i(t)?(e.consume(t),L):D(t)}function D(t){return l(t)?(a=D,P(t)):p(t)?(e.consume(t),D):O(t)}function A(t){return 45===t||i(t)?(e.consume(t),A):47===t||62===t||f(t)?C(t):n(t)}function C(t){return 47===t?(e.consume(t),O):58===t||95===t||r(t)?(e.consume(t),I):l(t)?(a=C,P(t)):p(t)?(e.consume(t),C):O(t)}function I(t){return 45===t||46===t||58===t||95===t||i(t)?(e.consume(t),I):F(t)}function F(t){return 61===t?(e.consume(t),z):l(t)?(a=F,P(t)):p(t)?(e.consume(t),F):C(t)}function z(t){return null===t||60===t||61===t||62===t||96===t?n(t):34===t||39===t?(e.consume(t),c=t,N):l(t)?(a=z,P(t)):p(t)?(e.consume(t),z):(e.consume(t),M)}function N(t){return t===c?(e.consume(t),c=void 0,R):null===t?n(t):l(t)?(a=N,P(t)):(e.consume(t),N)}function M(t){return null===t||34===t||39===t||60===t||61===t||96===t?n(t):47===t||62===t||f(t)?C(t):(e.consume(t),M)}function R(e){return 47===e||62===e||f(e)?C(e):n(e)}function O(r){return 62===r?(e.consume(r),e.exit("htmlTextData"),e.exit("htmlText"),t):n(r)}function P(t){return e.exit("htmlTextData"),e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),V}function V(t){return p(t)?g(e,_,"linePrefix",o.parser.constructs.disable.null.includes("codeIndented")?void 0:4)(t):_(t)}function _(t){return e.enter("htmlTextData"),a(t)}}},St={name:"labelStartLink",tokenize:function(e,t,n){const r=this;return function(t){return e.enter("labelLink"),e.enter("labelMarker"),e.consume(t),e.exit("labelMarker"),e.exit("labelLink"),i};function i(e){return 94===e&&"_hiddenFootnoteSupport"in r.parser.constructs?n(e):t(e)}},resolveAll:dt.resolveAll},qt={name:"hardBreakEscape",tokenize:function(e,t,n){return function(t){return e.enter("hardBreakEscape"),e.consume(t),r};function r(r){return l(r)?(e.exit("hardBreakEscape"),t(r)):n(r)}}},Tt={name:"codeText",tokenize:function(e,t,n){let r,i,o=0;return function(t){return e.enter("codeText"),e.enter("codeTextSequence"),c(t)};function c(t){return 96===t?(e.consume(t),o++,c):(e.exit("codeTextSequence"),u(t))}function u(t){return null===t?n(t):32===t?(e.enter("space"),e.consume(t),e.exit("space"),u):96===t?(i=e.enter("codeTextSequence"),r=0,s(t)):l(t)?(e.enter("lineEnding"),e.consume(t),e.exit("lineEnding"),u):(e.enter("codeTextData"),a(t))}function a(t){return null===t||32===t||96===t||l(t)?(e.exit("codeTextData"),u(t)):(e.consume(t),a)}function s(n){return 96===n?(e.consume(n),r++,s):r===o?(e.exit("codeTextSequence"),e.exit("codeText"),t(n)):(i.type="codeTextData",a(n))}},resolve:function(e){let t,n,r=e.length-4,i=3;if(!("lineEnding"!==e[i][1].type&&"space"!==e[i][1].type||"lineEnding"!==e[r][1].type&&"space"!==e[r][1].type))for(t=i;++t<r;)if("codeTextData"===e[t][1].type){e[i][1].type="codeTextPadding",e[r][1].type="codeTextPadding",i+=2,r-=2;break}for(t=i-1,r++;++t<=r;)void 0===n?t!==r&&"lineEnding"!==e[t][1].type&&(n=t):t!==r&&"lineEnding"!==e[t][1].type||(e[n][1].type="codeTextData",t!==n+2&&(e[n][1].end=e[t-1][1].end,e.splice(n+2,t-n-2),r-=t-n-2,t=n+2),n=void 0);return e},previous:function(e){return 96!==e||"characterEscape"===this.events[this.events.length-1][1].type}},Et={42:je,43:je,45:je,48:je,49:je,50:je,51:je,52:je,53:je,54:je,55:je,56:je,57:je,62:Ge},Lt={91:Ze},Dt={[-2]:Ke,[-1]:Ke,32:Ke},At={35:$e,42:Be,45:[et,Be],60:rt,61:et,95:Be,96:ut,126:ut},Ct={38:lt,92:ft},It={[-5]:pt,[-4]:pt,[-3]:pt,33:bt,38:lt,42:vt,60:[yt,wt],91:St,92:[qt,ft],93:dt,95:vt,96:Tt},Ft={null:[vt,ze]},zt={null:[42,95]},Nt={null:[]};function Mt(e){const t={defined:[],lazy:{},constructs:function(e){const t={};let n=-1;for(;++n<e.length;)ye(t,e[n]);return t}([n,...(e||{}).extensions||[]]),content:r(Se),document:r(qe),flow:r(Fe),string:r(Ne),text:r(Me)};return t;function r(e){return function(n){return _e(t,e,n)}}}function Rt(e){for(;!De(e););return e}const Ot=/[\0\t\n\r]/g;function Pt(){let e,t=1,n="",r=!0;return function(i,o,c){const u=[];let a,s,l,f,p;for(i=n+("string"==typeof i?i.toString():new TextDecoder(o||void 0).decode(i)),l=0,n="",r&&(65279===i.charCodeAt(0)&&l++,r=void 0);l<i.length;){if(Ot.lastIndex=l,a=Ot.exec(i),f=a&&void 0!==a.index?a.index:i.length,p=i.charCodeAt(f),!a){n=i.slice(l);break}if(10===p&&l===f&&e)u.push(-3),e=void 0;else switch(e&&(u.push(-5),e=void 0),l<f&&(u.push(i.slice(l,f)),t+=f-l),p){case 0:u.push(65533),t++;break;case 9:for(s=4*Math.ceil(t/4),u.push(-2);t++<s;)u.push(-1);break;case 10:u.push(-4),t=1;break;default:e=!0,t=1}l=f+1}return c&&(e&&u.push(-5),n&&u.push(n),u.push(null)),u}}var Vt=exports;for(var _t in t)Vt[_t]=t[_t];t.__esModule&&Object.defineProperty(Vt,"__esModule",{value:!0})})();
-
-/***/ }),
-
-/***/ 1670:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { flatTokensSymbol, htmlFlowSymbol } = __nccwpck_require__(7389);
-
-/** @typedef {import("markdownlint-micromark").TokenType} TokenType */
-/** @typedef {import("../lib/markdownlint.js").MicromarkToken} Token */
-
-/**
- * Determines if a Micromark token is within an htmlFlow type.
- *
- * @param {Token} token Micromark token.
- * @returns {boolean} True iff the token is within an htmlFlow type.
- */
-function inHtmlFlow(token) {
-  return Boolean(token[htmlFlowSymbol]);
-}
-
-/**
- * Returns whether a token is an htmlFlow type containing an HTML comment.
- *
- * @param {Token} token Micromark token.
- * @returns {boolean} True iff token is htmlFlow containing a comment.
- */
-function isHtmlFlowComment(token) {
-  const { text, type } = token;
-  if (
-    (type === "htmlFlow") &&
-    text.startsWith("<!--") &&
-    text.endsWith("-->")
-  ) {
-    const comment = text.slice(4, -3);
-    return (
-      !comment.startsWith(">") &&
-      !comment.startsWith("->") &&
-      !comment.endsWith("-")
-      // The following condition from the CommonMark specification is commented
-      // to avoid parsing HTML comments that include "--" because that is NOT a
-      // condition of the HTML specification.
-      // https://spec.commonmark.org/0.30/#raw-html
-      // https://html.spec.whatwg.org/multipage/syntax.html#comments
-      // && !comment.includes("--")
-    );
-  }
-  return false;
-}
-
-/**
- * Adds a range of numbers to a set.
- *
- * @param {Set<number>} set Set of numbers.
- * @param {number} start Starting number.
- * @param {number} end Ending number.
- * @returns {void}
- */
-function addRangeToSet(set, start, end) {
-  for (let i = start; i <= end; i++) {
-    set.add(i);
-  }
-}
-
-/**
- * @callback AllowedPredicate
- * @param {Token} token Micromark token.
- * @returns {boolean} True iff allowed.
- */
-
-/**
- * @callback TransformPredicate
- * @param {Token} token Micromark token.
- * @returns {Token[]} Child tokens.
- */
-
-/**
- * Filter a list of Micromark tokens by predicate.
- *
- * @param {Token[]} tokens Micromark tokens.
- * @param {AllowedPredicate} [allowed] Allowed token predicate.
- * @param {TransformPredicate} [transformChildren] Transform predicate.
- * @returns {Token[]} Filtered tokens.
- */
-function filterByPredicate(tokens, allowed, transformChildren) {
-  allowed = allowed || (() => true);
-  const result = [];
-  const queue = [
-    {
-      "array": tokens,
-      "index": 0
-    }
-  ];
-  while (queue.length > 0) {
-    const current = queue[queue.length - 1];
-    const { array, index } = current;
-    if (index < array.length) {
-      const token = array[current.index++];
-      if (allowed(token)) {
-        result.push(token);
-      }
-      const { children } = token;
-      if (children.length > 0) {
-        const transformed =
-          transformChildren ? transformChildren(token) : children;
-        queue.push(
-          {
-            "array": transformed,
-            "index": 0
-          }
-        );
-      }
-    } else {
-      queue.pop();
-    }
-  }
-  return result;
-}
-
-/**
- * Filter a list of Micromark tokens by type.
- *
- * @param {Token[]} tokens Micromark tokens.
- * @param {TokenType[]} types Types to allow.
- * @param {boolean} [htmlFlow] Whether to include htmlFlow content.
- * @returns {Token[]} Filtered tokens.
- */
-function filterByTypes(tokens, types, htmlFlow) {
-  const predicate = (token) => types.includes(token.type) && (htmlFlow || !inHtmlFlow(token));
-  const flatTokens = tokens[flatTokensSymbol];
-  if (flatTokens) {
-    return flatTokens.filter(predicate);
-  }
-  return filterByPredicate(tokens, predicate);
-}
-
-/**
- * Gets the blockquote prefix text (if any) for the specified line number.
- *
- * @param {Token[]} tokens Micromark tokens.
- * @param {number} lineNumber Line number to examine.
- * @param {number} [count] Number of times to repeat.
- * @returns {string} Blockquote prefix text.
- */
-function getBlockQuotePrefixText(tokens, lineNumber, count = 1) {
-  return filterByTypes(tokens, [ "blockQuotePrefix", "linePrefix" ])
-    .filter((prefix) => prefix.startLine === lineNumber)
-    .map((prefix) => prefix.text)
-    .join("")
-    .trimEnd()
-    // eslint-disable-next-line unicorn/prefer-spread
-    .concat("\n")
-    .repeat(count);
-};
-
-/**
- * Gets a list of nested Micromark token descendants by type path.
- *
- * @param {Token|Token[]} parent Micromark token parent or parents.
- * @param {(TokenType|TokenType[])[]} typePath Micromark token type path.
- * @returns {Token[]} Micromark token descendants.
- */
-function getDescendantsByType(parent, typePath) {
-  let tokens = Array.isArray(parent) ? parent : [ parent ];
-  for (const type of typePath) {
-    const predicate = (token) => Array.isArray(type) ? type.includes(token.type) : (type === token.type);
-    tokens = tokens.flatMap((t) => t.children.filter(predicate));
-  }
-  return tokens;
-}
-
-/**
- * Gets the heading level of a Micromark heading tokan.
- *
- * @param {Token} heading Micromark heading token.
- * @returns {number} Heading level.
- */
-function getHeadingLevel(heading) {
-  let level = 1;
-  const headingSequence = heading.children.find(
-    (child) => [ "atxHeadingSequence", "setextHeadingLine" ].includes(child.type)
-  );
-  // @ts-ignore
-  const { text } = headingSequence;
-  if (text[0] === "#") {
-    level = Math.min(text.length, 6);
-  } else if (text[0] === "-") {
-    level = 2;
-  }
-  return level;
-}
-
-/**
- * Gets the heading style of a Micromark heading tokan.
- *
- * @param {Token} heading Micromark heading token.
- * @returns {"atx" | "atx_closed" | "setext"} Heading style.
- */
-function getHeadingStyle(heading) {
-  if (heading.type === "setextHeading") {
-    return "setext";
-  }
-  const atxHeadingSequenceLength = heading.children.filter(
-    (child) => child.type === "atxHeadingSequence"
-  ).length;
-  if (atxHeadingSequenceLength === 1) {
-    return "atx";
-  }
-  return "atx_closed";
-}
-
-/**
- * Gets the heading text of a Micromark heading token.
- *
- * @param {Token} heading Micromark heading token.
- * @returns {string} Heading text.
- */
-function getHeadingText(heading) {
-  const headingTexts = getDescendantsByType(heading, [ [ "atxHeadingText", "setextHeadingText" ] ]);
-  return headingTexts[0]?.text.replace(/[\r\n]+/g, " ") || "";
-}
-
-/**
- * HTML tag information.
- *
- * @typedef {Object} HtmlTagInfo
- * @property {boolean} close True iff close tag.
- * @property {string} name Tag name.
- */
-
-/**
- * Gets information about the tag in an HTML token.
- *
- * @param {Token} token Micromark token.
- * @returns {HtmlTagInfo | null} HTML tag information.
- */
-function getHtmlTagInfo(token) {
-  const htmlTagNameRe = /^<([^!>][^/\s>]*)/;
-  if (token.type === "htmlText") {
-    const match = htmlTagNameRe.exec(token.text);
-    if (match) {
-      const name = match[1];
-      const close = name.startsWith("/");
-      return {
-        close,
-        "name": close ? name.slice(1) : name
-      };
-    }
-  }
-  return null;
-}
-
-/**
- * Gets the nearest parent of the specified type for a Micromark token.
- *
- * @param {Token} token Micromark token.
- * @param {TokenType[]} types Types to allow.
- * @returns {Token | null} Parent token.
- */
-function getParentOfType(token, types) {
-  /** @type {Token | null} */
-  let current = token;
-  while ((current = current.parent) && !types.includes(current.type)) {
-    // Empty
-  }
-  return current;
-}
-
-/**
- * Set containing token types that do not contain content.
- *
- * @type {Set<TokenType>}
- */
-const nonContentTokens = new Set([
-  "blockQuoteMarker",
-  "blockQuotePrefix",
-  "blockQuotePrefixWhitespace",
-  "lineEnding",
-  "lineEndingBlank",
-  "linePrefix",
-  "listItemIndent"
-]);
-
-module.exports = {
-  addRangeToSet,
-  filterByPredicate,
-  filterByTypes,
-  getBlockQuotePrefixText,
-  getDescendantsByType,
-  getHeadingLevel,
-  getHeadingStyle,
-  getHeadingText,
-  getHtmlTagInfo,
-  getParentOfType,
-  inHtmlFlow,
-  isHtmlFlowComment,
-  nonContentTokens
-};
-
-
-/***/ }),
-
-/***/ 7132:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const micromark = __nccwpck_require__(9520);
-const { isHtmlFlowComment } = __nccwpck_require__(1670);
-const { flatTokensSymbol, htmlFlowSymbol, newLineRe } = __nccwpck_require__(7389);
-
-/** @typedef {import("markdownlint-micromark").Construct} Construct */
-/** @typedef {import("markdownlint-micromark").Event} Event */
-/** @typedef {import("markdownlint-micromark").ParseOptions} MicromarkParseOptions */
-/** @typedef {import("markdownlint-micromark").State} State */
-/** @typedef {import("markdownlint-micromark").Token} Token */
-/** @typedef {import("markdownlint-micromark").Tokenizer} Tokenizer */
-/** @typedef {import("../lib/markdownlint.js").MicromarkToken} MicromarkToken */
-
-/**
- * Parse options.
- *
- * @typedef {Object} ParseOptions
- * @property {boolean} [freezeTokens] Whether to freeze output Tokens.
- */
-
-/**
- * Parses a Markdown document and returns Micromark events.
- *
- * @param {string} markdown Markdown document.
- * @param {MicromarkParseOptions} [micromarkParseOptions] Options for micromark.
- * @returns {Event[]} Micromark events.
- */
-function getEvents(
-  markdown,
-  micromarkParseOptions = {}
-) {
-  // Customize extensions list to add useful extensions
-  const extensions = [
-    micromark.directive(),
-    micromark.gfmAutolinkLiteral(),
-    micromark.gfmFootnote(),
-    micromark.gfmTable(),
-    micromark.math(),
-    ...(micromarkParseOptions.extensions || [])
-  ];
-
-  // // Shim labelEnd to identify undefined link labels
-  /** @type {Event[][]} */
-  const artificialEventLists = [];
-  /** @type {Construct} */
-  const labelEnd =
-    // @ts-ignore
-    micromark.labelEnd;
-  const tokenizeOriginal = labelEnd.tokenize;
-
-  /** @type {Tokenizer} */
-  function tokenizeShim(effects, okOriginal, nokOriginal) {
-    // eslint-disable-next-line consistent-this, unicorn/no-this-assignment, no-invalid-this
-    const tokenizeContext = this;
-    const events = tokenizeContext.events;
-
-    /** @type {State} */
-    const nokShim = (code) => {
-      // Find start of label (image or link)
-      let indexStart = events.length;
-      while (--indexStart >= 0) {
-        const event = events[indexStart];
-        const [ kind, token ] = event;
-        if (kind === "enter") {
-          const { type } = token;
-          if ((type === "labelImage") || (type === "labelLink")) {
-            // Found it
-            break;
-          }
-        }
-      }
-
-      // If found...
-      if (indexStart >= 0) {
-        // Create artificial enter/exit events and replicate all data/lineEnding events within
-        const eventStart = events[indexStart];
-        const [ , eventStartToken ] = eventStart;
-        const eventEnd = events[events.length - 1];
-        const [ , eventEndToken ] = eventEnd;
-        /** @type {Token} */
-        const undefinedReferenceType = {
-          "type": "undefinedReferenceShortcut",
-          "start": eventStartToken.start,
-          "end": eventEndToken.end
-        };
-        /** @type {Token} */
-        const undefinedReference = {
-          "type": "undefinedReference",
-          "start": eventStartToken.start,
-          "end": eventEndToken.end
-        };
-        const eventsToReplicate = events
-          .slice(indexStart)
-          .filter((event) => {
-            const [ , eventToken ] = event;
-            const { type } = eventToken;
-            return (type === "data") || (type === "lineEnding");
-          });
-
-        // Determine the type of the undefined reference
-        const previousUndefinedEvent = (artificialEventLists.length > 0) && artificialEventLists[artificialEventLists.length - 1][0];
-        const previousUndefinedToken = previousUndefinedEvent && previousUndefinedEvent[1];
-        if (
-          previousUndefinedToken &&
-          (previousUndefinedToken.end.line === undefinedReferenceType.start.line) &&
-          (previousUndefinedToken.end.column === undefinedReferenceType.start.column)
-        ) {
-          // Previous undefined reference event is immediately before this one
-          if (eventsToReplicate.length === 0) {
-            // The pair represent a collapsed reference (ex: [...][])
-            previousUndefinedToken.type = "undefinedReferenceCollapsed";
-            previousUndefinedToken.end = eventEndToken.end;
-          } else {
-            // The pair represent a full reference (ex: [...][...])
-            undefinedReferenceType.type = "undefinedReferenceFull";
-            undefinedReferenceType.start = previousUndefinedToken.start;
-            artificialEventLists.pop();
-          }
-        }
-
-        // Create artificial event list and replicate content
-        const text = eventsToReplicate
-          .filter((event) => event[0] === "enter")
-          .map((event) => tokenizeContext.sliceSerialize(event[1]))
-          .join("")
-          .trim();
-        if ((text.length > 0) && !text.includes("]")) {
-          /** @type {Event[]} */
-          const artificialEvents = [];
-          artificialEvents.push(
-            [ "enter", undefinedReferenceType, tokenizeContext ],
-            [ "enter", undefinedReference, tokenizeContext ]
-          );
-          for (const event of eventsToReplicate) {
-            const [ kind, token ] = event;
-            // Copy token because the current object will get modified by the parser
-            artificialEvents.push([ kind, { ...token }, tokenizeContext ]);
-          }
-          artificialEvents.push(
-            [ "exit", undefinedReference, tokenizeContext ],
-            [ "exit", undefinedReferenceType, tokenizeContext ]
-          );
-          artificialEventLists.push(artificialEvents);
-        }
-      }
-
-      // Continue with original behavior
-      return nokOriginal(code);
-    };
-
-    // Shim nok handler of labelEnd's tokenize
-    return tokenizeOriginal.call(tokenizeContext, effects, okOriginal, nokShim);
-  }
-
-  try {
-    // Shim labelEnd behavior to detect undefined references
-    labelEnd.tokenize = tokenizeShim;
-
-    // Use micromark to parse document into Events
-    const encoding = undefined;
-    const eol = true;
-    const parseContext = micromark.parse({ ...micromarkParseOptions, extensions });
-    const chunks = micromark.preprocess()(markdown, encoding, eol);
-    const events = micromark.postprocess(parseContext.document().write(chunks));
-
-    // Append artificial events and return all events
-    // eslint-disable-next-line unicorn/prefer-spread
-    return events.concat(...artificialEventLists);
-  } finally {
-    // Restore shimmed labelEnd behavior
-    labelEnd.tokenize = tokenizeOriginal;
-  }
-}
-
-/**
- * Parses a Markdown document and returns micromark tokens (internal).
- *
- * @param {string} markdown Markdown document.
- * @param {ParseOptions} [parseOptions] Options.
- * @param {MicromarkParseOptions} [micromarkParseOptions] Options for micromark.
- * @param {number} [lineDelta] Offset for start/end line.
- * @param {MicromarkToken} [ancestor] Parent of top-most tokens.
- * @returns {MicromarkToken[]} Micromark tokens.
- */
-function parseInternal(
-  markdown,
-  parseOptions = {},
-  micromarkParseOptions = {},
-  lineDelta = 0,
-  ancestor = undefined
-) {
-  // Get options
-  const freezeTokens = Boolean(parseOptions.freezeTokens);
-
-  // Use micromark to parse document into Events
-  const events = getEvents(markdown, micromarkParseOptions);
-
-  // Create Token objects
-  const document = [];
-  let flatTokens = [];
-  /** @type {MicromarkToken} */
-  const root = {
-    "type": "data",
-    "startLine": -1,
-    "startColumn": -1,
-    "endLine": -1,
-    "endColumn": -1,
-    "text": "ROOT",
-    "children": document,
-    "parent": null
-  };
-  const history = [ root ];
-  let current = root;
-  // eslint-disable-next-line jsdoc/valid-types
-  /** @type MicromarkParseOptions | null */
-  let reparseOptions = null;
-  let lines = null;
-  let skipHtmlFlowChildren = false;
-  for (const event of events) {
-    const [ kind, token, context ] = event;
-    const { type, start, end } = token;
-    const { "column": startColumn, "line": startLine } = start;
-    const { "column": endColumn, "line": endLine } = end;
-    const text = context.sliceSerialize(token);
-    if ((kind === "enter") && !skipHtmlFlowChildren) {
-      const previous = current;
-      history.push(previous);
-      current = {
-        type,
-        "startLine": startLine + lineDelta,
-        startColumn,
-        "endLine": endLine + lineDelta,
-        endColumn,
-        text,
-        "children": [],
-        "parent": ((previous === root) ? (ancestor || null) : previous)
-      };
-      if (ancestor) {
-        Object.defineProperty(current, htmlFlowSymbol, { "value": true });
-      }
-      previous.children.push(current);
-      flatTokens.push(current);
-      if ((current.type === "htmlFlow") && !isHtmlFlowComment(current)) {
-        skipHtmlFlowChildren = true;
-        if (!reparseOptions || !lines) {
-          reparseOptions = {
-            ...micromarkParseOptions,
-            "extensions": [
-              {
-                "disable": {
-                  "null": [ "codeIndented", "htmlFlow" ]
-                }
-              }
-            ]
-          };
-          lines = markdown.split(newLineRe);
-        }
-        const reparseMarkdown = lines
-          .slice(current.startLine - 1, current.endLine)
-          .join("\n");
-        const tokens = parseInternal(
-          reparseMarkdown,
-          parseOptions,
-          reparseOptions,
-          current.startLine - 1,
-          current
-        );
-        current.children = tokens;
-        // Avoid stack overflow of Array.push(...spread)
-        // eslint-disable-next-line unicorn/prefer-spread
-        flatTokens = flatTokens.concat(tokens[flatTokensSymbol]);
-      }
-    } else if (kind === "exit") {
-      if (type === "htmlFlow") {
-        skipHtmlFlowChildren = false;
-      }
-      if (!skipHtmlFlowChildren) {
-        if (freezeTokens) {
-          Object.freeze(current.children);
-          Object.freeze(current);
-        }
-        // @ts-ignore
-        current = history.pop();
-      }
-    }
-  }
-
-  // Return document
-  Object.defineProperty(document, flatTokensSymbol, { "value": flatTokens });
-  if (freezeTokens) {
-    Object.freeze(document);
-  }
-  return document;
-}
-
-/**
- * Parses a Markdown document and returns micromark tokens.
- *
- * @param {string} markdown Markdown document.
- * @param {ParseOptions} [parseOptions] Options.
- * @returns {MicromarkToken[]} Micromark tokens.
- */
-function parse(markdown, parseOptions) {
-  return parseInternal(markdown, parseOptions);
-}
-
-module.exports = {
-  getEvents,
-  parse
-};
-
-
-/***/ }),
-
-/***/ 9917:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// @ts-check
-
-
-
-const { newLineRe } = __nccwpck_require__(8307);
-
-/**
- * @callback InlineCodeSpanCallback
- * @param {string} code Code content.
- * @param {number} lineIndex Line index (0-based).
- * @param {number} columnIndex Column index (0-based).
- * @param {number} ticks Count of backticks.
- * @returns {void}
- */
-
-/**
- * Calls the provided function for each inline code span's content.
- *
- * @param {string} input Markdown content.
- * @param {InlineCodeSpanCallback} handler Callback function taking (code,
- * lineIndex, columnIndex, ticks).
- * @returns {void}
- */
-function forEachInlineCodeSpan(input, handler) {
-  const backtickRe = /`+/g;
-  let match = null;
-  const backticksLengthAndIndex = [];
-  while ((match = backtickRe.exec(input)) !== null) {
-    backticksLengthAndIndex.push([ match[0].length, match.index ]);
-  }
-  const newLinesIndex = [];
-  while ((match = newLineRe.exec(input)) !== null) {
-    newLinesIndex.push(match.index);
-  }
-  let lineIndex = 0;
-  let lineStartIndex = 0;
-  let k = 0;
-  for (let i = 0; i < backticksLengthAndIndex.length - 1; i++) {
-    const [ startLength, startIndex ] = backticksLengthAndIndex[i];
-    if ((startIndex === 0) || (input[startIndex - 1] !== "\\")) {
-      for (let j = i + 1; j < backticksLengthAndIndex.length; j++) {
-        const [ endLength, endIndex ] = backticksLengthAndIndex[j];
-        if (startLength === endLength) {
-          for (; k < newLinesIndex.length; k++) {
-            const newLineIndex = newLinesIndex[k];
-            if (startIndex < newLineIndex) {
-              break;
-            }
-            lineIndex++;
-            lineStartIndex = newLineIndex + 1;
-          }
-          const columnIndex = startIndex - lineStartIndex + startLength;
-          handler(
-            input.slice(startIndex + startLength, endIndex),
-            lineIndex,
-            columnIndex,
-            startLength
-          );
-          i = j;
-          break;
-        }
-      }
-    }
-  }
-}
-
-/**
- * Freeze all freeze-able members of a token and its children.
- *
- * @param {import("./markdownlint").MarkdownItToken} token A markdown-it token.
- * @returns {void}
- */
-function freezeToken(token) {
-  if (token.attrs) {
-    for (const attr of token.attrs) {
-      Object.freeze(attr);
-    }
-    Object.freeze(token.attrs);
-  }
-  if (token.children) {
-    for (const child of token.children) {
-      freezeToken(child);
-    }
-    Object.freeze(token.children);
-  }
-  if (token.map) {
-    Object.freeze(token.map);
-  }
-  Object.freeze(token);
-}
-
-/**
- * Annotate tokens with line/lineNumber and freeze them.
- *
- * @param {Object[]} tokens Array of markdown-it tokens.
- * @param {string[]} lines Lines of Markdown content.
- * @returns {void}
- */
-function annotateAndFreezeTokens(tokens, lines) {
-  let trMap = null;
-  // eslint-disable-next-line jsdoc/valid-types
-  /** @type import("./markdownlint").MarkdownItToken[] */
-  // @ts-ignore
-  const markdownItTokens = tokens;
-  for (const token of markdownItTokens) {
-    // Provide missing maps for table content
-    if (token.type === "tr_open") {
-      trMap = token.map;
-    } else if (token.type === "tr_close") {
-      trMap = null;
-    }
-    if (!token.map && trMap) {
-      token.map = [ ...trMap ];
-    }
-    // Update token metadata
-    if (token.map) {
-      token.line = lines[token.map[0]];
-      token.lineNumber = token.map[0] + 1;
-      // Trim bottom of token to exclude whitespace lines
-      while (token.map[1] && !((lines[token.map[1] - 1] || "").trim())) {
-        token.map[1]--;
-      }
-    }
-    // Annotate children with lineNumber
-    if (token.children) {
-      const codeSpanExtraLines = [];
-      if (token.children.some((child) => child.type === "code_inline")) {
-        forEachInlineCodeSpan(token.content, (code) => {
-          codeSpanExtraLines.push(code.split(newLineRe).length - 1);
-        });
-      }
-      let lineNumber = token.lineNumber;
-      for (const child of token.children) {
-        child.lineNumber = lineNumber;
-        child.line = lines[lineNumber - 1];
-        if ((child.type === "softbreak") || (child.type === "hardbreak")) {
-          lineNumber++;
-        } else if (child.type === "code_inline") {
-          lineNumber += codeSpanExtraLines.shift();
-        }
-      }
-    }
-    freezeToken(token);
-  }
-  Object.freeze(tokens);
-}
-
-/**
- * Gets an array of markdown-it tokens for the input.
- *
- * @param {import("./markdownlint").Plugin[]} markdownItPlugins Additional plugins.
- * @param {string} content Markdown content.
- * @param {string[]} lines Lines of Markdown content.
- * @returns {import("../lib/markdownlint").MarkdownItToken} Array of markdown-it tokens.
- */
-function getMarkdownItTokens(markdownItPlugins, content, lines) {
-  const markdownit = __nccwpck_require__(5182);
-  const md = markdownit({ "html": true });
-  for (const plugin of markdownItPlugins) {
-    // @ts-ignore
-    md.use(...plugin);
-  }
-  const tokens = md.parse(content, {});
-  annotateAndFreezeTokens(tokens, lines);
-  // @ts-ignore
-  return tokens;
-};
-
-module.exports = {
-  forEachInlineCodeSpan,
-  getMarkdownItTokens
-};
-
-
-/***/ })
-
-/******/ });
-/************************************************************************/
-/******/ // The module cache
-/******/ var __webpack_module_cache__ = {};
-/******/ 
-/******/ // The require function
-/******/ function __nccwpck_require__(moduleId) {
-/******/ 	// Check if module is in cache
-/******/ 	var cachedModule = __webpack_module_cache__[moduleId];
-/******/ 	if (cachedModule !== undefined) {
-/******/ 		return cachedModule.exports;
-/******/ 	}
-/******/ 	// Create a new module (and put it into the cache)
-/******/ 	var module = __webpack_module_cache__[moduleId] = {
-/******/ 		// no module.id needed
-/******/ 		// no module.loaded needed
-/******/ 		exports: {}
-/******/ 	};
-/******/ 
-/******/ 	// Execute the module function
-/******/ 	var threw = true;
-/******/ 	try {
-/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __nccwpck_require__);
-/******/ 		threw = false;
-/******/ 	} finally {
-/******/ 		if(threw) delete __webpack_module_cache__[moduleId];
-/******/ 	}
-/******/ 
-/******/ 	// Return the exports of the module
-/******/ 	return module.exports;
-/******/ }
-/******/ 
-/************************************************************************/
-/******/ /* webpack/runtime/create fake namespace object */
-/******/ (() => {
-/******/ 	var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
-/******/ 	var leafPrototypes;
-/******/ 	// create a fake namespace object
-/******/ 	// mode & 1: value is a module id, require it
-/******/ 	// mode & 2: merge all properties of value into the ns
-/******/ 	// mode & 4: return value when already ns object
-/******/ 	// mode & 16: return value when it's Promise-like
-/******/ 	// mode & 8|1: behave like require
-/******/ 	__nccwpck_require__.t = function(value, mode) {
-/******/ 		if(mode & 1) value = this(value);
-/******/ 		if(mode & 8) return value;
-/******/ 		if(typeof value === 'object' && value) {
-/******/ 			if((mode & 4) && value.__esModule) return value;
-/******/ 			if((mode & 16) && typeof value.then === 'function') return value;
-/******/ 		}
-/******/ 		var ns = Object.create(null);
-/******/ 		__nccwpck_require__.r(ns);
-/******/ 		var def = {};
-/******/ 		leafPrototypes = leafPrototypes || [null, getProto({}), getProto([]), getProto(getProto)];
-/******/ 		for(var current = mode & 2 && value; typeof current == 'object' && !~leafPrototypes.indexOf(current); current = getProto(current)) {
-/******/ 			Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => (value[key])));
-/******/ 		}
-/******/ 		def['default'] = () => (value);
-/******/ 		__nccwpck_require__.d(ns, def);
-/******/ 		return ns;
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/define property getters */
-/******/ (() => {
-/******/ 	// define getter functions for harmony exports
-/******/ 	__nccwpck_require__.d = (exports, definition) => {
-/******/ 		for(var key in definition) {
-/******/ 			if(__nccwpck_require__.o(definition, key) && !__nccwpck_require__.o(exports, key)) {
-/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
-/******/ 			}
-/******/ 		}
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/hasOwnProperty shorthand */
-/******/ (() => {
-/******/ 	__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/make namespace object */
-/******/ (() => {
-/******/ 	// define __esModule on exports
-/******/ 	__nccwpck_require__.r = (exports) => {
-/******/ 		if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
-/******/ 			Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-/******/ 		}
-/******/ 		Object.defineProperty(exports, '__esModule', { value: true });
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/compat */
-/******/ 
-/******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
-/******/ 
-/************************************************************************/
-var __webpack_exports__ = {};
-
-// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
-var core = __nccwpck_require__(7484);
-// EXTERNAL MODULE: external "node:fs"
-var external_node_fs_ = __nccwpck_require__(3024);
-;// CONCATENATED MODULE: external "node:module"
-const external_node_module_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:module");
-// EXTERNAL MODULE: external "node:os"
-var external_node_os_ = __nccwpck_require__(8161);
-// EXTERNAL MODULE: external "node:path"
-var external_node_path_ = __nccwpck_require__(6760);
-;// CONCATENATED MODULE: external "node:url"
-const external_node_url_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:url");
-// EXTERNAL MODULE: external "path"
-var external_path_ = __nccwpck_require__(6928);
-;// CONCATENATED MODULE: external "process"
-const external_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("process");
-;// CONCATENATED MODULE: external "module"
-const external_module_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("module");
-// EXTERNAL MODULE: external "url"
-var external_url_ = __nccwpck_require__(7016);
-;// CONCATENATED MODULE: ./node_modules/es-main/main.js
-
-
-
-
-
-/**
- * Strip the extension from a filename if it has one.
- * @param {string} name A filename.
- * @return {string} The filename without a path.
- */
-function stripExt(name) {
-  const extension = external_path_.extname(name);
-  if (!extension) {
-    return name;
-  }
-
-  return name.slice(0, -extension.length);
-}
-
-/**
- * Check if a module was run directly with node as opposed to being
- * imported from another module.
- * @param {ImportMeta} meta The `import.meta` object.
- * @return {boolean} The module was run directly with node.
- */
-function esMain(meta) {
-  if (!meta || !external_process_namespaceObject.argv[1]) {
-    return false;
-  }
-
-  const require = (0,external_module_namespaceObject.createRequire)(meta.url);
-  const scriptPath = require.resolve(external_process_namespaceObject.argv[1]);
-
-  const modulePath = (0,external_url_.fileURLToPath)(meta.url);
-
-  const extension = external_path_.extname(scriptPath);
-  if (extension) {
-    return modulePath === scriptPath;
-  }
-
-  return stripExt(modulePath) === scriptPath;
-}
-
-;// CONCATENATED MODULE: external "node:process"
-const external_node_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:process");
-// EXTERNAL MODULE: external "node:events"
-var external_node_events_ = __nccwpck_require__(8474);
-// EXTERNAL MODULE: external "node:stream"
-var external_node_stream_ = __nccwpck_require__(7075);
-;// CONCATENATED MODULE: external "node:stream/promises"
-const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
-;// CONCATENATED MODULE: ./node_modules/@sindresorhus/merge-streams/index.js
-
-
-
-
-function mergeStreams(streams) {
-	if (!Array.isArray(streams)) {
-		throw new TypeError(`Expected an array, got \`${typeof streams}\`.`);
-	}
-
-	for (const stream of streams) {
-		validateStream(stream);
-	}
-
-	const objectMode = streams.some(({readableObjectMode}) => readableObjectMode);
-	const highWaterMark = getHighWaterMark(streams, objectMode);
-	const passThroughStream = new MergedStream({
-		objectMode,
-		writableHighWaterMark: highWaterMark,
-		readableHighWaterMark: highWaterMark,
-	});
-
-	for (const stream of streams) {
-		passThroughStream.add(stream);
-	}
-
-	if (streams.length === 0) {
-		endStream(passThroughStream);
-	}
-
-	return passThroughStream;
-}
-
-const getHighWaterMark = (streams, objectMode) => {
-	if (streams.length === 0) {
-		// @todo Use `node:stream` `getDefaultHighWaterMark(objectMode)` in next major release
-		return 16_384;
-	}
-
-	const highWaterMarks = streams
-		.filter(({readableObjectMode}) => readableObjectMode === objectMode)
-		.map(({readableHighWaterMark}) => readableHighWaterMark);
-	return Math.max(...highWaterMarks);
-};
-
-class MergedStream extends external_node_stream_.PassThrough {
-	#streams = new Set([]);
-	#ended = new Set([]);
-	#aborted = new Set([]);
-	#onFinished;
-
-	add(stream) {
-		validateStream(stream);
-
-		if (this.#streams.has(stream)) {
-			return;
-		}
-
-		this.#streams.add(stream);
-
-		this.#onFinished ??= onMergedStreamFinished(this, this.#streams);
-		endWhenStreamsDone({
-			passThroughStream: this,
-			stream,
-			streams: this.#streams,
-			ended: this.#ended,
-			aborted: this.#aborted,
-			onFinished: this.#onFinished,
-		});
-
-		stream.pipe(this, {end: false});
-	}
-
-	remove(stream) {
-		validateStream(stream);
-
-		if (!this.#streams.has(stream)) {
-			return false;
-		}
-
-		stream.unpipe(this);
-		return true;
-	}
-}
-
-const onMergedStreamFinished = async (passThroughStream, streams) => {
-	updateMaxListeners(passThroughStream, PASSTHROUGH_LISTENERS_COUNT);
-	const controller = new AbortController();
-
-	try {
-		await Promise.race([
-			onMergedStreamEnd(passThroughStream, controller),
-			onInputStreamsUnpipe(passThroughStream, streams, controller),
-		]);
-	} finally {
-		controller.abort();
-		updateMaxListeners(passThroughStream, -PASSTHROUGH_LISTENERS_COUNT);
-	}
-};
-
-const onMergedStreamEnd = async (passThroughStream, {signal}) => {
-	await (0,promises_namespaceObject.finished)(passThroughStream, {signal, cleanup: true});
-};
-
-const onInputStreamsUnpipe = async (passThroughStream, streams, {signal}) => {
-	for await (const [unpipedStream] of (0,external_node_events_.on)(passThroughStream, 'unpipe', {signal})) {
-		if (streams.has(unpipedStream)) {
-			unpipedStream.emit(unpipeEvent);
-		}
-	}
-};
-
-const validateStream = stream => {
-	if (typeof stream?.pipe !== 'function') {
-		throw new TypeError(`Expected a readable stream, got: \`${typeof stream}\`.`);
-	}
-};
-
-const endWhenStreamsDone = async ({passThroughStream, stream, streams, ended, aborted, onFinished}) => {
-	updateMaxListeners(passThroughStream, PASSTHROUGH_LISTENERS_PER_STREAM);
-	const controller = new AbortController();
-
-	try {
-		await Promise.race([
-			afterMergedStreamFinished(onFinished, stream),
-			onInputStreamEnd({passThroughStream, stream, streams, ended, aborted, controller}),
-			onInputStreamUnpipe({stream, streams, ended, aborted, controller}),
-		]);
-	} finally {
-		controller.abort();
-		updateMaxListeners(passThroughStream, -PASSTHROUGH_LISTENERS_PER_STREAM);
-	}
-
-	if (streams.size === ended.size + aborted.size) {
-		if (ended.size === 0 && aborted.size > 0) {
-			abortStream(passThroughStream);
-		} else {
-			endStream(passThroughStream);
-		}
-	}
-};
-
-// This is the error thrown by `finished()` on `stream.destroy()`
-const isAbortError = error => error?.code === 'ERR_STREAM_PREMATURE_CLOSE';
-
-const afterMergedStreamFinished = async (onFinished, stream) => {
-	try {
-		await onFinished;
-		abortStream(stream);
-	} catch (error) {
-		if (isAbortError(error)) {
-			abortStream(stream);
-		} else {
-			errorStream(stream, error);
-		}
-	}
-};
-
-const onInputStreamEnd = async ({passThroughStream, stream, streams, ended, aborted, controller: {signal}}) => {
-	try {
-		await (0,promises_namespaceObject.finished)(stream, {signal, cleanup: true, readable: true, writable: false});
-		if (streams.has(stream)) {
-			ended.add(stream);
-		}
-	} catch (error) {
-		if (signal.aborted || !streams.has(stream)) {
-			return;
-		}
-
-		if (isAbortError(error)) {
-			aborted.add(stream);
-		} else {
-			errorStream(passThroughStream, error);
-		}
-	}
-};
-
-const onInputStreamUnpipe = async ({stream, streams, ended, aborted, controller: {signal}}) => {
-	await (0,external_node_events_.once)(stream, unpipeEvent, {signal});
-	streams.delete(stream);
-	ended.delete(stream);
-	aborted.delete(stream);
-};
-
-const unpipeEvent = Symbol('unpipe');
-
-const endStream = stream => {
-	if (stream.writable) {
-		stream.end();
-	}
-};
-
-const abortStream = stream => {
-	if (stream.readable || stream.writable) {
-		stream.destroy();
-	}
-};
-
-// `stream.destroy(error)` crashes the process with `uncaughtException` if no `error` event listener exists on `stream`.
-// We take care of error handling on user behalf, so we do not want this to happen.
-const errorStream = (stream, error) => {
-	if (!stream.destroyed) {
-		stream.once('error', noop);
-		stream.destroy(error);
-	}
-};
-
-const noop = () => {};
-
-const updateMaxListeners = (passThroughStream, increment) => {
-	const maxListeners = passThroughStream.getMaxListeners();
-	if (maxListeners !== 0 && maxListeners !== Number.POSITIVE_INFINITY) {
-		passThroughStream.setMaxListeners(maxListeners + increment);
-	}
-};
-
-// Number of times `passThroughStream.on()` is called regardless of streams:
-//  - once due to `finished(passThroughStream)`
-//  - once due to `on(passThroughStream)`
-const PASSTHROUGH_LISTENERS_COUNT = 2;
-
-// Number of times `passThroughStream.on()` is called per stream:
-//  - once due to `stream.pipe(passThroughStream)`
-const PASSTHROUGH_LISTENERS_PER_STREAM = 1;
-
-// EXTERNAL MODULE: ./node_modules/fast-glob/out/index.js
-var out = __nccwpck_require__(5648);
-// EXTERNAL MODULE: external "fs"
-var external_fs_ = __nccwpck_require__(9896);
-;// CONCATENATED MODULE: ./node_modules/path-type/index.js
-
-
-async function isType(fsStatType, statsMethodName, filePath) {
-	if (typeof filePath !== 'string') {
-		throw new TypeError(`Expected a string, got ${typeof filePath}`);
-	}
-
-	try {
-		const stats = await external_fs_.promises[fsStatType](filePath);
-		return stats[statsMethodName]();
-	} catch (error) {
-		if (error.code === 'ENOENT') {
-			return false;
-		}
-
-		throw error;
-	}
-}
-
-function isTypeSync(fsStatType, statsMethodName, filePath) {
-	if (typeof filePath !== 'string') {
-		throw new TypeError(`Expected a string, got ${typeof filePath}`);
-	}
-
-	try {
-		return external_fs_[fsStatType](filePath)[statsMethodName]();
-	} catch (error) {
-		if (error.code === 'ENOENT') {
-			return false;
-		}
-
-		throw error;
-	}
-}
-
-const isFile = isType.bind(null, 'stat', 'isFile');
-const isDirectory = isType.bind(null, 'stat', 'isDirectory');
-const isSymlink = isType.bind(null, 'lstat', 'isSymbolicLink');
-const isFileSync = isTypeSync.bind(null, 'statSync', 'isFile');
-const isDirectorySync = isTypeSync.bind(null, 'statSync', 'isDirectory');
-const isSymlinkSync = isTypeSync.bind(null, 'lstatSync', 'isSymbolicLink');
-
-;// CONCATENATED MODULE: ./node_modules/unicorn-magic/node.js
-
-
-function toPath(urlOrPath) {
-	return urlOrPath instanceof URL ? (0,external_node_url_namespaceObject.fileURLToPath)(urlOrPath) : urlOrPath;
-}
-
-
-
-;// CONCATENATED MODULE: external "node:fs/promises"
-const external_node_fs_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
-// EXTERNAL MODULE: ./node_modules/ignore/index.js
-var ignore = __nccwpck_require__(298);
-;// CONCATENATED MODULE: ./node_modules/slash/index.js
-function slash(path) {
-	const isExtendedLengthPath = path.startsWith('\\\\?\\');
-
-	if (isExtendedLengthPath) {
-		return path;
-	}
-
-	return path.replace(/\\/g, '/');
-}
-
-;// CONCATENATED MODULE: ./node_modules/globby/utilities.js
-const isNegativePattern = pattern => pattern[0] === '!';
-
-;// CONCATENATED MODULE: ./node_modules/globby/ignore.js
-
-
-
-
-
-
-
-
-
-
-const defaultIgnoredDirectories = [
-	'**/node_modules',
-	'**/flow-typed',
-	'**/coverage',
-	'**/.git',
-];
-const ignoreFilesGlobOptions = {
-	absolute: true,
-	dot: true,
-};
-
-const GITIGNORE_FILES_PATTERN = '**/.gitignore';
-
-const applyBaseToPattern = (pattern, base) => isNegativePattern(pattern)
-	? '!' + external_node_path_.posix.join(base, pattern.slice(1))
-	: external_node_path_.posix.join(base, pattern);
-
-const parseIgnoreFile = (file, cwd) => {
-	const base = slash(external_node_path_.relative(cwd, external_node_path_.dirname(file.filePath)));
-
-	return file.content
-		.split(/\r?\n/)
-		.filter(line => line && !line.startsWith('#'))
-		.map(pattern => applyBaseToPattern(pattern, base));
-};
-
-const toRelativePath = (fileOrDirectory, cwd) => {
-	cwd = slash(cwd);
-	if (external_node_path_.isAbsolute(fileOrDirectory)) {
-		if (slash(fileOrDirectory).startsWith(cwd)) {
-			return external_node_path_.relative(cwd, fileOrDirectory);
-		}
-
-		throw new Error(`Path ${fileOrDirectory} is not in cwd ${cwd}`);
-	}
-
-	return fileOrDirectory;
-};
-
-const getIsIgnoredPredicate = (files, cwd) => {
-	const patterns = files.flatMap(file => parseIgnoreFile(file, cwd));
-	const ignores = ignore().add(patterns);
-
-	return fileOrDirectory => {
-		fileOrDirectory = toPath(fileOrDirectory);
-		fileOrDirectory = toRelativePath(fileOrDirectory, cwd);
-		return fileOrDirectory ? ignores.ignores(slash(fileOrDirectory)) : false;
-	};
-};
-
-const normalizeOptions = (options = {}) => ({
-	cwd: toPath(options.cwd) ?? external_node_process_namespaceObject.cwd(),
-	suppressErrors: Boolean(options.suppressErrors),
-	deep: typeof options.deep === 'number' ? options.deep : Number.POSITIVE_INFINITY,
-	ignore: [...options.ignore ?? [], ...defaultIgnoredDirectories],
-});
-
-const isIgnoredByIgnoreFiles = async (patterns, options) => {
-	const {cwd, suppressErrors, deep, ignore} = normalizeOptions(options);
-
-	const paths = await out(patterns, {
-		cwd,
-		suppressErrors,
-		deep,
-		ignore,
-		...ignoreFilesGlobOptions,
-	});
-
-	const files = await Promise.all(
-		paths.map(async filePath => ({
-			filePath,
-			content: await external_node_fs_promises_namespaceObject.readFile(filePath, 'utf8'),
-		})),
-	);
-
-	return getIsIgnoredPredicate(files, cwd);
-};
-
-const isIgnoredByIgnoreFilesSync = (patterns, options) => {
-	const {cwd, suppressErrors, deep, ignore} = normalizeOptions(options);
-
-	const paths = out.sync(patterns, {
-		cwd,
-		suppressErrors,
-		deep,
-		ignore,
-		...ignoreFilesGlobOptions,
-	});
-
-	const files = paths.map(filePath => ({
-		filePath,
-		content: external_node_fs_.readFileSync(filePath, 'utf8'),
-	}));
-
-	return getIsIgnoredPredicate(files, cwd);
-};
-
-const isGitIgnored = options => isIgnoredByIgnoreFiles(GITIGNORE_FILES_PATTERN, options);
-const isGitIgnoredSync = options => isIgnoredByIgnoreFilesSync(GITIGNORE_FILES_PATTERN, options);
-
-;// CONCATENATED MODULE: ./node_modules/globby/index.js
-
-
-
-
-
-
-
-
-
-
-const assertPatternsInput = patterns => {
-	if (patterns.some(pattern => typeof pattern !== 'string')) {
-		throw new TypeError('Patterns must be a string or an array of strings');
-	}
-};
-
-const normalizePathForDirectoryGlob = (filePath, cwd) => {
-	const path = isNegativePattern(filePath) ? filePath.slice(1) : filePath;
-	return external_node_path_.isAbsolute(path) ? path : external_node_path_.join(cwd, path);
-};
-
-const getDirectoryGlob = ({directoryPath, files, extensions}) => {
-	const extensionGlob = extensions?.length > 0 ? `.${extensions.length > 1 ? `{${extensions.join(',')}}` : extensions[0]}` : '';
-	return files
-		? files.map(file => external_node_path_.posix.join(directoryPath, `**/${external_node_path_.extname(file) ? file : `${file}${extensionGlob}`}`))
-		: [external_node_path_.posix.join(directoryPath, `**${extensionGlob ? `/*${extensionGlob}` : ''}`)];
-};
-
-const directoryToGlob = async (directoryPaths, {
-	cwd = external_node_process_namespaceObject.cwd(),
-	files,
-	extensions,
-} = {}) => {
-	const globs = await Promise.all(directoryPaths.map(async directoryPath =>
-		(await isDirectory(normalizePathForDirectoryGlob(directoryPath, cwd))) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath),
-	);
-
-	return globs.flat();
-};
-
-const directoryToGlobSync = (directoryPaths, {
-	cwd = external_node_process_namespaceObject.cwd(),
-	files,
-	extensions,
-} = {}) => directoryPaths.flatMap(directoryPath => isDirectorySync(normalizePathForDirectoryGlob(directoryPath, cwd)) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath);
-
-const toPatternsArray = patterns => {
-	patterns = [...new Set([patterns].flat())];
-	assertPatternsInput(patterns);
-	return patterns;
-};
-
-const checkCwdOption = cwd => {
-	if (!cwd) {
-		return;
-	}
-
-	let stat;
-	try {
-		stat = external_node_fs_.statSync(cwd);
-	} catch {
-		return;
-	}
-
-	if (!stat.isDirectory()) {
-		throw new Error('The `cwd` option must be a path to a directory');
-	}
-};
-
-const globby_normalizeOptions = (options = {}) => {
-	options = {
-		...options,
-		ignore: options.ignore ?? [],
-		expandDirectories: options.expandDirectories ?? true,
-		cwd: toPath(options.cwd),
-	};
-
-	checkCwdOption(options.cwd);
-
-	return options;
-};
-
-const normalizeArguments = function_ => async (patterns, options) => function_(toPatternsArray(patterns), globby_normalizeOptions(options));
-const normalizeArgumentsSync = function_ => (patterns, options) => function_(toPatternsArray(patterns), globby_normalizeOptions(options));
-
-const getIgnoreFilesPatterns = options => {
-	const {ignoreFiles, gitignore} = options;
-
-	const patterns = ignoreFiles ? toPatternsArray(ignoreFiles) : [];
-	if (gitignore) {
-		patterns.push(GITIGNORE_FILES_PATTERN);
-	}
-
-	return patterns;
-};
-
-const getFilter = async options => {
-	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
-	return createFilterFunction(
-		ignoreFilesPatterns.length > 0 && await isIgnoredByIgnoreFiles(ignoreFilesPatterns, options),
-	);
-};
-
-const getFilterSync = options => {
-	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
-	return createFilterFunction(
-		ignoreFilesPatterns.length > 0 && isIgnoredByIgnoreFilesSync(ignoreFilesPatterns, options),
-	);
-};
-
-const createFilterFunction = isIgnored => {
-	const seen = new Set();
-
-	return fastGlobResult => {
-		const pathKey = external_node_path_.normalize(fastGlobResult.path ?? fastGlobResult);
-
-		if (seen.has(pathKey) || (isIgnored && isIgnored(pathKey))) {
-			return false;
-		}
-
-		seen.add(pathKey);
-
-		return true;
-	};
-};
-
-const unionFastGlobResults = (results, filter) => results.flat().filter(fastGlobResult => filter(fastGlobResult));
-
-const convertNegativePatterns = (patterns, options) => {
-	const tasks = [];
-
-	while (patterns.length > 0) {
-		const index = patterns.findIndex(pattern => isNegativePattern(pattern));
-
-		if (index === -1) {
-			tasks.push({patterns, options});
-			break;
-		}
-
-		const ignorePattern = patterns[index].slice(1);
-
-		for (const task of tasks) {
-			task.options.ignore.push(ignorePattern);
-		}
-
-		if (index !== 0) {
-			tasks.push({
-				patterns: patterns.slice(0, index),
-				options: {
-					...options,
-					ignore: [
-						...options.ignore,
-						ignorePattern,
-					],
-				},
-			});
-		}
-
-		patterns = patterns.slice(index + 1);
-	}
-
-	return tasks;
-};
-
-const normalizeExpandDirectoriesOption = (options, cwd) => ({
-	...(cwd ? {cwd} : {}),
-	...(Array.isArray(options) ? {files: options} : options),
-});
-
-const generateTasks = async (patterns, options) => {
-	const globTasks = convertNegativePatterns(patterns, options);
-
-	const {cwd, expandDirectories} = options;
-
-	if (!expandDirectories) {
-		return globTasks;
-	}
-
-	const directoryToGlobOptions = normalizeExpandDirectoriesOption(expandDirectories, cwd);
-
-	return Promise.all(
-		globTasks.map(async task => {
-			let {patterns, options} = task;
-
-			[
-				patterns,
-				options.ignore,
-			] = await Promise.all([
-				directoryToGlob(patterns, directoryToGlobOptions),
-				directoryToGlob(options.ignore, {cwd}),
-			]);
-
-			return {patterns, options};
-		}),
-	);
-};
-
-const generateTasksSync = (patterns, options) => {
-	const globTasks = convertNegativePatterns(patterns, options);
-	const {cwd, expandDirectories} = options;
-
-	if (!expandDirectories) {
-		return globTasks;
-	}
-
-	const directoryToGlobSyncOptions = normalizeExpandDirectoriesOption(expandDirectories, cwd);
-
-	return globTasks.map(task => {
-		let {patterns, options} = task;
-		patterns = directoryToGlobSync(patterns, directoryToGlobSyncOptions);
-		options.ignore = directoryToGlobSync(options.ignore, {cwd});
-		return {patterns, options};
-	});
-};
-
-const globby = normalizeArguments(async (patterns, options) => {
-	const [
-		tasks,
-		filter,
-	] = await Promise.all([
-		generateTasks(patterns, options),
-		getFilter(options),
-	]);
-
-	const results = await Promise.all(tasks.map(task => out(task.patterns, task.options)));
-	return unionFastGlobResults(results, filter);
-});
-
-const globbySync = normalizeArgumentsSync((patterns, options) => {
-	const tasks = generateTasksSync(patterns, options);
-	const filter = getFilterSync(options);
-	const results = tasks.map(task => out.sync(task.patterns, task.options));
-	return unionFastGlobResults(results, filter);
-});
-
-const globbyStream = normalizeArgumentsSync((patterns, options) => {
-	const tasks = generateTasksSync(patterns, options);
-	const filter = getFilterSync(options);
-	const streams = tasks.map(task => out.stream(task.patterns, task.options));
-	const stream = mergeStreams(streams).filter(fastGlobResult => filter(fastGlobResult));
-
-	// TODO: Make it return a web stream at some point.
-	// return Readable.toWeb(stream);
-
-	return stream;
-});
-
-const isDynamicPattern = normalizeArgumentsSync(
-	(patterns, options) => patterns.some(pattern => out.isDynamicPattern(pattern, options)),
-);
-
-const generateGlobTasks = normalizeArguments(generateTasks);
-const generateGlobTasksSync = normalizeArgumentsSync(generateTasksSync);
-
-
-
-const {convertPathToPattern} = out;
-
-// EXTERNAL MODULE: ./node_modules/micromatch/index.js
-var micromatch = __nccwpck_require__(8785);
-// EXTERNAL MODULE: ./node_modules/markdownlint/lib/markdownlint.js
-var markdownlint = __nccwpck_require__(9061);
-// EXTERNAL MODULE: ./node_modules/markdownlint/helpers/helpers.js
-var helpers = __nccwpck_require__(8307);
 ;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/append-to-array.mjs
 // @ts-check
 
@@ -53652,7 +67851,7 @@ var seq = new type('tag:yaml.org,2002:seq', {
   construct: function (data) { return data !== null ? data : []; }
 });
 
-var map = new type('tag:yaml.org,2002:map', {
+var js_yaml_map = new type('tag:yaml.org,2002:map', {
   kind: 'mapping',
   construct: function (data) { return data !== null ? data : {}; }
 });
@@ -53661,7 +67860,7 @@ var failsafe = new schema({
   explicit: [
     str,
     seq,
-    map
+    js_yaml_map
   ]
 });
 
@@ -57055,7 +71254,7 @@ var YAMLException       = exception;
 var types = {
   binary:    binary,
   float:     js_yaml_float,
-  map:       map,
+  map:       js_yaml_map,
   null:      _null,
   pairs:     pairs,
   set:       set,
@@ -57130,20 +71329,20 @@ const parsers = [
 // Requires
 
 
-const dynamicRequire = (0,external_node_module_namespaceObject.createRequire)(import.meta.url);
+const markdownlint_cli2_dynamicRequire = (0,external_node_module_namespaceObject.createRequire)(import.meta.url);
 
 
-const pathPosix = external_node_path_.posix;
+const pathPosix = external_node_path_namespaceObject.posix;
 
 
 
 
 
 const {
-  applyFixes,
+  applyFixes: markdownlint_cli2_applyFixes,
   "getVersion": getLibraryVersion,
   "promises": markdownlintPromises
-} = markdownlint;
+} = lib_markdownlint;
 const {
   markdownlint: markdownlint_cli2_markdownlint,
   "extendConfig": markdownlintExtendConfig,
@@ -57190,15 +71389,15 @@ const throwForConfigurationFile = (file, error) => {
 };
 
 // Return a posix path (even on Windows)
-const posixPath = (p) => p.split(external_node_path_.sep).join(pathPosix.sep);
+const posixPath = (p) => p.split(external_node_path_namespaceObject.sep).join(pathPosix.sep);
 
 // Resolves module paths relative to the specified directory
 const resolveModulePaths = (dir, modulePaths) => (
-  modulePaths.map((path) => external_node_path_.resolve(dir, (0,helpers.expandTildePath)(path, external_node_os_)))
+  modulePaths.map((path) => external_node_path_namespaceObject.resolve(dir, (0,helpers.expandTildePath)(path, external_node_os_namespaceObject)))
 );
 
 // Read a JSON(C) or YAML file and return the object
-const readConfig = (fs, dir, name, otherwise) => () => {
+const markdownlint_cli2_readConfig = (fs, dir, name, otherwise) => () => {
   const file = pathPosix.join(dir, name);
   return fs.promises.access(file).
     then(
@@ -57218,18 +71417,18 @@ const importOrRequireResolve = async (dirOrDirs, id, noRequire) => {
       return null;
     }
     const dirs = Array.isArray(dirOrDirs) ? dirOrDirs : [ dirOrDirs ];
-    const expandId = (0,helpers.expandTildePath)(id, external_node_os_);
+    const expandId = (0,helpers.expandTildePath)(id, external_node_os_namespaceObject);
     const errors = [];
     try {
-      return resolve_and_require(dynamicRequire, expandId, dirs);
+      return resolve_and_require(markdownlint_cli2_dynamicRequire, expandId, dirs);
     } catch (error) {
       errors.push(error);
     }
     try {
       // eslint-disable-next-line n/no-unsupported-features/node-builtins
-      const isURL = !external_node_path_.isAbsolute(expandId) && URL.canParse(expandId);
+      const isURL = !external_node_path_namespaceObject.isAbsolute(expandId) && URL.canParse(expandId);
       const urlString = (
-        isURL ? new URL(expandId) : (0,external_node_url_namespaceObject.pathToFileURL)(external_node_path_.resolve(dirs[0], expandId))
+        isURL ? new URL(expandId) : (0,external_node_url_namespaceObject.pathToFileURL)(external_node_path_namespaceObject.resolve(dirs[0], expandId))
       ).toString();
       // eslint-disable-next-line no-inline-comments
       const module = await import(/* webpackIgnore: true */ urlString);
@@ -57501,19 +71700,19 @@ const getAndProcessDirInfo = (
 
     // Load markdownlint object(s)
     const readConfigs =
-      readConfig(
+      markdownlint_cli2_readConfig(
         fs,
         dir,
         ".markdownlint.jsonc",
-        readConfig(
+        markdownlint_cli2_readConfig(
           fs,
           dir,
           ".markdownlint.json",
-          readConfig(
+          markdownlint_cli2_readConfig(
             fs,
             dir,
             ".markdownlint.yaml",
-            readConfig(
+            markdownlint_cli2_readConfig(
               fs,
               dir,
               ".markdownlint.yml",
@@ -57626,7 +71825,7 @@ const enumerateFiles = async (
     (globPattern) => {
       if (globPattern.startsWith(":")) {
         literalFiles.push(
-          posixPath(external_node_path_.resolve(baseDirSystem, globPattern.slice(1)))
+          posixPath(external_node_path_namespaceObject.resolve(baseDirSystem, globPattern.slice(1)))
         );
         return false;
       }
@@ -57650,7 +71849,7 @@ const enumerateFiles = async (
           : globPattern;
       const globPath = (
         pathPosix.isAbsolute(barePattern) ||
-        external_node_path_.isAbsolute(barePattern)
+        external_node_path_namespaceObject.isAbsolute(barePattern)
       )
         ? barePattern
         : pathPosix.join(baseDir, barePattern);
@@ -57937,7 +72136,7 @@ const lintFiles = (fs, dirInfos, fileContents) => {
             options.files.push(fileName);
             subTasks.push(fs.promises.readFile(fileName, utf8).
               then((original) => {
-                const fixed = applyFixes(original, errorInfos);
+                const fixed = markdownlint_cli2_applyFixes(original, errorInfos);
                 return fs.promises.writeFile(fileName, fixed, utf8);
               })
             );
@@ -58039,9 +72238,9 @@ const markdownlint_cli2_main = async (params) => {
   } = params;
   const logMessage = params.logMessage || markdownlint_cli2_noop;
   const logError = params.logError || markdownlint_cli2_noop;
-  const fs = params.fs || external_node_fs_;
+  const fs = params.fs || external_node_fs_namespaceObject;
   const baseDirSystem =
-    (directory && external_node_path_.resolve(directory)) ||
+    (directory && external_node_path_namespaceObject.resolve(directory)) ||
     process.cwd();
   const baseDir = posixPath(baseDirSystem);
   // Merge and process args/argv
@@ -58085,7 +72284,7 @@ const markdownlint_cli2_main = async (params) => {
   try {
     if (configPath) {
       const resolvedConfigPath =
-        posixPath(external_node_path_.resolve(baseDirSystem, configPath));
+        posixPath(external_node_path_namespaceObject.resolve(baseDirSystem, configPath));
       optionsArgv =
         await readOptionsOrConfig(resolvedConfigPath, fs, noRequire);
       relativeDir = pathPosix.dirname(resolvedConfigPath);
@@ -58125,7 +72324,7 @@ const markdownlint_cli2_main = async (params) => {
   // Include any file overrides or non-file content
   const resolvedFileContents = {};
   for (const file in fileContents) {
-    const resolvedFile = posixPath(external_node_path_.resolve(baseDirSystem, file));
+    const resolvedFile = posixPath(external_node_path_namespaceObject.resolve(baseDirSystem, file));
     resolvedFileContents[resolvedFile] = fileContents[file];
   }
   for (const nonFile in nonFileContents) {
