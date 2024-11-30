@@ -38861,6 +38861,7 @@ const version = "0.36.1";
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md001 = ({
   "names": [ "MD001", "heading-increment" ],
@@ -38886,6 +38887,7 @@ const version = "0.36.1";
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md003.mjs
 // @ts-check
+
 
 
 
@@ -38961,6 +38963,7 @@ const validStyles = new Set([
   "plus",
   "sublist"
 ]);
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md004 = ({
   "names": [ "MD004", "ul-style" ],
@@ -39018,6 +39021,7 @@ const validStyles = new Set([
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md005.mjs
 // @ts-check
+
 
 
 
@@ -39092,12 +39096,14 @@ const validStyles = new Set([
 
 
 
+
 /** @type {import("micromark-util-types").TokenType[]} */
 const unorderedListTypes =
   [ "blockQuotePrefix", "listItemPrefix", "listUnordered" ];
 /** @type {import("micromark-util-types").TokenType[]} */
 const unorderedParentTypes =
   [ "blockQuote", "listOrdered", "listUnordered" ];
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md007 = ({
   "names": [ "MD007", "ul-indent" ],
@@ -39171,6 +39177,7 @@ const unorderedParentTypes =
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md009.mjs
 // @ts-check
+
 
 
 
@@ -39270,6 +39277,7 @@ const unorderedParentTypes =
 
 
 const tabRe = /\t+/g;
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md010 = ({
   "names": [ "MD010", "no-hard-tabs" ],
@@ -39348,8 +39356,8 @@ const tabRe = /\t+/g;
 
 
 
-const reversedLinkRe =
-  /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
+const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md011 = ({
   "names": [ "MD011", "no-reversed-links" ],
@@ -39403,6 +39411,7 @@ const reversedLinkRe =
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md012 = ({
   "names": [ "MD012", "no-multiple-blanks" ],
@@ -39449,6 +39458,10 @@ const longLineRePrefix = "^.{";
 const longLineRePostfixRelaxed = "}.*\\s.*$";
 const longLineRePostfixStrict = "}.+$";
 const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
+
+/** @typedef {import("micromark-extension-gfm-autolink-literal")} */
+/** @typedef {import("micromark-extension-gfm-table")} */
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md013 = ({
   "names": [ "MD013", "line-length" ],
@@ -39547,6 +39560,7 @@ const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
 
 
 const dollarCommandRe = /^(\s*)(\$\s+)/;
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md014 = ({
   "names": [ "MD014", "commands-show-output" ],
@@ -39590,6 +39604,7 @@ const dollarCommandRe = /^(\s*)(\$\s+)/;
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md018.mjs
 // @ts-check
+
 
 
 
@@ -39679,6 +39694,7 @@ function validateHeadingSpaces(onError, heading, delta) {
     );
   }
 }
+
 /** @type {import("./markdownlint.mjs").Rule[]} */
 /* harmony default export */ const md019_md021 = ([
   {
@@ -39712,6 +39728,7 @@ function validateHeadingSpaces(onError, heading, delta) {
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md020.mjs
 // @ts-check
+
 
 
 
@@ -39800,6 +39817,7 @@ const getLinesFunction = (linesParam) => {
   const lines = (linesParam === undefined) ? defaultLines : Number(linesParam);
   return () => lines;
 };
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md022 = ({
   "names": [ "MD022", "blanks-around-headings" ],
@@ -39882,6 +39900,7 @@ const getLinesFunction = (linesParam) => {
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md023 = ({
   "names": [ "MD023", "heading-start-left" ],
@@ -39917,6 +39936,7 @@ const getLinesFunction = (linesParam) => {
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md024.mjs
 // @ts-check
+
 
 
 
@@ -39967,6 +39987,7 @@ const getLinesFunction = (linesParam) => {
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md025 = ({
   "names": [ "MD025", "single-title", "single-h1" ],
@@ -40001,6 +40022,7 @@ const getLinesFunction = (linesParam) => {
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md026.mjs
 // @ts-check
+
 
 
 
@@ -40050,6 +40072,7 @@ const getLinesFunction = (linesParam) => {
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md027 = ({
   "names": [ "MD027", "no-multiple-space-blockquote" ],
@@ -40093,6 +40116,7 @@ const getLinesFunction = (linesParam) => {
 
 
 const ignoreTypes = new Set([ "lineEnding", "listItemIndent", "linePrefix" ]);
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md028 = ({
   "names": [ "MD028", "no-blanks-blockquote" ],
@@ -40148,6 +40172,7 @@ const listStyleExamples = {
 function getOrderedListItemValue(listItemPrefix) {
   return Number((0,micromark_helpers.getDescendantsByType)(listItemPrefix, [ "listItemValue" ])[0].text);
 }
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md029 = ({
   "names": [ "MD029", "ol-prefix" ],
@@ -40202,6 +40227,7 @@ function getOrderedListItemValue(listItemPrefix) {
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md030.mjs
 // @ts-check
+
 
 
 
@@ -40298,6 +40324,7 @@ function addError(onError, lines, lineNumber, top) {
     fixInfo
   );
 }
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md031 = ({
   "names": [ "MD031", "blanks-around-fences" ],
@@ -40331,6 +40358,7 @@ function addError(onError, lines, lineNumber, top) {
 const isList = (token) => (
   (token.type === "listOrdered") || (token.type === "listUnordered")
 );
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md032 = ({
   "names": [ "MD032", "blanks-around-lists" ],
@@ -40403,6 +40431,7 @@ const isList = (token) => (
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md033 = ({
   "names": [ "MD033", "no-inline-html" ],
@@ -40440,6 +40469,9 @@ const isList = (token) => (
 // @ts-check
 
 
+
+
+/** @typedef {import("micromark-extension-gfm-autolink-literal")} */
 
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md034 = ({
@@ -40531,6 +40563,7 @@ const isList = (token) => (
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md035 = ({
   "names": [ "MD035", "hr-style" ],
@@ -40563,6 +40596,7 @@ const emphasisTypes = [
   [ "emphasis", "emphasisText" ],
   [ "strong", "strongText" ]
 ];
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md036 = ({
   "names": [ "MD036", "no-emphasis-as-heading" ],
@@ -40595,6 +40629,7 @@ const emphasisTypes = [
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md037.mjs
 // @ts-check
+
 
 
 
@@ -40704,6 +40739,7 @@ const trimCodeText = (text, start, end) => {
   }
   return text;
 };
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md038 = ({
   "names": [ "MD038", "no-space-in-code" ],
@@ -40827,6 +40863,7 @@ function addLabelSpaceError(onError, label, labelText, isStart) {
 function validLink(label, labelText, definitions) {
   return (label.parent?.children.length !== 1) || definitions.has(labelText.text.trim());
 }
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md039 = ({
   "names": [ "MD039", "no-space-in-links" ],
@@ -40863,6 +40900,7 @@ function validLink(label, labelText, definitions) {
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md040 = ({
   "names": [ "MD040", "fenced-code-language" ],
@@ -40892,6 +40930,7 @@ function validLink(label, labelText, definitions) {
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md041.mjs
 // @ts-check
+
 
 
 
@@ -40926,6 +40965,7 @@ function validLink(label, labelText, definitions) {
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md042.mjs
 // @ts-check
+
 
 
 
@@ -40983,6 +41023,7 @@ function validLink(label, labelText, definitions) {
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md043.mjs
 // @ts-check
+
 
 
 
@@ -56012,6 +56053,7 @@ function micromark_parse_parse(markdown, parseOptions) {
 const ignoredChildTypes = new Set(
   [ "codeFencedFence", "definition", "reference", "resource" ]
 );
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md044 = ({
   "names": [ "MD044", "proper-names" ],
@@ -56121,6 +56163,7 @@ const ignoredChildTypes = new Set(
 
 
 const altRe = (0,helpers/* getHtmlAttributeRe */.Xi)("alt");
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md045 = ({
   "names": [ "MD045", "no-alt-text" ],
@@ -56183,6 +56226,7 @@ const tokenTypeToStyle = {
   "codeFenced": "fenced",
   "codeIndented": "indented"
 };
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md046 = ({
   "names": [ "MD046", "code-block-style" ],
@@ -56207,6 +56251,7 @@ const tokenTypeToStyle = {
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md047.mjs
 // @ts-check
+
 
 
 /** @type {import("./markdownlint.mjs").Rule} */
@@ -56255,6 +56300,7 @@ function fencedCodeBlockStyleFor(markup) {
       return "backtick";
   }
 };
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md048 = ({
   "names": [ "MD048", "code-fence-style" ],
@@ -56360,6 +56406,7 @@ const impl =
       }
     }
   };
+
 /** @type {import("./markdownlint.mjs").Rule[]} */
 /* harmony default export */ const md049_md050 = ([
   {
@@ -56458,6 +56505,7 @@ function unescapeStringTokenText(token) {
     .map((child) => child.text)
     .join("");
 }
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md051 = ({
   "names": [ "MD051", "link-fragments" ],
@@ -56568,6 +56616,7 @@ function unescapeStringTokenText(token) {
 
 
 
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md052 = ({
   "names": [ "MD052", "reference-links-images" ],
@@ -56610,6 +56659,7 @@ function unescapeStringTokenText(token) {
 
 
 const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md053 = ({
   "names": [ "MD053", "link-image-reference-definitions" ],
@@ -56684,6 +56734,7 @@ const autolinkAble = (destination) => {
   }
   return !autolinkDisallowedRe.test(destination);
 };
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md054 = ({
   "names": [ "MD054", "link-image-style" ],
@@ -56798,6 +56849,9 @@ const ignoreWhitespace = (tokens) => tokens.filter(
 const firstOrNothing = (items) => items[0];
 const lastOrNothing = (items) => items[items.length - 1];
 const makeRange = (start, end) => [ start, end - start + 1 ];
+
+/** @typedef {import("micromark-extension-gfm-table")} */
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md055 = ({
   "names": [ "MD055", "table-pipe-style" ],
@@ -56863,6 +56917,9 @@ const makeRange = (start, end) => [ start, end - start + 1 ];
 
 
 const md056_makeRange = (start, end) => [ start, end - start + 1 ];
+
+/** @typedef {import("micromark-extension-gfm-table")} */
+
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md056 = ({
   "names": [ "MD056", "table-column-count" ],
@@ -56909,6 +56966,9 @@ const md056_makeRange = (start, end) => [ start, end - start + 1 ];
 
 
 
+
+
+/** @typedef {import("micromark-extension-gfm-table")} */
 
 /** @type {import("./markdownlint.mjs").Rule} */
 /* harmony default export */ const md058 = ({
