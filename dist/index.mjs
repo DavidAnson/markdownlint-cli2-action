@@ -37107,13 +37107,18 @@ module.exports.Or = newLineRe;
 module.exports.gi = nextLinesRe;
 
 // @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("../lib/markdownlint.mjs").RuleOnError} RuleOnError */
+/** @typedef {import("markdownlint").RuleOnError} RuleOnError */
 // @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("../lib/markdownlint.mjs").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
+/** @typedef {import("markdownlint").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
 // @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("../lib/markdownlint.mjs").MicromarkToken} MicromarkToken */
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
+// eslint-disable-next-line jsdoc/valid-types
+/** @typedef {import("micromark-extension-gfm-footnote", { with: { "resolution-mode": "import" } })} */
+// eslint-disable-next-line jsdoc/valid-types
+/** @typedef {import("../lib/micromark-types.d.mts", { with: { "resolution-mode": "import" } })} */
 
 // Regular expression for matching common front matter (YAML and TOML)
+// @ts-ignore
 module.exports.Q9 =
   /((^---[^\S\r\n\u2028\u2029]*$[\s\S]+?^---\s*)|(^\+\+\+[^\S\r\n\u2028\u2029]*$[\s\S]+?^(\+\+\+|\.\.\.)\s*)|(^\{[^\S\r\n\u2028\u2029]*$[\s\S]+?^\}\s*))(\r\n|\r|\n|$)/m;
 
@@ -37465,7 +37470,7 @@ module.exports.Fl =
 /**
  * Returns an object with information about reference links and images.
  *
- * @param {import("../helpers/micromark-helpers.cjs").Token[]} tokens Micromark tokens.
+ * @param {MicromarkToken[]} tokens Micromark tokens.
  * @returns {Object} Reference link/image data.
  */
 function getReferenceLinkImageData(tokens) {
@@ -37645,10 +37650,10 @@ module.exports.ww = expandTildePath;
 
 const { flatTokensSymbol, htmlFlowSymbol } = __nccwpck_require__(3408);
 
+// eslint-disable-next-line jsdoc/valid-types
+/** @typedef {import("micromark-util-types", { with: { "resolution-mode": "import" } }).TokenType} TokenType */
 // @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("micromark-util-types").TokenType} TokenType */
-// @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("../lib/markdownlint.mjs").MicromarkToken} Token */
+/** @typedef {import("markdownlint").MicromarkToken} Token */
 
 /**
  * Determines if a Micromark token is within an htmlFlow type.
@@ -38770,10 +38775,8 @@ const {convertPathToPattern} = out;
 
 // EXTERNAL MODULE: ./node_modules/micromatch/index.js
 var micromatch = __nccwpck_require__(8785);
-// EXTERNAL MODULE: external "node:util"
-var external_node_util_ = __nccwpck_require__(7975);
 // EXTERNAL MODULE: ./node_modules/markdownlint/helpers/helpers.cjs
-var helpers = __nccwpck_require__(3810);
+var helpers_helpers = __nccwpck_require__(3810);
 // EXTERNAL MODULE: ./node_modules/markdownlint/helpers/micromark-helpers.cjs
 var micromark_helpers = __nccwpck_require__(1670);
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/cache.mjs
@@ -38789,7 +38792,7 @@ let params = undefined;
 /**
  * Initializes (resets) the cache.
  *
- * @param {import("./markdownlint.mjs").RuleParams} [p] Rule parameters object.
+ * @param {import("markdownlint").RuleParams} [p] Rule parameters object.
  * @returns {void}
  */
 function initialize(p) {
@@ -38816,9 +38819,9 @@ function getCached(name, getValue) {
 /**
  * Filters a list of Micromark tokens by type and caches the result.
  *
- * @param {import("./markdownlint.mjs").MicromarkTokenType[]} types Types to allow.
+ * @param {import("markdownlint").MicromarkTokenType[]} types Types to allow.
  * @param {boolean} [htmlFlow] Whether to include htmlFlow content.
- * @returns {import("./markdownlint.mjs").MicromarkToken[]} Filtered tokens.
+ * @returns {import("markdownlint").MicromarkToken[]} Filtered tokens.
  */
 function filterByTypesCached(types, htmlFlow) {
   return getCached(
@@ -38836,7 +38839,7 @@ function filterByTypesCached(types, htmlFlow) {
 function getReferenceLinkImageData() {
   return getCached(
     getReferenceLinkImageData.name,
-    () => (0,helpers/* getReferenceLinkImageData */.fL)(params.parsers.micromark.tokens)
+    () => (0,helpers_helpers/* getReferenceLinkImageData */.fL)(params.parsers.micromark.tokens)
   );
 }
 
@@ -38862,7 +38865,7 @@ const version = "0.36.1";
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md001 = ({
   "names": [ "MD001", "heading-increment" ],
   "description": "Heading levels should only increment by one level at a time",
@@ -38873,7 +38876,7 @@ const version = "0.36.1";
     for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
       const level = (0,micromark_helpers.getHeadingLevel)(heading);
       if (level > prevLevel) {
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           heading.startLine,
           `h${prevLevel + 1}`,
@@ -38892,7 +38895,7 @@ const version = "0.36.1";
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md003 = ({
   "names": [ "MD003", "heading-style" ],
   "description": "Heading style",
@@ -38922,7 +38925,7 @@ const version = "0.36.1";
           } else if (style === "setext_with_atx_closed") {
             expected = h12 ? "setext" : "atx_closed";
           }
-          (0,helpers/* addErrorDetailIf */.qC)(
+          (0,helpers_helpers/* addErrorDetailIf */.qC)(
             onError,
             heading.startLine,
             expected,
@@ -38964,7 +38967,7 @@ const validStyles = new Set([
   "sublist"
 ]);
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md004 = ({
   "names": [ "MD004", "ul-style" ],
   "description": "Unordered list style",
@@ -38977,7 +38980,7 @@ const validStyles = new Set([
     for (const listUnordered of filterByTypesCached([ "listUnordered" ])) {
       let nesting = 0;
       if (style === "sublist") {
-        /** @type {import("../helpers/micromark-helpers.cjs").Token | null} */
+        /** @type {import("markdownlint").MicromarkToken | null} */
         let parent = listUnordered;
         // @ts-ignore
         while ((parent = (0,micromark_helpers.getParentOfType)(parent, [ "listOrdered", "listUnordered" ]))) {
@@ -39000,7 +39003,7 @@ const validStyles = new Set([
         }
         const column = listItemMarker.startColumn;
         const length = listItemMarker.endColumn - listItemMarker.startColumn;
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           listItemMarker.startLine,
           expectedStyle,
@@ -39025,7 +39028,7 @@ const validStyles = new Set([
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md005 = ({
   "names": [ "MD005", "list-indent" ],
   "description": "Inconsistent indentation for list items at the same level",
@@ -39043,7 +39046,7 @@ const validStyles = new Set([
         const actualIndent = listItemPrefix.startColumn - 1;
         const range = [ 1, listItemPrefix.endColumn - 1 ];
         if (list.type === "listUnordered") {
-          (0,helpers/* addErrorDetailIf */.qC)(
+          (0,helpers_helpers/* addErrorDetailIf */.qC)(
             onError,
             lineNumber,
             expectedIndent,
@@ -39070,7 +39073,7 @@ const validStyles = new Set([
               const actual = endMatching ?
                 actualEnd - markerLength :
                 actualIndent;
-              (0,helpers/* addError */.CN)(
+              (0,helpers_helpers/* addError */.CN)(
                 onError,
                 lineNumber,
                 detail,
@@ -39104,7 +39107,7 @@ const unorderedListTypes =
 const unorderedParentTypes =
   [ "blockQuote", "listOrdered", "listUnordered" ];
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md007 = ({
   "names": [ "MD007", "ul-indent" ],
   "description": "Unordered list indentation",
@@ -39123,7 +39126,7 @@ const unorderedParentTypes =
         lastBlockQuotePrefix = token;
       } else if (type === "listUnordered") {
         let nesting = 0;
-        /** @type {import("../helpers/micromark-helpers.cjs").Token | null} */
+        /** @type {import("markdownlint").MicromarkToken | null} */
         let current = token;
         while (
           // @ts-ignore
@@ -39159,7 +39162,7 @@ const unorderedParentTypes =
             "deleteCount": Math.max(actualIndent - expectedIndent, 0),
             "insertText": "".padEnd(Math.max(expectedIndent - actualIndent, 0))
           };
-          (0,helpers/* addErrorDetailIf */.qC)(
+          (0,helpers_helpers/* addErrorDetailIf */.qC)(
             onError,
             startLine,
             expectedIndent,
@@ -39182,7 +39185,7 @@ const unorderedParentTypes =
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md009 = ({
   "names": [ "MD009", "no-trailing-spaces" ],
   "description": "Trailing spaces",
@@ -39252,7 +39255,7 @@ const unorderedParentTypes =
         )
       ) {
         const column = line.length - trailingSpaces + 1;
-        (0,helpers/* addError */.CN)(
+        (0,helpers_helpers/* addError */.CN)(
           onError,
           lineNumber,
           "Expected: " + (expected === 0 ? "" : "0 or ") +
@@ -39278,7 +39281,7 @@ const unorderedParentTypes =
 
 const tabRe = /\t+/g;
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md010 = ({
   "names": [ "MD010", "no-hard-tabs" ],
   "description": "Hard tabs",
@@ -39295,7 +39298,7 @@ const tabRe = /\t+/g;
     const spaceMultiplier = (spacesPerTab === undefined) ?
       1 :
       Math.max(0, Number(spacesPerTab));
-    /** @type {import("../helpers/micromark-helpers.cjs").TokenType[]} */
+    /** @type {import("markdownlint").MicromarkTokenType[]} */
     const exclusionTypes = [];
     if (includeCode) {
       if (ignoreCodeLanguages.size > 0) {
@@ -39330,8 +39333,8 @@ const tabRe = /\t+/g;
         const length = match[0].length;
         /** @type {import("../helpers/helpers.cjs").FileRange} */
         const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
-        if (!codeRanges.some((codeRange) => (0,helpers/* hasOverlap */.UM)(codeRange, range))) {
-          (0,helpers/* addError */.CN)(
+        if (!codeRanges.some((codeRange) => (0,helpers_helpers/* hasOverlap */.UM)(codeRange, range))) {
+          (0,helpers_helpers/* addError */.CN)(
             onError,
             lineNumber,
             "Column: " + column,
@@ -39358,7 +39361,7 @@ const tabRe = /\t+/g;
 
 const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md011 = ({
   "names": [ "MD011", "no-reversed-links" ],
   "description": "Reversed link syntax",
@@ -39384,8 +39387,8 @@ const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
             const length = match[0].length - preChar.length;
             /** @type {import("../helpers/helpers.cjs").FileRange} */
             const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
-            if (!codeTexts.some((codeText) => (0,helpers/* hasOverlap */.UM)(codeText, range))) {
-              (0,helpers/* addError */.CN)(
+            if (!codeTexts.some((codeText) => (0,helpers_helpers/* hasOverlap */.UM)(codeText, range))) {
+              (0,helpers_helpers/* addError */.CN)(
                 onError,
                 lineNumber,
                 reversedLink.slice(preChar.length),
@@ -39412,7 +39415,7 @@ const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md012 = ({
   "names": [ "MD012", "no-multiple-blanks" ],
   "description": "Multiple consecutive blank lines",
@@ -39430,7 +39433,7 @@ const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
       const inCode = codeBlockLineNumbers.has(lineIndex + 1);
       count = (inCode || (line.trim().length > 0)) ? 0 : count + 1;
       if (maximum < count) {
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           lineIndex + 1,
           maximum,
@@ -39462,7 +39465,7 @@ const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
 /** @typedef {import("micromark-extension-gfm-autolink-literal")} */
 /** @typedef {import("micromark-extension-gfm-table")} */
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md013 = ({
   "names": [ "MD013", "line-length" ],
   "description": "Line length",
@@ -39539,7 +39542,7 @@ const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
            (!(stern && sternModeRe.test(line)) &&
             !linkOnlyLineNumbers.has(lineNumber))) &&
           lengthRe.test(line)) {
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           lineNumber,
           length,
@@ -39561,7 +39564,7 @@ const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
 
 const dollarCommandRe = /^(\s*)(\$\s+)/;
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md014 = ({
   "names": [ "MD014", "commands-show-output" ],
   "description": "Dollar signs used before commands without showing output",
@@ -39584,7 +39587,7 @@ const dollarCommandRe = /^(\s*)(\$\s+)/;
           const column = dollarMatch.startColumn + dollarMatch.result[1].length;
           // @ts-ignore
           const length = dollarMatch.result[2].length;
-          (0,helpers/* addErrorContext */.Xr)(
+          (0,helpers_helpers/* addErrorContext */.Xr)(
             onError,
             dollarMatch.startLine,
             dollarMatch.text,
@@ -39609,7 +39612,7 @@ const dollarCommandRe = /^(\s*)(\$\s+)/;
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md018 = ({
   "names": [ "MD018", "no-missing-space-atx" ],
   "description": "No space after hash on atx style heading",
@@ -39630,7 +39633,7 @@ const dollarCommandRe = /^(\s*)(\$\s+)/;
       ) {
         // @ts-ignore
         const hashCount = /^#+/.exec(line)[0].length;
-        (0,helpers/* addErrorContext */.Xr)(
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           lineIndex + 1,
           line.trim(),
@@ -39657,8 +39660,8 @@ const dollarCommandRe = /^(\s*)(\$\s+)/;
 /**
  * Validate heading sequence and whitespace length at start or end.
  *
- * @param {import("./markdownlint.mjs").RuleOnError} onError Error-reporting callback.
- * @param {import("./markdownlint.mjs").MicromarkToken} heading ATX heading token.
+ * @param {import("markdownlint").RuleOnError} onError Error-reporting callback.
+ * @param {import("markdownlint").MicromarkToken} heading ATX heading token.
  * @param {number} delta Direction to scan.
  * @returns {void}
  */
@@ -39680,7 +39683,7 @@ function validateHeadingSpaces(onError, heading, delta) {
   ) {
     const column = whitespace.startColumn + 1;
     const length = whitespace.endColumn - column;
-    (0,helpers/* addErrorContext */.Xr)(
+    (0,helpers_helpers/* addErrorContext */.Xr)(
       onError,
       startLine,
       text.trim(),
@@ -39695,7 +39698,7 @@ function validateHeadingSpaces(onError, heading, delta) {
   }
 }
 
-/** @type {import("./markdownlint.mjs").Rule[]} */
+/** @type {import("markdownlint").Rule[]} */
 /* harmony default export */ const md019_md021 = ([
   {
     "names": [ "MD019", "no-multiple-space-atx" ],
@@ -39733,7 +39736,7 @@ function validateHeadingSpaces(onError, heading, delta) {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md020 = ({
   "names": [ "MD020", "no-missing-space-closed-atx" ],
   "description": "No space inside hashes on closed atx style heading",
@@ -39775,7 +39778,7 @@ function validateHeadingSpaces(onError, heading, delta) {
                 line.length - trailSpaceLength - rightHashLength,
                 rightHashLength + 1
               ];
-            (0,helpers/* addErrorContext */.Xr)(
+            (0,helpers_helpers/* addErrorContext */.Xr)(
               onError,
               lineIndex + 1,
               line.trim(),
@@ -39818,7 +39821,7 @@ const getLinesFunction = (linesParam) => {
   return () => lines;
 };
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md022 = ({
   "names": [ "MD022", "blanks-around-headings" ],
   "description": "Headings should be surrounded by blank lines",
@@ -39839,12 +39842,12 @@ const getLinesFunction = (linesParam) => {
         let actualAbove = 0;
         for (
           let i = 0;
-          (i < linesAbove) && (0,helpers/* isBlankLine */.pB)(lines[startLine - 2 - i]);
+          (i < linesAbove) && (0,helpers_helpers/* isBlankLine */.pB)(lines[startLine - 2 - i]);
           i++
         ) {
           actualAbove++;
         }
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           startLine,
           linesAbove,
@@ -39868,12 +39871,12 @@ const getLinesFunction = (linesParam) => {
         let actualBelow = 0;
         for (
           let i = 0;
-          (i < linesBelow) && (0,helpers/* isBlankLine */.pB)(lines[endLine + i]);
+          (i < linesBelow) && (0,helpers_helpers/* isBlankLine */.pB)(lines[endLine + i]);
           i++
         ) {
           actualBelow++;
         }
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           startLine,
           linesBelow,
@@ -39901,7 +39904,7 @@ const getLinesFunction = (linesParam) => {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md023 = ({
   "names": [ "MD023", "heading-start-left" ],
   "description": "Headings must start at the beginning of the line",
@@ -39917,7 +39920,7 @@ const getLinesFunction = (linesParam) => {
       ) {
         const { endColumn, startColumn, startLine } = headings[i];
         const length = endColumn - startColumn;
-        (0,helpers/* addErrorContext */.Xr)(
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           startLine,
           params.lines[startLine - 1],
@@ -39941,7 +39944,7 @@ const getLinesFunction = (linesParam) => {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md024 = ({
   "names": [ "MD024", "no-duplicate-heading" ],
   "description": "Multiple headings with the same content",
@@ -39968,7 +39971,7 @@ const getLinesFunction = (linesParam) => {
       }
       // @ts-ignore
       if (knownContent.includes(headingText)) {
-        (0,helpers/* addErrorContext */.Xr)(
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           heading.startLine,
           headingText.trim()
@@ -39988,7 +39991,7 @@ const getLinesFunction = (linesParam) => {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md025 = ({
   "names": [ "MD025", "single-title", "single-h1" ],
   "description": "Multiple top-level headings in the same document",
@@ -39997,7 +40000,7 @@ const getLinesFunction = (linesParam) => {
   "function": function MD025(params, onError) {
     const level = Number(params.config.level || 1);
     const foundFrontMatterTitle =
-      (0,helpers/* frontMatterHasTitle */.Fl)(
+      (0,helpers_helpers/* frontMatterHasTitle */.Fl)(
         params.frontMatterLines,
         params.config.front_matter_title
       );
@@ -40007,7 +40010,7 @@ const getLinesFunction = (linesParam) => {
       if (headingLevel === level) {
         if (hasTopLevelHeading || foundFrontMatterTitle) {
           const headingText = (0,micromark_helpers.getHeadingText)(heading);
-          (0,helpers/* addErrorContext */.Xr)(
+          (0,helpers_helpers/* addErrorContext */.Xr)(
             onError,
             heading.startLine,
             headingText
@@ -40026,7 +40029,7 @@ const getLinesFunction = (linesParam) => {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md026 = ({
   "names": [ "MD026", "no-trailing-punctuation" ],
   "description": "Trailing punctuation in heading",
@@ -40035,23 +40038,23 @@ const getLinesFunction = (linesParam) => {
   "function": function MD026(params, onError) {
     let punctuation = params.config.punctuation;
     punctuation = String(
-      (punctuation === undefined) ? helpers/* allPunctuationNoQuestion */.f4 : punctuation
+      (punctuation === undefined) ? helpers_helpers/* allPunctuationNoQuestion */.f4 : punctuation
     );
     const trailingPunctuationRe =
-      new RegExp("\\s*[" + (0,helpers/* escapeForRegExp */.If)(punctuation) + "]+$");
+      new RegExp("\\s*[" + (0,helpers_helpers/* escapeForRegExp */.If)(punctuation) + "]+$");
     const headings = filterByTypesCached([ "atxHeadingText", "setextHeadingText" ]);
     for (const heading of headings) {
       const { endColumn, endLine, text } = heading;
       const match = trailingPunctuationRe.exec(text);
       if (
         match &&
-        !helpers/* endOfLineHtmlEntityRe */.oo.test(text) &&
-        !helpers/* endOfLineGemojiCodeRe */.Uj.test(text)
+        !helpers_helpers/* endOfLineHtmlEntityRe */.oo.test(text) &&
+        !helpers_helpers/* endOfLineGemojiCodeRe */.Uj.test(text)
       ) {
         const fullMatch = match[0];
         const length = fullMatch.length;
         const column = endColumn - length;
-        (0,helpers/* addError */.CN)(
+        (0,helpers_helpers/* addError */.CN)(
           onError,
           endLine,
           `Punctuation: '${fullMatch}'`,
@@ -40073,7 +40076,7 @@ const getLinesFunction = (linesParam) => {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md027 = ({
   "names": [ "MD027", "no-multiple-space-blockquote" ],
   "description": "Multiple spaces after blockquote symbol",
@@ -40092,7 +40095,7 @@ const getLinesFunction = (linesParam) => {
         const { startColumn, startLine, text } = token;
         const { length } = text;
         const line = params.lines[startLine - 1];
-        (0,helpers/* addErrorContext */.Xr)(
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           startLine,
           line,
@@ -40117,7 +40120,7 @@ const getLinesFunction = (linesParam) => {
 
 const ignoreTypes = new Set([ "lineEnding", "listItemIndent", "linePrefix" ]);
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md028 = ({
   "names": [ "MD028", "no-blanks-blockquote" ],
   "description": "Blank line inside blockquote",
@@ -40138,7 +40141,7 @@ const ignoreTypes = new Set([ "lineEnding", "listItemIndent", "linePrefix" ]);
         } else if (type === "blockQuote") {
           // Blockquote followed by blockquote
           for (const lineNumber of errorLineNumbers) {
-            (0,helpers/* addError */.CN)(onError, lineNumber);
+            (0,helpers_helpers/* addError */.CN)(onError, lineNumber);
           }
           break;
         } else {
@@ -40166,14 +40169,14 @@ const listStyleExamples = {
 /**
  * Gets the value of an ordered list item prefix token.
  *
- * @param {import("../helpers/micromark-helpers.cjs").Token} listItemPrefix List item prefix token.
+ * @param {import("markdownlint").MicromarkToken} listItemPrefix List item prefix token.
  * @returns {number} List item value.
  */
 function getOrderedListItemValue(listItemPrefix) {
   return Number((0,micromark_helpers.getDescendantsByType)(listItemPrefix, [ "listItemValue" ])[0].text);
 }
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md029 = ({
   "names": [ "MD029", "ol-prefix" ],
   "description": "Ordered list item prefix",
@@ -40208,7 +40211,7 @@ function getOrderedListItemValue(listItemPrefix) {
       // Validate each list item marker
       for (const listItemPrefix of listItemPrefixes) {
         const actual = getOrderedListItemValue(listItemPrefix);
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           listItemPrefix.startLine,
           expected,
@@ -40231,7 +40234,7 @@ function getOrderedListItemValue(listItemPrefix) {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md030 = ({
   "names": [ "MD030", "list-marker-space" ],
   "description": "Spaces after list markers",
@@ -40268,7 +40271,7 @@ function getOrderedListItemValue(listItemPrefix) {
             "deleteCount": actualSpaces,
             "insertText": "".padEnd(expectedSpaces)
           };
-          (0,helpers/* addErrorDetailIf */.qC)(
+          (0,helpers_helpers/* addErrorDetailIf */.qC)(
             onError,
             startLine,
             expectedSpaces,
@@ -40299,7 +40302,7 @@ const codeFencePrefixRe = /^(.*?)[`~]/;
 /**
  * Adds an error for the top or bottom of a code fence.
  *
- * @param {import("./markdownlint.mjs").RuleOnError} onError Error-reporting callback.
+ * @param {import("markdownlint").RuleOnError} onError Error-reporting callback.
  * @param {ReadonlyStringArray} lines Lines of Markdown content.
  * @param {number} lineNumber Line number.
  * @param {boolean} top True iff top fence.
@@ -40314,7 +40317,7 @@ function addError(onError, lines, lineNumber, top) {
       "lineNumber": lineNumber + (top ? 0 : 1),
       "insertText": `${prefix.replace(/[^>]/g, " ").trim()}\n`
     };
-  (0,helpers/* addErrorContext */.Xr)(
+  (0,helpers_helpers/* addErrorContext */.Xr)(
     onError,
     lineNumber,
     line.trim(),
@@ -40325,7 +40328,7 @@ function addError(onError, lines, lineNumber, top) {
   );
 }
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md031 = ({
   "names": [ "MD031", "blanks-around-fences" ],
   "description": "Fenced code blocks should be surrounded by blank lines",
@@ -40337,10 +40340,10 @@ function addError(onError, lines, lineNumber, top) {
     const { lines } = params;
     for (const codeBlock of filterByTypesCached([ "codeFenced" ])) {
       if (includeListItems || !((0,micromark_helpers.getParentOfType)(codeBlock, [ "listOrdered", "listUnordered" ]))) {
-        if (!(0,helpers/* isBlankLine */.pB)(lines[codeBlock.startLine - 2])) {
+        if (!(0,helpers_helpers/* isBlankLine */.pB)(lines[codeBlock.startLine - 2])) {
           addError(onError, lines, codeBlock.startLine, true);
         }
-        if (!(0,helpers/* isBlankLine */.pB)(lines[codeBlock.endLine]) && !(0,helpers/* isBlankLine */.pB)(lines[codeBlock.endLine - 1])) {
+        if (!(0,helpers_helpers/* isBlankLine */.pB)(lines[codeBlock.endLine]) && !(0,helpers_helpers/* isBlankLine */.pB)(lines[codeBlock.endLine - 1])) {
           addError(onError, lines, codeBlock.endLine, false);
         }
       }
@@ -40359,7 +40362,7 @@ const isList = (token) => (
   (token.type === "listOrdered") || (token.type === "listUnordered")
 );
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md032 = ({
   "names": [ "MD032", "blanks-around-lists" ],
   "description": "Lists should be surrounded by blank lines",
@@ -40381,8 +40384,8 @@ const isList = (token) => (
 
       // Look for a blank line above the list
       const firstLineNumber = list.startLine;
-      if (!(0,helpers/* isBlankLine */.pB)(lines[firstLineNumber - 2])) {
-        (0,helpers/* addErrorContext */.Xr)(
+      if (!(0,helpers_helpers/* isBlankLine */.pB)(lines[firstLineNumber - 2])) {
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           firstLineNumber,
           lines[firstLineNumber - 1].trim(),
@@ -40407,8 +40410,8 @@ const isList = (token) => (
 
       // Look for a blank line below the list
       const lastLineNumber = endLine;
-      if (!(0,helpers/* isBlankLine */.pB)(lines[lastLineNumber])) {
-        (0,helpers/* addErrorContext */.Xr)(
+      if (!(0,helpers_helpers/* isBlankLine */.pB)(lines[lastLineNumber])) {
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           lastLineNumber,
           lines[lastLineNumber - 1].trim(),
@@ -40432,7 +40435,7 @@ const isList = (token) => (
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md033 = ({
   "names": [ "MD033", "no-inline-html" ],
   "description": "Inline HTML",
@@ -40451,9 +40454,9 @@ const isList = (token) => (
       ) {
         const range = [
           token.startColumn,
-          token.text.replace(helpers/* nextLinesRe */.gi, "").length
+          token.text.replace(helpers_helpers/* nextLinesRe */.gi, "").length
         ];
-        (0,helpers/* addError */.CN)(
+        (0,helpers_helpers/* addError */.CN)(
           onError,
           token.startLine,
           "Element: " + htmlTagInfo.name,
@@ -40473,7 +40476,7 @@ const isList = (token) => (
 
 /** @typedef {import("micromark-extension-gfm-autolink-literal")} */
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md034 = ({
   "names": [ "MD034", "no-bare-urls" ],
   "description": "Bare URL used",
@@ -40545,7 +40548,7 @@ const isList = (token) => (
         "deleteCount": range[1],
         "insertText": `<${token.text}>`
       };
-      (0,helpers/* addErrorContext */.Xr)(
+      (0,helpers_helpers/* addErrorContext */.Xr)(
         onError,
         token.startLine,
         token.text,
@@ -40564,7 +40567,7 @@ const isList = (token) => (
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md035 = ({
   "names": [ "MD035", "hr-style" ],
   "description": "Horizontal rule style",
@@ -40578,7 +40581,7 @@ const isList = (token) => (
       if (style === "consistent") {
         style = text;
       }
-      (0,helpers/* addErrorDetailIf */.qC)(onError, startLine, style, text);
+      (0,helpers_helpers/* addErrorDetailIf */.qC)(onError, startLine, style, text);
     }
   }
 });
@@ -40590,14 +40593,14 @@ const isList = (token) => (
 
 
 
-/** @typedef {import("../helpers/micromark-helpers.cjs").TokenType} TokenType */
+/** @typedef {import("markdownlint").MicromarkTokenType} TokenType */
 /** @type {TokenType[][]} */
 const emphasisTypes = [
   [ "emphasis", "emphasisText" ],
   [ "strong", "strongText" ]
 ];
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md036 = ({
   "names": [ "MD036", "no-emphasis-as-heading" ],
   "description": "Emphasis used instead of a heading",
@@ -40605,7 +40608,7 @@ const emphasisTypes = [
   "parser": "micromark",
   "function": function MD036(params, onError) {
     let punctuation = params.config.punctuation;
-    punctuation = String((punctuation === undefined) ? helpers/* allPunctuation */.qA : punctuation);
+    punctuation = String((punctuation === undefined) ? helpers_helpers/* allPunctuation */.qA : punctuation);
     const punctuationRe = new RegExp("[" + punctuation + "]$");
     const paragraphTokens =
       filterByTypesCached([ "paragraph" ])
@@ -40620,7 +40623,7 @@ const emphasisTypes = [
           (textToken.children[0].type === "data") &&
           !punctuationRe.test(textToken.text)
         ) {
-          (0,helpers/* addErrorContext */.Xr)(onError, textToken.startLine, textToken.text);
+          (0,helpers_helpers/* addErrorContext */.Xr)(onError, textToken.startLine, textToken.text);
         }
       }
     }
@@ -40633,7 +40636,7 @@ const emphasisTypes = [
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md037 = ({
   "names": [ "MD037", "no-space-in-emphasis" ],
   "description": "Spaces inside emphasis markers",
@@ -40680,7 +40683,7 @@ const emphasisTypes = [
           if (startMatch) {
             const [ startSpaceCharacter ] = startMatch;
             const startContext = `${marker}${startSpaceCharacter}`;
-            (0,helpers/* addError */.CN)(
+            (0,helpers_helpers/* addError */.CN)(
               onError,
               startToken.startLine,
               undefined,
@@ -40701,7 +40704,7 @@ const emphasisTypes = [
           if (endMatch) {
             const [ endSpaceCharacter ] = endMatch;
             const endContext = `${endSpaceCharacter}${marker}`;
-            (0,helpers/* addError */.CN)(
+            (0,helpers_helpers/* addError */.CN)(
               onError,
               endToken.startLine,
               undefined,
@@ -40740,7 +40743,7 @@ const trimCodeText = (text, start, end) => {
   return text;
 };
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md038 = ({
   "names": [ "MD038", "no-space-in-code" ],
   "description": "Spaces inside code span elements",
@@ -40798,7 +40801,7 @@ const trimCodeText = (text, start, end) => {
             const context = params
               .lines[lineNumber - 1]
               .substring(range[0] - 1, range[0] - 1 + range[1]);
-            (0,helpers/* addErrorContext */.Xr)(
+            (0,helpers_helpers/* addErrorContext */.Xr)(
               onError,
               lineNumber,
               context,
@@ -40823,9 +40826,9 @@ const trimCodeText = (text, start, end) => {
 /**
  * Adds an error for a label space issue.
  *
- * @param {import("./markdownlint.mjs").RuleOnError} onError Error-reporting callback.
- * @param {import("../helpers/micromark-helpers.cjs").Token} label Label token.
- * @param {import("../helpers/micromark-helpers.cjs").Token} labelText LabelText token.
+ * @param {import("markdownlint").RuleOnError} onError Error-reporting callback.
+ * @param {import("markdownlint").MicromarkToken} label Label token.
+ * @param {import("markdownlint").MicromarkToken} labelText LabelText token.
  * @param {boolean} isStart True iff error is at the start of the link.
  */
 function addLabelSpaceError(onError, label, labelText, isStart) {
@@ -40836,7 +40839,7 @@ function addLabelSpaceError(onError, label, labelText, isStart) {
       match[0].length
     ] :
     undefined;
-  (0,helpers/* addErrorContext */.Xr)(
+  (0,helpers_helpers/* addErrorContext */.Xr)(
     onError,
     isStart ? (labelText.startLine + (match ? 0 : 1)) : (labelText.endLine - (match ? 0 : 1)),
     label.text.replace(/\s+/g, " "),
@@ -40855,8 +40858,8 @@ function addLabelSpaceError(onError, label, labelText, isStart) {
 /**
  * Determines if a link is a valid link (and not a fake shortcut link due to parser tricks).
  *
- * @param {import("../helpers/micromark-helpers.cjs").Token} label Label token.
- * @param {import("../helpers/micromark-helpers.cjs").Token} labelText LabelText token.
+ * @param {import("markdownlint").MicromarkToken} label Label token.
+ * @param {import("markdownlint").MicromarkToken} labelText LabelText token.
  * @param {Map<string, any>} definitions Map of link definitions.
  * @returns {boolean} True iff the link is valid.
  */
@@ -40864,7 +40867,7 @@ function validLink(label, labelText, definitions) {
   return (label.parent?.children.length !== 1) || definitions.has(labelText.text.trim());
 }
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md039 = ({
   "names": [ "MD039", "no-space-in-links" ],
   "description": "Spaces inside link text",
@@ -40901,7 +40904,7 @@ function validLink(label, labelText, definitions) {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md040 = ({
   "names": [ "MD040", "fenced-code-language" ],
   "description": "Fenced code blocks should have a language specified",
@@ -40917,12 +40920,12 @@ function validLink(label, labelText, definitions) {
       const { startLine, text } = openingFence;
       const info = (0,micromark_helpers.getDescendantsByType)(openingFence, [ "codeFencedFenceInfo" ])[0]?.text;
       if (!info) {
-        (0,helpers/* addErrorContext */.Xr)(onError, startLine, text);
+        (0,helpers_helpers/* addErrorContext */.Xr)(onError, startLine, text);
       } else if ((allowed.length > 0) && !allowed.includes(info)) {
-        (0,helpers/* addError */.CN)(onError, startLine, `"${info}" is not allowed`);
+        (0,helpers_helpers/* addError */.CN)(onError, startLine, `"${info}" is not allowed`);
       }
       if (languageOnly && (0,micromark_helpers.getDescendantsByType)(openingFence, [ "codeFencedFenceMeta" ]).length > 0) {
-        (0,helpers/* addError */.CN)(onError, startLine, `Info string contains more than language: "${text}"`);
+        (0,helpers_helpers/* addError */.CN)(onError, startLine, `Info string contains more than language: "${text}"`);
       }
     }
   }
@@ -40934,7 +40937,7 @@ function validLink(label, labelText, definitions) {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md041 = ({
   "names": [ "MD041", "first-line-heading", "first-line-h1" ],
   "description": "First line in a file should be a top-level heading",
@@ -40942,7 +40945,7 @@ function validLink(label, labelText, definitions) {
   "parser": "micromark",
   "function": function MD041(params, onError) {
     const level = Number(params.config.level || 1);
-    if (!(0,helpers/* frontMatterHasTitle */.Fl)(params.frontMatterLines, params.config.front_matter_title)) {
+    if (!(0,helpers_helpers/* frontMatterHasTitle */.Fl)(params.frontMatterLines, params.config.front_matter_title)) {
       params.parsers.micromark.tokens
         .filter((token) => !micromark_helpers.nonContentTokens.has(token.type) && !(0,micromark_helpers.isHtmlFlowComment)(token))
         .every((token) => {
@@ -40955,7 +40958,7 @@ function validLink(label, labelText, definitions) {
             isError = !tagInfo || (tagInfo.name.toLowerCase() !== `h${level}`);
           }
           if (isError) {
-            (0,helpers/* addErrorContext */.Xr)(onError, token.startLine, params.lines[token.startLine - 1]);
+            (0,helpers_helpers/* addErrorContext */.Xr)(onError, token.startLine, params.lines[token.startLine - 1]);
           }
           return false;
         });
@@ -40970,7 +40973,7 @@ function validLink(label, labelText, definitions) {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md042 = ({
   "names": [ "MD042", "no-empty-links" ],
   "description": "No empty links",
@@ -41008,7 +41011,7 @@ function validLink(label, labelText, definitions) {
         error = true;
       }
       if (error) {
-        (0,helpers/* addErrorContext */.Xr)(
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           link.startLine,
           link.text,
@@ -41028,7 +41031,7 @@ function validLink(label, labelText, definitions) {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md043 = ({
   "names": [ "MD043", "required-headings" ],
   "description": "Required heading structure",
@@ -41067,7 +41070,7 @@ function validLink(label, labelText, definitions) {
         } else if (matchAny) {
           i--;
         } else {
-          (0,helpers/* addErrorDetailIf */.qC)(
+          (0,helpers_helpers/* addErrorDetailIf */.qC)(
             onError,
             heading.startLine,
             expected,
@@ -41084,7 +41087,7 @@ function validLink(label, labelText, definitions) {
         ((extraHeadings === 1) && (requiredHeadings[i] !== "*"))) &&
       (anyHeadings || !requiredHeadings.every((heading) => heading === "*"))
     ) {
-      (0,helpers/* addErrorContext */.Xr)(
+      (0,helpers_helpers/* addErrorContext */.Xr)(
         onError,
         params.lines.length,
         requiredHeadings[i]
@@ -42308,7 +42311,7 @@ const domain = {
   tokenize: tokenizeDomain,
   partial: true
 };
-const path = {
+const syntax_path = {
   tokenize: tokenizePath,
   partial: true
 };
@@ -42544,7 +42547,7 @@ function tokenizeWwwAutolink(effects, ok, nok) {
     effects.enter('literalAutolinkWww');
     // Note: we *check*, so we can discard the `www.` we parsed.
     // If it worked, we consider it as a part of the domain.
-    return effects.check(wwwPrefix, effects.attempt(domain, effects.attempt(path, wwwAfter), nok), nok)(code);
+    return effects.check(wwwPrefix, effects.attempt(domain, effects.attempt(syntax_path, wwwAfter), nok), nok)(code);
   }
 
   /**
@@ -42665,7 +42668,7 @@ function tokenizeProtocolAutolink(effects, ok, nok) {
   function afterProtocol(code) {
     // To do: this is different from `markdown-rs`:
     // https://github.com/wooorm/markdown-rs/blob/b3a921c761309ae00a51fe348d8a43adbc54b518/src/construct/gfm_autolink_literal.rs#L172-L182
-    return code === null || asciiControl(code) || markdownLineEndingOrSpace(code) || unicodeWhitespace(code) || unicodePunctuation(code) ? nok(code) : effects.attempt(domain, effects.attempt(path, protocolAfter), nok)(code);
+    return code === null || asciiControl(code) || markdownLineEndingOrSpace(code) || unicodeWhitespace(code) || unicodePunctuation(code) ? nok(code) : effects.attempt(domain, effects.attempt(syntax_path, protocolAfter), nok)(code);
   }
 
   /**
@@ -45641,11 +45644,13 @@ function htmlExtension(all, extension) {
 
 ;// CONCATENATED MODULE: ./node_modules/micromark/lib/initialize/content.js
 /**
- * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
- * @typedef {import('micromark-util-types').Initializer} Initializer
- * @typedef {import('micromark-util-types').State} State
- * @typedef {import('micromark-util-types').Token} Token
- * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
+ * @import {
+ *   InitialConstruct,
+ *   Initializer,
+ *   State,
+ *   TokenizeContext,
+ *   Token
+ * } from 'micromark-util-types'
  */
 
 
@@ -45653,88 +45658,88 @@ function htmlExtension(all, extension) {
 /** @type {InitialConstruct} */
 const content = {
   tokenize: initializeContent
-}
+};
 
 /**
  * @this {TokenizeContext}
+ *   Context.
  * @type {Initializer}
+ *   Content.
  */
 function initializeContent(effects) {
-  const contentStart = effects.attempt(
-    this.parser.constructs.contentInitial,
-    afterContentStartConstruct,
-    paragraphInitial
-  )
+  const contentStart = effects.attempt(this.parser.constructs.contentInitial, afterContentStartConstruct, paragraphInitial);
   /** @type {Token} */
-  let previous
-  return contentStart
+  let previous;
+  return contentStart;
 
   /** @type {State} */
   function afterContentStartConstruct(code) {
     if (code === null) {
-      effects.consume(code)
-      return
+      effects.consume(code);
+      return;
     }
-    effects.enter('lineEnding')
-    effects.consume(code)
-    effects.exit('lineEnding')
-    return factorySpace(effects, contentStart, 'linePrefix')
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    return factorySpace(effects, contentStart, "linePrefix");
   }
 
   /** @type {State} */
   function paragraphInitial(code) {
-    effects.enter('paragraph')
-    return lineStart(code)
+    effects.enter("paragraph");
+    return lineStart(code);
   }
 
   /** @type {State} */
   function lineStart(code) {
-    const token = effects.enter('chunkText', {
-      contentType: 'text',
+    const token = effects.enter("chunkText", {
+      contentType: "text",
       previous
-    })
+    });
     if (previous) {
-      previous.next = token
+      previous.next = token;
     }
-    previous = token
-    return data(code)
+    previous = token;
+    return data(code);
   }
 
   /** @type {State} */
   function data(code) {
     if (code === null) {
-      effects.exit('chunkText')
-      effects.exit('paragraph')
-      effects.consume(code)
-      return
+      effects.exit("chunkText");
+      effects.exit("paragraph");
+      effects.consume(code);
+      return;
     }
     if (markdownLineEnding(code)) {
-      effects.consume(code)
-      effects.exit('chunkText')
-      return lineStart
+      effects.consume(code);
+      effects.exit("chunkText");
+      return lineStart;
     }
 
     // Data.
-    effects.consume(code)
-    return data
+    effects.consume(code);
+    return data;
   }
 }
-
 ;// CONCATENATED MODULE: ./node_modules/micromark/lib/initialize/document.js
 /**
- * @typedef {import('micromark-util-types').Construct} Construct
- * @typedef {import('micromark-util-types').ContainerState} ContainerState
- * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
- * @typedef {import('micromark-util-types').Initializer} Initializer
- * @typedef {import('micromark-util-types').Point} Point
- * @typedef {import('micromark-util-types').State} State
- * @typedef {import('micromark-util-types').Token} Token
- * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
- * @typedef {import('micromark-util-types').Tokenizer} Tokenizer
+ * @import {
+ *   Construct,
+ *   ContainerState,
+ *   InitialConstruct,
+ *   Initializer,
+ *   Point,
+ *   State,
+ *   TokenizeContext,
+ *   Tokenizer,
+ *   Token
+ * } from 'micromark-util-types'
  */
 
 /**
  * @typedef {[Construct, ContainerState]} StackItem
+ *   Construct and its state.
  */
 
 
@@ -45743,29 +45748,31 @@ function initializeContent(effects) {
 /** @type {InitialConstruct} */
 const document_document = {
   tokenize: initializeDocument
-}
+};
 
 /** @type {Construct} */
 const containerConstruct = {
   tokenize: tokenizeContainer
-}
+};
 
 /**
  * @this {TokenizeContext}
+ *   Self.
  * @type {Initializer}
+ *   Initializer.
  */
 function initializeDocument(effects) {
-  const self = this
+  const self = this;
   /** @type {Array<StackItem>} */
-  const stack = []
-  let continued = 0
+  const stack = [];
+  let continued = 0;
   /** @type {TokenizeContext | undefined} */
-  let childFlow
+  let childFlow;
   /** @type {Token | undefined} */
-  let childToken
+  let childToken;
   /** @type {number} */
-  let lineStartOffset
-  return start
+  let lineStartOffset;
+  return start;
 
   /** @type {State} */
   function start(code) {
@@ -45780,71 +45787,61 @@ function initializeDocument(effects) {
     // But we cannot close unmatched blocks yet, because we may have a lazy
     // continuation line.
     if (continued < stack.length) {
-      const item = stack[continued]
-      self.containerState = item[1]
-      return effects.attempt(
-        item[0].continuation,
-        documentContinue,
-        checkNewContainers
-      )(code)
+      const item = stack[continued];
+      self.containerState = item[1];
+      return effects.attempt(item[0].continuation, documentContinue, checkNewContainers)(code);
     }
 
     // Done.
-    return checkNewContainers(code)
+    return checkNewContainers(code);
   }
 
   /** @type {State} */
   function documentContinue(code) {
-    continued++
+    continued++;
 
     // Note: this field is called `_closeFlow` but it also closes containers.
     // Perhaps a good idea to rename it but it’s already used in the wild by
     // extensions.
     if (self.containerState._closeFlow) {
-      self.containerState._closeFlow = undefined
+      self.containerState._closeFlow = undefined;
       if (childFlow) {
-        closeFlow()
+        closeFlow();
       }
 
       // Note: this algorithm for moving events around is similar to the
       // algorithm when dealing with lazy lines in `writeToChild`.
-      const indexBeforeExits = self.events.length
-      let indexBeforeFlow = indexBeforeExits
+      const indexBeforeExits = self.events.length;
+      let indexBeforeFlow = indexBeforeExits;
       /** @type {Point | undefined} */
-      let point
+      let point;
 
       // Find the flow chunk.
       while (indexBeforeFlow--) {
-        if (
-          self.events[indexBeforeFlow][0] === 'exit' &&
-          self.events[indexBeforeFlow][1].type === 'chunkFlow'
-        ) {
-          point = self.events[indexBeforeFlow][1].end
-          break
+        if (self.events[indexBeforeFlow][0] === 'exit' && self.events[indexBeforeFlow][1].type === "chunkFlow") {
+          point = self.events[indexBeforeFlow][1].end;
+          break;
         }
       }
-      exitContainers(continued)
+      exitContainers(continued);
 
       // Fix positions.
-      let index = indexBeforeExits
+      let index = indexBeforeExits;
       while (index < self.events.length) {
-        self.events[index][1].end = Object.assign({}, point)
-        index++
+        self.events[index][1].end = {
+          ...point
+        };
+        index++;
       }
 
       // Inject the exits earlier (they’re still also at the end).
-      splice(
-        self.events,
-        indexBeforeFlow + 1,
-        0,
-        self.events.slice(indexBeforeExits)
-      )
+      splice(self.events, indexBeforeFlow + 1, 0, self.events.slice(indexBeforeExits));
 
       // Discard the duplicate exits.
-      self.events.length = index
-      return checkNewContainers(code)
+      self.events.length = index;
+      return checkNewContainers(code);
     }
-    return start(code)
+    return start(code);
   }
 
   /** @type {State} */
@@ -45859,14 +45856,14 @@ function initializeDocument(effects) {
       // would be moot.
       // We can instead immediately `attempt` to parse one.
       if (!childFlow) {
-        return documentContinued(code)
+        return documentContinued(code);
       }
 
       // If we have concrete content, such as block HTML or fenced code,
       // we can’t have containers “pierce” into them, so we can immediately
       // start.
       if (childFlow.currentConstruct && childFlow.currentConstruct.concrete) {
-        return flowStart(code)
+        return flowStart(code);
       }
 
       // If we do have flow, it could still be a blank line,
@@ -45874,103 +45871,96 @@ function initializeDocument(effects) {
       // construct.
       // To do: next major: remove `_gfmTableDynamicInterruptHack` (no longer
       // needed in micromark-extension-gfm-table@1.0.6).
-      self.interrupt = Boolean(
-        childFlow.currentConstruct && !childFlow._gfmTableDynamicInterruptHack
-      )
+      self.interrupt = Boolean(childFlow.currentConstruct && !childFlow._gfmTableDynamicInterruptHack);
     }
 
     // Check if there is a new container.
-    self.containerState = {}
-    return effects.check(
-      containerConstruct,
-      thereIsANewContainer,
-      thereIsNoNewContainer
-    )(code)
+    self.containerState = {};
+    return effects.check(containerConstruct, thereIsANewContainer, thereIsNoNewContainer)(code);
   }
 
   /** @type {State} */
   function thereIsANewContainer(code) {
-    if (childFlow) closeFlow()
-    exitContainers(continued)
-    return documentContinued(code)
+    if (childFlow) closeFlow();
+    exitContainers(continued);
+    return documentContinued(code);
   }
 
   /** @type {State} */
   function thereIsNoNewContainer(code) {
-    self.parser.lazy[self.now().line] = continued !== stack.length
-    lineStartOffset = self.now().offset
-    return flowStart(code)
+    self.parser.lazy[self.now().line] = continued !== stack.length;
+    lineStartOffset = self.now().offset;
+    return flowStart(code);
   }
 
   /** @type {State} */
   function documentContinued(code) {
     // Try new containers.
-    self.containerState = {}
-    return effects.attempt(
-      containerConstruct,
-      containerContinue,
-      flowStart
-    )(code)
+    self.containerState = {};
+    return effects.attempt(containerConstruct, containerContinue, flowStart)(code);
   }
 
   /** @type {State} */
   function containerContinue(code) {
-    continued++
-    stack.push([self.currentConstruct, self.containerState])
+    continued++;
+    stack.push([self.currentConstruct, self.containerState]);
     // Try another.
-    return documentContinued(code)
+    return documentContinued(code);
   }
 
   /** @type {State} */
   function flowStart(code) {
     if (code === null) {
-      if (childFlow) closeFlow()
-      exitContainers(0)
-      effects.consume(code)
-      return
+      if (childFlow) closeFlow();
+      exitContainers(0);
+      effects.consume(code);
+      return;
     }
-    childFlow = childFlow || self.parser.flow(self.now())
-    effects.enter('chunkFlow', {
-      contentType: 'flow',
-      previous: childToken,
-      _tokenizer: childFlow
-    })
-    return flowContinue(code)
+    childFlow = childFlow || self.parser.flow(self.now());
+    effects.enter("chunkFlow", {
+      _tokenizer: childFlow,
+      contentType: "flow",
+      previous: childToken
+    });
+    return flowContinue(code);
   }
 
   /** @type {State} */
   function flowContinue(code) {
     if (code === null) {
-      writeToChild(effects.exit('chunkFlow'), true)
-      exitContainers(0)
-      effects.consume(code)
-      return
+      writeToChild(effects.exit("chunkFlow"), true);
+      exitContainers(0);
+      effects.consume(code);
+      return;
     }
     if (markdownLineEnding(code)) {
-      effects.consume(code)
-      writeToChild(effects.exit('chunkFlow'))
+      effects.consume(code);
+      writeToChild(effects.exit("chunkFlow"));
       // Get ready for the next line.
-      continued = 0
-      self.interrupt = undefined
-      return start
+      continued = 0;
+      self.interrupt = undefined;
+      return start;
     }
-    effects.consume(code)
-    return flowContinue
+    effects.consume(code);
+    return flowContinue;
   }
 
   /**
    * @param {Token} token
-   * @param {boolean | undefined} [eof]
+   *   Token.
+   * @param {boolean | undefined} [endOfFile]
+   *   Whether the token is at the end of the file (default: `false`).
    * @returns {undefined}
+   *   Nothing.
    */
-  function writeToChild(token, eof) {
-    const stream = self.sliceStream(token)
-    if (eof) stream.push(null)
-    token.previous = childToken
-    if (childToken) childToken.next = token
-    childToken = token
-    childFlow.defineSkip(token.start)
-    childFlow.write(stream)
+  function writeToChild(token, endOfFile) {
+    const stream = self.sliceStream(token);
+    if (endOfFile) stream.push(null);
+    token.previous = childToken;
+    if (childToken) childToken.next = token;
+    childToken = token;
+    childFlow.defineSkip(token.start);
+    childFlow.write(stream);
 
     // Alright, so we just added a lazy line:
     //
@@ -46006,104 +45996,95 @@ function initializeDocument(effects) {
     // whether the lazy line started a new flow block.
     // If it did, we exit the current containers between the two flow blocks.
     if (self.parser.lazy[token.start.line]) {
-      let index = childFlow.events.length
+      let index = childFlow.events.length;
       while (index--) {
         if (
-          // The token starts before the line ending…
-          childFlow.events[index][1].start.offset < lineStartOffset &&
-          // …and either is not ended yet…
-          (!childFlow.events[index][1].end ||
-            // …or ends after it.
-            childFlow.events[index][1].end.offset > lineStartOffset)
-        ) {
+        // The token starts before the line ending…
+        childFlow.events[index][1].start.offset < lineStartOffset && (
+        // …and either is not ended yet…
+        !childFlow.events[index][1].end ||
+        // …or ends after it.
+        childFlow.events[index][1].end.offset > lineStartOffset)) {
           // Exit: there’s still something open, which means it’s a lazy line
           // part of something.
-          return
+          return;
         }
       }
 
       // Note: this algorithm for moving events around is similar to the
       // algorithm when closing flow in `documentContinue`.
-      const indexBeforeExits = self.events.length
-      let indexBeforeFlow = indexBeforeExits
+      const indexBeforeExits = self.events.length;
+      let indexBeforeFlow = indexBeforeExits;
       /** @type {boolean | undefined} */
-      let seen
+      let seen;
       /** @type {Point | undefined} */
-      let point
+      let point;
 
       // Find the previous chunk (the one before the lazy line).
       while (indexBeforeFlow--) {
-        if (
-          self.events[indexBeforeFlow][0] === 'exit' &&
-          self.events[indexBeforeFlow][1].type === 'chunkFlow'
-        ) {
+        if (self.events[indexBeforeFlow][0] === 'exit' && self.events[indexBeforeFlow][1].type === "chunkFlow") {
           if (seen) {
-            point = self.events[indexBeforeFlow][1].end
-            break
+            point = self.events[indexBeforeFlow][1].end;
+            break;
           }
-          seen = true
+          seen = true;
         }
       }
-      exitContainers(continued)
+      exitContainers(continued);
 
       // Fix positions.
-      index = indexBeforeExits
+      index = indexBeforeExits;
       while (index < self.events.length) {
-        self.events[index][1].end = Object.assign({}, point)
-        index++
+        self.events[index][1].end = {
+          ...point
+        };
+        index++;
       }
 
       // Inject the exits earlier (they’re still also at the end).
-      splice(
-        self.events,
-        indexBeforeFlow + 1,
-        0,
-        self.events.slice(indexBeforeExits)
-      )
+      splice(self.events, indexBeforeFlow + 1, 0, self.events.slice(indexBeforeExits));
 
       // Discard the duplicate exits.
-      self.events.length = index
+      self.events.length = index;
     }
   }
 
   /**
    * @param {number} size
+   *   Size.
    * @returns {undefined}
+   *   Nothing.
    */
   function exitContainers(size) {
-    let index = stack.length
+    let index = stack.length;
 
     // Exit open containers.
     while (index-- > size) {
-      const entry = stack[index]
-      self.containerState = entry[1]
-      entry[0].exit.call(self, effects)
+      const entry = stack[index];
+      self.containerState = entry[1];
+      entry[0].exit.call(self, effects);
     }
-    stack.length = size
+    stack.length = size;
   }
   function closeFlow() {
-    childFlow.write([null])
-    childToken = undefined
-    childFlow = undefined
-    self.containerState._closeFlow = undefined
+    childFlow.write([null]);
+    childToken = undefined;
+    childFlow = undefined;
+    self.containerState._closeFlow = undefined;
   }
 }
 
 /**
  * @this {TokenizeContext}
+ *   Context.
  * @type {Tokenizer}
+ *   Tokenizer.
  */
 function tokenizeContainer(effects, ok, nok) {
   // Always populated by defaults.
 
-  return factorySpace(
-    effects,
-    effects.attempt(this.parser.constructs.document, ok, nok),
-    'linePrefix',
-    this.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4
-  )
+  return factorySpace(effects, effects.attempt(this.parser.constructs.document, ok, nok), "linePrefix", this.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4);
 }
-
 ;// CONCATENATED MODULE: ./node_modules/micromark-util-subtokenize/lib/splice-buffer.js
 /**
  * Some of the internal operations of micromark do lots of editing
@@ -46743,10 +46724,12 @@ function tokenizeContinuation(effects, ok, nok) {
 }
 ;// CONCATENATED MODULE: ./node_modules/micromark/lib/initialize/flow.js
 /**
- * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
- * @typedef {import('micromark-util-types').Initializer} Initializer
- * @typedef {import('micromark-util-types').State} State
- * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
+ * @import {
+ *   InitialConstruct,
+ *   Initializer,
+ *   State,
+ *   TokenizeContext
+ * } from 'micromark-util-types'
  */
 
 
@@ -46755,185 +46738,179 @@ function tokenizeContinuation(effects, ok, nok) {
 /** @type {InitialConstruct} */
 const flow = {
   tokenize: initializeFlow
-}
+};
 
 /**
  * @this {TokenizeContext}
+ *   Self.
  * @type {Initializer}
+ *   Initializer.
  */
 function initializeFlow(effects) {
-  const self = this
+  const self = this;
   const initial = effects.attempt(
-    // Try to parse a blank line.
-    blankLine,
-    atBlankEnding,
-    // Try to parse initial flow (essentially, only code).
-    effects.attempt(
-      this.parser.constructs.flowInitial,
-      afterConstruct,
-      factorySpace(
-        effects,
-        effects.attempt(
-          this.parser.constructs.flow,
-          afterConstruct,
-          effects.attempt(content_content, afterConstruct)
-        ),
-        'linePrefix'
-      )
-    )
-  )
-  return initial
+  // Try to parse a blank line.
+  blankLine, atBlankEnding,
+  // Try to parse initial flow (essentially, only code).
+  effects.attempt(this.parser.constructs.flowInitial, afterConstruct, factorySpace(effects, effects.attempt(this.parser.constructs.flow, afterConstruct, effects.attempt(content_content, afterConstruct)), "linePrefix")));
+  return initial;
 
   /** @type {State} */
   function atBlankEnding(code) {
     if (code === null) {
-      effects.consume(code)
-      return
+      effects.consume(code);
+      return;
     }
-    effects.enter('lineEndingBlank')
-    effects.consume(code)
-    effects.exit('lineEndingBlank')
-    self.currentConstruct = undefined
-    return initial
+    effects.enter("lineEndingBlank");
+    effects.consume(code);
+    effects.exit("lineEndingBlank");
+    self.currentConstruct = undefined;
+    return initial;
   }
 
   /** @type {State} */
   function afterConstruct(code) {
     if (code === null) {
-      effects.consume(code)
-      return
+      effects.consume(code);
+      return;
     }
-    effects.enter('lineEnding')
-    effects.consume(code)
-    effects.exit('lineEnding')
-    self.currentConstruct = undefined
-    return initial
+    effects.enter("lineEnding");
+    effects.consume(code);
+    effects.exit("lineEnding");
+    self.currentConstruct = undefined;
+    return initial;
   }
 }
-
 ;// CONCATENATED MODULE: ./node_modules/micromark/lib/initialize/text.js
 /**
- * @typedef {import('micromark-util-types').Code} Code
- * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
- * @typedef {import('micromark-util-types').Initializer} Initializer
- * @typedef {import('micromark-util-types').Resolver} Resolver
- * @typedef {import('micromark-util-types').State} State
- * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
+ * @import {
+ *   Code,
+ *   InitialConstruct,
+ *   Initializer,
+ *   Resolver,
+ *   State,
+ *   TokenizeContext
+ * } from 'micromark-util-types'
  */
 
 const resolver = {
   resolveAll: createResolver()
-}
-const string = initializeFactory('string')
-const text_text = initializeFactory('text')
+};
+const string = initializeFactory('string');
+const text_text = initializeFactory('text');
 
 /**
  * @param {'string' | 'text'} field
+ *   Field.
  * @returns {InitialConstruct}
+ *   Construct.
  */
 function initializeFactory(field) {
   return {
-    tokenize: initializeText,
-    resolveAll: createResolver(
-      field === 'text' ? resolveAllLineSuffixes : undefined
-    )
-  }
+    resolveAll: createResolver(field === 'text' ? resolveAllLineSuffixes : undefined),
+    tokenize: initializeText
+  };
 
   /**
    * @this {TokenizeContext}
+   *   Context.
    * @type {Initializer}
    */
   function initializeText(effects) {
-    const self = this
-    const constructs = this.parser.constructs[field]
-    const text = effects.attempt(constructs, start, notText)
-    return start
+    const self = this;
+    const constructs = this.parser.constructs[field];
+    const text = effects.attempt(constructs, start, notText);
+    return start;
 
     /** @type {State} */
     function start(code) {
-      return atBreak(code) ? text(code) : notText(code)
+      return atBreak(code) ? text(code) : notText(code);
     }
 
     /** @type {State} */
     function notText(code) {
       if (code === null) {
-        effects.consume(code)
-        return
+        effects.consume(code);
+        return;
       }
-      effects.enter('data')
-      effects.consume(code)
-      return data
+      effects.enter("data");
+      effects.consume(code);
+      return data;
     }
 
     /** @type {State} */
     function data(code) {
       if (atBreak(code)) {
-        effects.exit('data')
-        return text(code)
+        effects.exit("data");
+        return text(code);
       }
 
       // Data.
-      effects.consume(code)
-      return data
+      effects.consume(code);
+      return data;
     }
 
     /**
      * @param {Code} code
+     *   Code.
      * @returns {boolean}
+     *   Whether the code is a break.
      */
     function atBreak(code) {
       if (code === null) {
-        return true
+        return true;
       }
-      const list = constructs[code]
-      let index = -1
+      const list = constructs[code];
+      let index = -1;
       if (list) {
         // Always populated by defaults.
 
         while (++index < list.length) {
-          const item = list[index]
+          const item = list[index];
           if (!item.previous || item.previous.call(self, self.previous)) {
-            return true
+            return true;
           }
         }
       }
-      return false
+      return false;
     }
   }
 }
 
 /**
  * @param {Resolver | undefined} [extraResolver]
+ *   Resolver.
  * @returns {Resolver}
+ *   Resolver.
  */
 function createResolver(extraResolver) {
-  return resolveAllText
+  return resolveAllText;
 
   /** @type {Resolver} */
   function resolveAllText(events, context) {
-    let index = -1
+    let index = -1;
     /** @type {number | undefined} */
-    let enter
+    let enter;
 
     // A rather boring computation (to merge adjacent `data` events) which
     // improves mm performance by 29%.
     while (++index <= events.length) {
       if (enter === undefined) {
-        if (events[index] && events[index][1].type === 'data') {
-          enter = index
-          index++
+        if (events[index] && events[index][1].type === "data") {
+          enter = index;
+          index++;
         }
-      } else if (!events[index] || events[index][1].type !== 'data') {
+      } else if (!events[index] || events[index][1].type !== "data") {
         // Don’t do anything if there is one data token.
         if (index !== enter + 2) {
-          events[enter][1].end = events[index - 1][1].end
-          events.splice(enter + 2, index - enter - 2)
-          index = enter + 2
+          events[enter][1].end = events[index - 1][1].end;
+          events.splice(enter + 2, index - enter - 2);
+          index = enter + 2;
         }
-        enter = undefined
+        enter = undefined;
       }
     }
-    return extraResolver ? extraResolver(events, context) : events
+    return extraResolver ? extraResolver(events, context) : events;
   }
 }
 
@@ -46949,698 +46926,69 @@ function createResolver(extraResolver) {
  * @type {Resolver}
  */
 function resolveAllLineSuffixes(events, context) {
-  let eventIndex = 0 // Skip first.
+  let eventIndex = 0; // Skip first.
 
   while (++eventIndex <= events.length) {
-    if (
-      (eventIndex === events.length ||
-        events[eventIndex][1].type === 'lineEnding') &&
-      events[eventIndex - 1][1].type === 'data'
-    ) {
-      const data = events[eventIndex - 1][1]
-      const chunks = context.sliceStream(data)
-      let index = chunks.length
-      let bufferIndex = -1
-      let size = 0
+    if ((eventIndex === events.length || events[eventIndex][1].type === "lineEnding") && events[eventIndex - 1][1].type === "data") {
+      const data = events[eventIndex - 1][1];
+      const chunks = context.sliceStream(data);
+      let index = chunks.length;
+      let bufferIndex = -1;
+      let size = 0;
       /** @type {boolean | undefined} */
-      let tabs
+      let tabs;
       while (index--) {
-        const chunk = chunks[index]
+        const chunk = chunks[index];
         if (typeof chunk === 'string') {
-          bufferIndex = chunk.length
+          bufferIndex = chunk.length;
           while (chunk.charCodeAt(bufferIndex - 1) === 32) {
-            size++
-            bufferIndex--
+            size++;
+            bufferIndex--;
           }
-          if (bufferIndex) break
-          bufferIndex = -1
+          if (bufferIndex) break;
+          bufferIndex = -1;
         }
         // Number
         else if (chunk === -2) {
-          tabs = true
-          size++
+          tabs = true;
+          size++;
         } else if (chunk === -1) {
           // Empty
         } else {
           // Replacement character, exit.
-          index++
-          break
+          index++;
+          break;
         }
       }
       if (size) {
         const token = {
-          type:
-            eventIndex === events.length || tabs || size < 2
-              ? 'lineSuffix'
-              : 'hardBreakTrailing',
+          type: eventIndex === events.length || tabs || size < 2 ? "lineSuffix" : "hardBreakTrailing",
           start: {
+            _bufferIndex: index ? bufferIndex : data.start._bufferIndex + bufferIndex,
+            _index: data.start._index + index,
             line: data.end.line,
             column: data.end.column - size,
-            offset: data.end.offset - size,
-            _index: data.start._index + index,
-            _bufferIndex: index
-              ? bufferIndex
-              : data.start._bufferIndex + bufferIndex
+            offset: data.end.offset - size
           },
-          end: Object.assign({}, data.end)
-        }
-        data.end = Object.assign({}, token.start)
+          end: {
+            ...data.end
+          }
+        };
+        data.end = {
+          ...token.start
+        };
         if (data.start.offset === data.end.offset) {
-          Object.assign(data, token)
+          Object.assign(data, token);
         } else {
-          events.splice(
-            eventIndex,
-            0,
-            ['enter', token, context],
-            ['exit', token, context]
-          )
-          eventIndex += 2
+          events.splice(eventIndex, 0, ['enter', token, context], ['exit', token, context]);
+          eventIndex += 2;
         }
       }
-      eventIndex++
+      eventIndex++;
     }
   }
-  return events
+  return events;
 }
-
-;// CONCATENATED MODULE: ./node_modules/micromark-util-resolve-all/index.js
-/**
- * @import {Event, Resolver, TokenizeContext} from 'micromark-util-types'
- */
-
-/**
- * Call all `resolveAll`s.
- *
- * @param {ReadonlyArray<{resolveAll?: Resolver | undefined}>} constructs
- *   List of constructs, optionally with `resolveAll`s.
- * @param {Array<Event>} events
- *   List of events.
- * @param {TokenizeContext} context
- *   Context used by `tokenize`.
- * @returns {Array<Event>}
- *   Changed events.
- */
-function resolveAll(constructs, events, context) {
-  /** @type {Array<Resolver>} */
-  const called = []
-  let index = -1
-
-  while (++index < constructs.length) {
-    const resolve = constructs[index].resolveAll
-
-    if (resolve && !called.includes(resolve)) {
-      events = resolve(events, context)
-      called.push(resolve)
-    }
-  }
-
-  return events
-}
-
-;// CONCATENATED MODULE: ./node_modules/micromark/lib/create-tokenizer.js
-/**
- * @typedef {import('micromark-util-types').Chunk} Chunk
- * @typedef {import('micromark-util-types').Code} Code
- * @typedef {import('micromark-util-types').Construct} Construct
- * @typedef {import('micromark-util-types').ConstructRecord} ConstructRecord
- * @typedef {import('micromark-util-types').Effects} Effects
- * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
- * @typedef {import('micromark-util-types').ParseContext} ParseContext
- * @typedef {import('micromark-util-types').Point} Point
- * @typedef {import('micromark-util-types').State} State
- * @typedef {import('micromark-util-types').Token} Token
- * @typedef {import('micromark-util-types').TokenType} TokenType
- * @typedef {import('micromark-util-types').TokenizeContext} TokenizeContext
- */
-
-/**
- * @callback Restore
- * @returns {undefined}
- *
- * @typedef Info
- * @property {Restore} restore
- * @property {number} from
- *
- * @callback ReturnHandle
- *   Handle a successful run.
- * @param {Construct} construct
- * @param {Info} info
- * @returns {undefined}
- */
-
-
-
-
-/**
- * Create a tokenizer.
- * Tokenizers deal with one type of data (e.g., containers, flow, text).
- * The parser is the object dealing with it all.
- * `initialize` works like other constructs, except that only its `tokenize`
- * function is used, in which case it doesn’t receive an `ok` or `nok`.
- * `from` can be given to set the point before the first character, although
- * when further lines are indented, they must be set with `defineSkip`.
- *
- * @param {ParseContext} parser
- * @param {InitialConstruct} initialize
- * @param {Omit<Point, '_bufferIndex' | '_index'> | undefined} [from]
- * @returns {TokenizeContext}
- */
-function createTokenizer(parser, initialize, from) {
-  /** @type {Point} */
-  let point = Object.assign(
-    from
-      ? Object.assign({}, from)
-      : {
-          line: 1,
-          column: 1,
-          offset: 0
-        },
-    {
-      _index: 0,
-      _bufferIndex: -1
-    }
-  )
-  /** @type {Record<string, number>} */
-  const columnStart = {}
-  /** @type {Array<Construct>} */
-  const resolveAllConstructs = []
-  /** @type {Array<Chunk>} */
-  let chunks = []
-  /** @type {Array<Token>} */
-  let stack = []
-  /** @type {boolean | undefined} */
-  let consumed = true
-
-  /**
-   * Tools used for tokenizing.
-   *
-   * @type {Effects}
-   */
-  const effects = {
-    consume,
-    enter,
-    exit,
-    attempt: constructFactory(onsuccessfulconstruct),
-    check: constructFactory(onsuccessfulcheck),
-    interrupt: constructFactory(onsuccessfulcheck, {
-      interrupt: true
-    })
-  }
-
-  /**
-   * State and tools for resolving and serializing.
-   *
-   * @type {TokenizeContext}
-   */
-  const context = {
-    previous: null,
-    code: null,
-    containerState: {},
-    events: [],
-    parser,
-    sliceStream,
-    sliceSerialize,
-    now,
-    defineSkip,
-    write
-  }
-
-  /**
-   * The state function.
-   *
-   * @type {State | undefined}
-   */
-  let state = initialize.tokenize.call(context, effects)
-
-  /**
-   * Track which character we expect to be consumed, to catch bugs.
-   *
-   * @type {Code}
-   */
-  let expectedCode
-  if (initialize.resolveAll) {
-    resolveAllConstructs.push(initialize)
-  }
-  return context
-
-  /** @type {TokenizeContext['write']} */
-  function write(slice) {
-    chunks = push(chunks, slice)
-    main()
-
-    // Exit if we’re not done, resolve might change stuff.
-    if (chunks[chunks.length - 1] !== null) {
-      return []
-    }
-    addResult(initialize, 0)
-
-    // Otherwise, resolve, and exit.
-    context.events = resolveAll(resolveAllConstructs, context.events, context)
-    return context.events
-  }
-
-  //
-  // Tools.
-  //
-
-  /** @type {TokenizeContext['sliceSerialize']} */
-  function sliceSerialize(token, expandTabs) {
-    return serializeChunks(sliceStream(token), expandTabs)
-  }
-
-  /** @type {TokenizeContext['sliceStream']} */
-  function sliceStream(token) {
-    return sliceChunks(chunks, token)
-  }
-
-  /** @type {TokenizeContext['now']} */
-  function now() {
-    // This is a hot path, so we clone manually instead of `Object.assign({}, point)`
-    const {line, column, offset, _index, _bufferIndex} = point
-    return {
-      line,
-      column,
-      offset,
-      _index,
-      _bufferIndex
-    }
-  }
-
-  /** @type {TokenizeContext['defineSkip']} */
-  function defineSkip(value) {
-    columnStart[value.line] = value.column
-    accountForPotentialSkip()
-  }
-
-  //
-  // State management.
-  //
-
-  /**
-   * Main loop (note that `_index` and `_bufferIndex` in `point` are modified by
-   * `consume`).
-   * Here is where we walk through the chunks, which either include strings of
-   * several characters, or numerical character codes.
-   * The reason to do this in a loop instead of a call is so the stack can
-   * drain.
-   *
-   * @returns {undefined}
-   */
-  function main() {
-    /** @type {number} */
-    let chunkIndex
-    while (point._index < chunks.length) {
-      const chunk = chunks[point._index]
-
-      // If we’re in a buffer chunk, loop through it.
-      if (typeof chunk === 'string') {
-        chunkIndex = point._index
-        if (point._bufferIndex < 0) {
-          point._bufferIndex = 0
-        }
-        while (
-          point._index === chunkIndex &&
-          point._bufferIndex < chunk.length
-        ) {
-          go(chunk.charCodeAt(point._bufferIndex))
-        }
-      } else {
-        go(chunk)
-      }
-    }
-  }
-
-  /**
-   * Deal with one code.
-   *
-   * @param {Code} code
-   * @returns {undefined}
-   */
-  function go(code) {
-    consumed = undefined
-    expectedCode = code
-    state = state(code)
-  }
-
-  /** @type {Effects['consume']} */
-  function consume(code) {
-    if (markdownLineEnding(code)) {
-      point.line++
-      point.column = 1
-      point.offset += code === -3 ? 2 : 1
-      accountForPotentialSkip()
-    } else if (code !== -1) {
-      point.column++
-      point.offset++
-    }
-
-    // Not in a string chunk.
-    if (point._bufferIndex < 0) {
-      point._index++
-    } else {
-      point._bufferIndex++
-
-      // At end of string chunk.
-      // @ts-expect-error Points w/ non-negative `_bufferIndex` reference
-      // strings.
-      if (point._bufferIndex === chunks[point._index].length) {
-        point._bufferIndex = -1
-        point._index++
-      }
-    }
-
-    // Expose the previous character.
-    context.previous = code
-
-    // Mark as consumed.
-    consumed = true
-  }
-
-  /** @type {Effects['enter']} */
-  function enter(type, fields) {
-    /** @type {Token} */
-    // @ts-expect-error Patch instead of assign required fields to help GC.
-    const token = fields || {}
-    token.type = type
-    token.start = now()
-    context.events.push(['enter', token, context])
-    stack.push(token)
-    return token
-  }
-
-  /** @type {Effects['exit']} */
-  function exit(type) {
-    const token = stack.pop()
-    token.end = now()
-    context.events.push(['exit', token, context])
-    return token
-  }
-
-  /**
-   * Use results.
-   *
-   * @type {ReturnHandle}
-   */
-  function onsuccessfulconstruct(construct, info) {
-    addResult(construct, info.from)
-  }
-
-  /**
-   * Discard results.
-   *
-   * @type {ReturnHandle}
-   */
-  function onsuccessfulcheck(_, info) {
-    info.restore()
-  }
-
-  /**
-   * Factory to attempt/check/interrupt.
-   *
-   * @param {ReturnHandle} onreturn
-   * @param {{interrupt?: boolean | undefined} | undefined} [fields]
-   */
-  function constructFactory(onreturn, fields) {
-    return hook
-
-    /**
-     * Handle either an object mapping codes to constructs, a list of
-     * constructs, or a single construct.
-     *
-     * @param {Array<Construct> | Construct | ConstructRecord} constructs
-     * @param {State} returnState
-     * @param {State | undefined} [bogusState]
-     * @returns {State}
-     */
-    function hook(constructs, returnState, bogusState) {
-      /** @type {Array<Construct>} */
-      let listOfConstructs
-      /** @type {number} */
-      let constructIndex
-      /** @type {Construct} */
-      let currentConstruct
-      /** @type {Info} */
-      let info
-      return Array.isArray(constructs) /* c8 ignore next 1 */
-        ? handleListOfConstructs(constructs)
-        : 'tokenize' in constructs
-        ? // @ts-expect-error Looks like a construct.
-          handleListOfConstructs([constructs])
-        : handleMapOfConstructs(constructs)
-
-      /**
-       * Handle a list of construct.
-       *
-       * @param {ConstructRecord} map
-       * @returns {State}
-       */
-      function handleMapOfConstructs(map) {
-        return start
-
-        /** @type {State} */
-        function start(code) {
-          const def = code !== null && map[code]
-          const all = code !== null && map.null
-          const list = [
-            // To do: add more extension tests.
-            /* c8 ignore next 2 */
-            ...(Array.isArray(def) ? def : def ? [def] : []),
-            ...(Array.isArray(all) ? all : all ? [all] : [])
-          ]
-          return handleListOfConstructs(list)(code)
-        }
-      }
-
-      /**
-       * Handle a list of construct.
-       *
-       * @param {Array<Construct>} list
-       * @returns {State}
-       */
-      function handleListOfConstructs(list) {
-        listOfConstructs = list
-        constructIndex = 0
-        if (list.length === 0) {
-          return bogusState
-        }
-        return handleConstruct(list[constructIndex])
-      }
-
-      /**
-       * Handle a single construct.
-       *
-       * @param {Construct} construct
-       * @returns {State}
-       */
-      function handleConstruct(construct) {
-        return start
-
-        /** @type {State} */
-        function start(code) {
-          // To do: not needed to store if there is no bogus state, probably?
-          // Currently doesn’t work because `inspect` in document does a check
-          // w/o a bogus, which doesn’t make sense. But it does seem to help perf
-          // by not storing.
-          info = store()
-          currentConstruct = construct
-          if (!construct.partial) {
-            context.currentConstruct = construct
-          }
-
-          // Always populated by defaults.
-
-          if (
-            construct.name &&
-            context.parser.constructs.disable.null.includes(construct.name)
-          ) {
-            return nok(code)
-          }
-          return construct.tokenize.call(
-            // If we do have fields, create an object w/ `context` as its
-            // prototype.
-            // This allows a “live binding”, which is needed for `interrupt`.
-            fields ? Object.assign(Object.create(context), fields) : context,
-            effects,
-            ok,
-            nok
-          )(code)
-        }
-      }
-
-      /** @type {State} */
-      function ok(code) {
-        consumed = true
-        onreturn(currentConstruct, info)
-        return returnState
-      }
-
-      /** @type {State} */
-      function nok(code) {
-        consumed = true
-        info.restore()
-        if (++constructIndex < listOfConstructs.length) {
-          return handleConstruct(listOfConstructs[constructIndex])
-        }
-        return bogusState
-      }
-    }
-  }
-
-  /**
-   * @param {Construct} construct
-   * @param {number} from
-   * @returns {undefined}
-   */
-  function addResult(construct, from) {
-    if (construct.resolveAll && !resolveAllConstructs.includes(construct)) {
-      resolveAllConstructs.push(construct)
-    }
-    if (construct.resolve) {
-      splice(
-        context.events,
-        from,
-        context.events.length - from,
-        construct.resolve(context.events.slice(from), context)
-      )
-    }
-    if (construct.resolveTo) {
-      context.events = construct.resolveTo(context.events, context)
-    }
-  }
-
-  /**
-   * Store state.
-   *
-   * @returns {Info}
-   */
-  function store() {
-    const startPoint = now()
-    const startPrevious = context.previous
-    const startCurrentConstruct = context.currentConstruct
-    const startEventsIndex = context.events.length
-    const startStack = Array.from(stack)
-    return {
-      restore,
-      from: startEventsIndex
-    }
-
-    /**
-     * Restore state.
-     *
-     * @returns {undefined}
-     */
-    function restore() {
-      point = startPoint
-      context.previous = startPrevious
-      context.currentConstruct = startCurrentConstruct
-      context.events.length = startEventsIndex
-      stack = startStack
-      accountForPotentialSkip()
-    }
-  }
-
-  /**
-   * Move the current point a bit forward in the line when it’s on a column
-   * skip.
-   *
-   * @returns {undefined}
-   */
-  function accountForPotentialSkip() {
-    if (point.line in columnStart && point.column < 2) {
-      point.column = columnStart[point.line]
-      point.offset += columnStart[point.line] - 1
-    }
-  }
-}
-
-/**
- * Get the chunks from a slice of chunks in the range of a token.
- *
- * @param {Array<Chunk>} chunks
- * @param {Pick<Token, 'end' | 'start'>} token
- * @returns {Array<Chunk>}
- */
-function sliceChunks(chunks, token) {
-  const startIndex = token.start._index
-  const startBufferIndex = token.start._bufferIndex
-  const endIndex = token.end._index
-  const endBufferIndex = token.end._bufferIndex
-  /** @type {Array<Chunk>} */
-  let view
-  if (startIndex === endIndex) {
-    // @ts-expect-error `_bufferIndex` is used on string chunks.
-    view = [chunks[startIndex].slice(startBufferIndex, endBufferIndex)]
-  } else {
-    view = chunks.slice(startIndex, endIndex)
-    if (startBufferIndex > -1) {
-      const head = view[0]
-      if (typeof head === 'string') {
-        view[0] = head.slice(startBufferIndex)
-      } else {
-        view.shift()
-      }
-    }
-    if (endBufferIndex > 0) {
-      // @ts-expect-error `_bufferIndex` is used on string chunks.
-      view.push(chunks[endIndex].slice(0, endBufferIndex))
-    }
-  }
-  return view
-}
-
-/**
- * Get the string value of a slice of chunks.
- *
- * @param {Array<Chunk>} chunks
- * @param {boolean | undefined} [expandTabs=false]
- * @returns {string}
- */
-function serializeChunks(chunks, expandTabs) {
-  let index = -1
-  /** @type {Array<string>} */
-  const result = []
-  /** @type {boolean | undefined} */
-  let atTab
-  while (++index < chunks.length) {
-    const chunk = chunks[index]
-    /** @type {string} */
-    let value
-    if (typeof chunk === 'string') {
-      value = chunk
-    } else
-      switch (chunk) {
-        case -5: {
-          value = '\r'
-          break
-        }
-        case -4: {
-          value = '\n'
-          break
-        }
-        case -3: {
-          value = '\r' + '\n'
-          break
-        }
-        case -2: {
-          value = expandTabs ? ' ' : '\t'
-          break
-        }
-        case -1: {
-          if (!expandTabs && atTab) continue
-          value = ' '
-          break
-        }
-        default: {
-          // Currently only replacement character.
-          value = String.fromCharCode(chunk)
-        }
-      }
-    atTab = chunk === -2
-    result.push(value)
-  }
-  return result.join('')
-}
-
 ;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/thematic-break.js
 /**
  * @import {
@@ -53268,6 +52616,40 @@ function tokenizeLineEnding(effects, ok) {
     return factorySpace(effects, ok, "linePrefix");
   }
 }
+;// CONCATENATED MODULE: ./node_modules/micromark-util-resolve-all/index.js
+/**
+ * @import {Event, Resolver, TokenizeContext} from 'micromark-util-types'
+ */
+
+/**
+ * Call all `resolveAll`s.
+ *
+ * @param {ReadonlyArray<{resolveAll?: Resolver | undefined}>} constructs
+ *   List of constructs, optionally with `resolveAll`s.
+ * @param {Array<Event>} events
+ *   List of events.
+ * @param {TokenizeContext} context
+ *   Context used by `tokenize`.
+ * @returns {Array<Event>}
+ *   Changed events.
+ */
+function resolveAll(constructs, events, context) {
+  /** @type {Array<Resolver>} */
+  const called = []
+  let index = -1
+
+  while (++index < constructs.length) {
+    const resolve = constructs[index].resolveAll
+
+    if (resolve && !called.includes(resolve)) {
+      events = resolve(events, context)
+      called.push(resolve)
+    }
+  }
+
+  return events
+}
+
 ;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/label-end.js
 /**
  * @import {
@@ -55460,7 +54842,7 @@ function tokenizeCodeText(effects, ok, nok) {
 }
 ;// CONCATENATED MODULE: ./node_modules/micromark/lib/constructs.js
 /**
- * @typedef {import('micromark-util-types').Extension} Extension
+ * @import {Extension} from 'micromark-util-types'
  */
 
 
@@ -55482,19 +54864,19 @@ const constructs_document = {
   [56]: list,
   [57]: list,
   [62]: blockQuote
-}
+};
 
 /** @satisfies {Extension['contentInitial']} */
 const contentInitial = {
   [91]: definition
-}
+};
 
 /** @satisfies {Extension['flowInitial']} */
 const flowInitial = {
   [-2]: codeIndented,
   [-1]: codeIndented,
   [32]: codeIndented
-}
+};
 
 /** @satisfies {Extension['flow']} */
 const constructs_flow = {
@@ -55506,13 +54888,13 @@ const constructs_flow = {
   [95]: thematicBreak,
   [96]: codeFenced,
   [126]: codeFenced
-}
+};
 
 /** @satisfies {Extension['string']} */
 const constructs_string = {
   [38]: characterReference,
   [92]: characterEscape
-}
+};
 
 /** @satisfies {Extension['text']} */
 const constructs_text = {
@@ -55528,30 +54910,642 @@ const constructs_text = {
   [93]: labelEnd,
   [95]: attention,
   [96]: codeText
-}
+};
 
 /** @satisfies {Extension['insideSpan']} */
 const insideSpan = {
   null: [attention, resolver]
-}
+};
 
 /** @satisfies {Extension['attentionMarkers']} */
 const attentionMarkers = {
   null: [42, 95]
-}
+};
 
 /** @satisfies {Extension['disable']} */
 const disable = {
   null: []
+};
+;// CONCATENATED MODULE: ./node_modules/micromark/lib/create-tokenizer.js
+/**
+ * @import {
+ *   Chunk,
+ *   Code,
+ *   ConstructRecord,
+ *   Construct,
+ *   Effects,
+ *   InitialConstruct,
+ *   ParseContext,
+ *   Point,
+ *   State,
+ *   TokenizeContext,
+ *   Token
+ * } from 'micromark-util-types'
+ */
+
+/**
+ * @callback Restore
+ *   Restore the state.
+ * @returns {undefined}
+ *   Nothing.
+ *
+ * @typedef Info
+ *   Info.
+ * @property {Restore} restore
+ *   Restore.
+ * @property {number} from
+ *   From.
+ *
+ * @callback ReturnHandle
+ *   Handle a successful run.
+ * @param {Construct} construct
+ *   Construct.
+ * @param {Info} info
+ *   Info.
+ * @returns {undefined}
+ *   Nothing.
+ */
+
+
+
+
+/**
+ * Create a tokenizer.
+ * Tokenizers deal with one type of data (e.g., containers, flow, text).
+ * The parser is the object dealing with it all.
+ * `initialize` works like other constructs, except that only its `tokenize`
+ * function is used, in which case it doesn’t receive an `ok` or `nok`.
+ * `from` can be given to set the point before the first character, although
+ * when further lines are indented, they must be set with `defineSkip`.
+ *
+ * @param {ParseContext} parser
+ *   Parser.
+ * @param {InitialConstruct} initialize
+ *   Construct.
+ * @param {Omit<Point, '_bufferIndex' | '_index'> | undefined} [from]
+ *   Point (optional).
+ * @returns {TokenizeContext}
+ *   Context.
+ */
+function createTokenizer(parser, initialize, from) {
+  /** @type {Point} */
+  let point = {
+    _bufferIndex: -1,
+    _index: 0,
+    line: from && from.line || 1,
+    column: from && from.column || 1,
+    offset: from && from.offset || 0
+  };
+  /** @type {Record<string, number>} */
+  const columnStart = {};
+  /** @type {Array<Construct>} */
+  const resolveAllConstructs = [];
+  /** @type {Array<Chunk>} */
+  let chunks = [];
+  /** @type {Array<Token>} */
+  let stack = [];
+  /** @type {boolean | undefined} */
+  let consumed = true;
+
+  /**
+   * Tools used for tokenizing.
+   *
+   * @type {Effects}
+   */
+  const effects = {
+    attempt: constructFactory(onsuccessfulconstruct),
+    check: constructFactory(onsuccessfulcheck),
+    consume,
+    enter,
+    exit,
+    interrupt: constructFactory(onsuccessfulcheck, {
+      interrupt: true
+    })
+  };
+
+  /**
+   * State and tools for resolving and serializing.
+   *
+   * @type {TokenizeContext}
+   */
+  const context = {
+    code: null,
+    containerState: {},
+    defineSkip,
+    events: [],
+    now,
+    parser,
+    previous: null,
+    sliceSerialize,
+    sliceStream,
+    write
+  };
+
+  /**
+   * The state function.
+   *
+   * @type {State | undefined}
+   */
+  let state = initialize.tokenize.call(context, effects);
+
+  /**
+   * Track which character we expect to be consumed, to catch bugs.
+   *
+   * @type {Code}
+   */
+  let expectedCode;
+  if (initialize.resolveAll) {
+    resolveAllConstructs.push(initialize);
+  }
+  return context;
+
+  /** @type {TokenizeContext['write']} */
+  function write(slice) {
+    chunks = push(chunks, slice);
+    main();
+
+    // Exit if we’re not done, resolve might change stuff.
+    if (chunks[chunks.length - 1] !== null) {
+      return [];
+    }
+    addResult(initialize, 0);
+
+    // Otherwise, resolve, and exit.
+    context.events = resolveAll(resolveAllConstructs, context.events, context);
+    return context.events;
+  }
+
+  //
+  // Tools.
+  //
+
+  /** @type {TokenizeContext['sliceSerialize']} */
+  function sliceSerialize(token, expandTabs) {
+    return serializeChunks(sliceStream(token), expandTabs);
+  }
+
+  /** @type {TokenizeContext['sliceStream']} */
+  function sliceStream(token) {
+    return sliceChunks(chunks, token);
+  }
+
+  /** @type {TokenizeContext['now']} */
+  function now() {
+    // This is a hot path, so we clone manually instead of `Object.assign({}, point)`
+    const {
+      _bufferIndex,
+      _index,
+      line,
+      column,
+      offset
+    } = point;
+    return {
+      _bufferIndex,
+      _index,
+      line,
+      column,
+      offset
+    };
+  }
+
+  /** @type {TokenizeContext['defineSkip']} */
+  function defineSkip(value) {
+    columnStart[value.line] = value.column;
+    accountForPotentialSkip();
+  }
+
+  //
+  // State management.
+  //
+
+  /**
+   * Main loop (note that `_index` and `_bufferIndex` in `point` are modified by
+   * `consume`).
+   * Here is where we walk through the chunks, which either include strings of
+   * several characters, or numerical character codes.
+   * The reason to do this in a loop instead of a call is so the stack can
+   * drain.
+   *
+   * @returns {undefined}
+   *   Nothing.
+   */
+  function main() {
+    /** @type {number} */
+    let chunkIndex;
+    while (point._index < chunks.length) {
+      const chunk = chunks[point._index];
+
+      // If we’re in a buffer chunk, loop through it.
+      if (typeof chunk === 'string') {
+        chunkIndex = point._index;
+        if (point._bufferIndex < 0) {
+          point._bufferIndex = 0;
+        }
+        while (point._index === chunkIndex && point._bufferIndex < chunk.length) {
+          go(chunk.charCodeAt(point._bufferIndex));
+        }
+      } else {
+        go(chunk);
+      }
+    }
+  }
+
+  /**
+   * Deal with one code.
+   *
+   * @param {Code} code
+   *   Code.
+   * @returns {undefined}
+   *   Nothing.
+   */
+  function go(code) {
+    consumed = undefined;
+    expectedCode = code;
+    state = state(code);
+  }
+
+  /** @type {Effects['consume']} */
+  function consume(code) {
+    if (markdownLineEnding(code)) {
+      point.line++;
+      point.column = 1;
+      point.offset += code === -3 ? 2 : 1;
+      accountForPotentialSkip();
+    } else if (code !== -1) {
+      point.column++;
+      point.offset++;
+    }
+
+    // Not in a string chunk.
+    if (point._bufferIndex < 0) {
+      point._index++;
+    } else {
+      point._bufferIndex++;
+
+      // At end of string chunk.
+      if (point._bufferIndex ===
+      // Points w/ non-negative `_bufferIndex` reference
+      // strings.
+      /** @type {string} */
+      chunks[point._index].length) {
+        point._bufferIndex = -1;
+        point._index++;
+      }
+    }
+
+    // Expose the previous character.
+    context.previous = code;
+
+    // Mark as consumed.
+    consumed = true;
+  }
+
+  /** @type {Effects['enter']} */
+  function enter(type, fields) {
+    /** @type {Token} */
+    // @ts-expect-error Patch instead of assign required fields to help GC.
+    const token = fields || {};
+    token.type = type;
+    token.start = now();
+    context.events.push(['enter', token, context]);
+    stack.push(token);
+    return token;
+  }
+
+  /** @type {Effects['exit']} */
+  function exit(type) {
+    const token = stack.pop();
+    token.end = now();
+    context.events.push(['exit', token, context]);
+    return token;
+  }
+
+  /**
+   * Use results.
+   *
+   * @type {ReturnHandle}
+   */
+  function onsuccessfulconstruct(construct, info) {
+    addResult(construct, info.from);
+  }
+
+  /**
+   * Discard results.
+   *
+   * @type {ReturnHandle}
+   */
+  function onsuccessfulcheck(_, info) {
+    info.restore();
+  }
+
+  /**
+   * Factory to attempt/check/interrupt.
+   *
+   * @param {ReturnHandle} onreturn
+   *   Callback.
+   * @param {{interrupt?: boolean | undefined} | undefined} [fields]
+   *   Fields.
+   */
+  function constructFactory(onreturn, fields) {
+    return hook;
+
+    /**
+     * Handle either an object mapping codes to constructs, a list of
+     * constructs, or a single construct.
+     *
+     * @param {Array<Construct> | ConstructRecord | Construct} constructs
+     *   Constructs.
+     * @param {State} returnState
+     *   State.
+     * @param {State | undefined} [bogusState]
+     *   State.
+     * @returns {State}
+     *   State.
+     */
+    function hook(constructs, returnState, bogusState) {
+      /** @type {ReadonlyArray<Construct>} */
+      let listOfConstructs;
+      /** @type {number} */
+      let constructIndex;
+      /** @type {Construct} */
+      let currentConstruct;
+      /** @type {Info} */
+      let info;
+      return Array.isArray(constructs) ? /* c8 ignore next 1 */
+      handleListOfConstructs(constructs) : 'tokenize' in constructs ?
+      // Looks like a construct.
+      handleListOfConstructs([(/** @type {Construct} */constructs)]) : handleMapOfConstructs(constructs);
+
+      /**
+       * Handle a list of construct.
+       *
+       * @param {ConstructRecord} map
+       *   Constructs.
+       * @returns {State}
+       *   State.
+       */
+      function handleMapOfConstructs(map) {
+        return start;
+
+        /** @type {State} */
+        function start(code) {
+          const left = code !== null && map[code];
+          const all = code !== null && map.null;
+          const list = [
+          // To do: add more extension tests.
+          /* c8 ignore next 2 */
+          ...(Array.isArray(left) ? left : left ? [left] : []), ...(Array.isArray(all) ? all : all ? [all] : [])];
+          return handleListOfConstructs(list)(code);
+        }
+      }
+
+      /**
+       * Handle a list of construct.
+       *
+       * @param {ReadonlyArray<Construct>} list
+       *   Constructs.
+       * @returns {State}
+       *   State.
+       */
+      function handleListOfConstructs(list) {
+        listOfConstructs = list;
+        constructIndex = 0;
+        if (list.length === 0) {
+          return bogusState;
+        }
+        return handleConstruct(list[constructIndex]);
+      }
+
+      /**
+       * Handle a single construct.
+       *
+       * @param {Construct} construct
+       *   Construct.
+       * @returns {State}
+       *   State.
+       */
+      function handleConstruct(construct) {
+        return start;
+
+        /** @type {State} */
+        function start(code) {
+          // To do: not needed to store if there is no bogus state, probably?
+          // Currently doesn’t work because `inspect` in document does a check
+          // w/o a bogus, which doesn’t make sense. But it does seem to help perf
+          // by not storing.
+          info = store();
+          currentConstruct = construct;
+          if (!construct.partial) {
+            context.currentConstruct = construct;
+          }
+
+          // Always populated by defaults.
+
+          if (construct.name && context.parser.constructs.disable.null.includes(construct.name)) {
+            return nok(code);
+          }
+          return construct.tokenize.call(
+          // If we do have fields, create an object w/ `context` as its
+          // prototype.
+          // This allows a “live binding”, which is needed for `interrupt`.
+          fields ? Object.assign(Object.create(context), fields) : context, effects, ok, nok)(code);
+        }
+      }
+
+      /** @type {State} */
+      function ok(code) {
+        consumed = true;
+        onreturn(currentConstruct, info);
+        return returnState;
+      }
+
+      /** @type {State} */
+      function nok(code) {
+        consumed = true;
+        info.restore();
+        if (++constructIndex < listOfConstructs.length) {
+          return handleConstruct(listOfConstructs[constructIndex]);
+        }
+        return bogusState;
+      }
+    }
+  }
+
+  /**
+   * @param {Construct} construct
+   *   Construct.
+   * @param {number} from
+   *   From.
+   * @returns {undefined}
+   *   Nothing.
+   */
+  function addResult(construct, from) {
+    if (construct.resolveAll && !resolveAllConstructs.includes(construct)) {
+      resolveAllConstructs.push(construct);
+    }
+    if (construct.resolve) {
+      splice(context.events, from, context.events.length - from, construct.resolve(context.events.slice(from), context));
+    }
+    if (construct.resolveTo) {
+      context.events = construct.resolveTo(context.events, context);
+    }
+  }
+
+  /**
+   * Store state.
+   *
+   * @returns {Info}
+   *   Info.
+   */
+  function store() {
+    const startPoint = now();
+    const startPrevious = context.previous;
+    const startCurrentConstruct = context.currentConstruct;
+    const startEventsIndex = context.events.length;
+    const startStack = Array.from(stack);
+    return {
+      from: startEventsIndex,
+      restore
+    };
+
+    /**
+     * Restore state.
+     *
+     * @returns {undefined}
+     *   Nothing.
+     */
+    function restore() {
+      point = startPoint;
+      context.previous = startPrevious;
+      context.currentConstruct = startCurrentConstruct;
+      context.events.length = startEventsIndex;
+      stack = startStack;
+      accountForPotentialSkip();
+    }
+  }
+
+  /**
+   * Move the current point a bit forward in the line when it’s on a column
+   * skip.
+   *
+   * @returns {undefined}
+   *   Nothing.
+   */
+  function accountForPotentialSkip() {
+    if (point.line in columnStart && point.column < 2) {
+      point.column = columnStart[point.line];
+      point.offset += columnStart[point.line] - 1;
+    }
+  }
 }
 
+/**
+ * Get the chunks from a slice of chunks in the range of a token.
+ *
+ * @param {ReadonlyArray<Chunk>} chunks
+ *   Chunks.
+ * @param {Pick<Token, 'end' | 'start'>} token
+ *   Token.
+ * @returns {Array<Chunk>}
+ *   Chunks.
+ */
+function sliceChunks(chunks, token) {
+  const startIndex = token.start._index;
+  const startBufferIndex = token.start._bufferIndex;
+  const endIndex = token.end._index;
+  const endBufferIndex = token.end._bufferIndex;
+  /** @type {Array<Chunk>} */
+  let view;
+  if (startIndex === endIndex) {
+    // @ts-expect-error `_bufferIndex` is used on string chunks.
+    view = [chunks[startIndex].slice(startBufferIndex, endBufferIndex)];
+  } else {
+    view = chunks.slice(startIndex, endIndex);
+    if (startBufferIndex > -1) {
+      const head = view[0];
+      if (typeof head === 'string') {
+        view[0] = head.slice(startBufferIndex);
+      } else {
+        view.shift();
+      }
+    }
+    if (endBufferIndex > 0) {
+      // @ts-expect-error `_bufferIndex` is used on string chunks.
+      view.push(chunks[endIndex].slice(0, endBufferIndex));
+    }
+  }
+  return view;
+}
+
+/**
+ * Get the string value of a slice of chunks.
+ *
+ * @param {ReadonlyArray<Chunk>} chunks
+ *   Chunks.
+ * @param {boolean | undefined} [expandTabs=false]
+ *   Whether to expand tabs (default: `false`).
+ * @returns {string}
+ *   Result.
+ */
+function serializeChunks(chunks, expandTabs) {
+  let index = -1;
+  /** @type {Array<string>} */
+  const result = [];
+  /** @type {boolean | undefined} */
+  let atTab;
+  while (++index < chunks.length) {
+    const chunk = chunks[index];
+    /** @type {string} */
+    let value;
+    if (typeof chunk === 'string') {
+      value = chunk;
+    } else switch (chunk) {
+      case -5:
+        {
+          value = "\r";
+          break;
+        }
+      case -4:
+        {
+          value = "\n";
+          break;
+        }
+      case -3:
+        {
+          value = "\r" + "\n";
+          break;
+        }
+      case -2:
+        {
+          value = expandTabs ? " " : "\t";
+          break;
+        }
+      case -1:
+        {
+          if (!expandTabs && atTab) continue;
+          value = " ";
+          break;
+        }
+      default:
+        {
+          // Currently only replacement character.
+          value = String.fromCharCode(chunk);
+        }
+    }
+    atTab = chunk === -2;
+    result.push(value);
+  }
+  return result.join('');
+}
 ;// CONCATENATED MODULE: ./node_modules/micromark/lib/parse.js
 /**
- * @typedef {import('micromark-util-types').Create} Create
- * @typedef {import('micromark-util-types').FullNormalizedExtension} FullNormalizedExtension
- * @typedef {import('micromark-util-types').InitialConstruct} InitialConstruct
- * @typedef {import('micromark-util-types').ParseContext} ParseContext
- * @typedef {import('micromark-util-types').ParseOptions} ParseOptions
+ * @import {
+ *   Create,
+ *   FullNormalizedExtension,
+ *   InitialConstruct,
+ *   ParseContext,
+ *   ParseOptions
+ * } from 'micromark-util-types'
  */
 
 
@@ -55564,175 +55558,180 @@ const disable = {
 
 /**
  * @param {ParseOptions | null | undefined} [options]
+ *   Configuration (optional).
  * @returns {ParseContext}
+ *   Parser.
  */
 function parse(options) {
-  const settings = options || {}
-  const constructs =
-    /** @type {FullNormalizedExtension} */
-    combineExtensions([constructs_namespaceObject, ...(settings.extensions || [])])
+  const settings = options || {};
+  const constructs = /** @type {FullNormalizedExtension} */
+  combineExtensions([constructs_namespaceObject, ...(settings.extensions || [])]);
 
   /** @type {ParseContext} */
   const parser = {
-    defined: [],
-    lazy: {},
     constructs,
     content: create(content),
+    defined: [],
     document: create(document_document),
     flow: create(flow),
+    lazy: {},
     string: create(string),
     text: create(text_text)
-  }
-  return parser
+  };
+  return parser;
 
   /**
    * @param {InitialConstruct} initial
+   *   Construct to start with.
+   * @returns {Create}
+   *   Create a tokenizer.
    */
   function create(initial) {
-    return creator
+    return creator;
     /** @type {Create} */
     function creator(from) {
-      return createTokenizer(parser, initial, from)
+      return createTokenizer(parser, initial, from);
     }
   }
 }
-
 ;// CONCATENATED MODULE: ./node_modules/micromark/lib/preprocess.js
 /**
- * @typedef {import('micromark-util-types').Chunk} Chunk
- * @typedef {import('micromark-util-types').Code} Code
- * @typedef {import('micromark-util-types').Encoding} Encoding
- * @typedef {import('micromark-util-types').Value} Value
+ * @import {Chunk, Code, Encoding, Value} from 'micromark-util-types'
  */
 
 /**
  * @callback Preprocessor
+ *   Preprocess a value.
  * @param {Value} value
+ *   Value.
  * @param {Encoding | null | undefined} [encoding]
+ *   Encoding when `value` is a typed array (optional).
  * @param {boolean | null | undefined} [end=false]
+ *   Whether this is the last chunk (default: `false`).
  * @returns {Array<Chunk>}
+ *   Chunks.
  */
 
-const search = /[\0\t\n\r]/g
+const search = /[\0\t\n\r]/g;
 
 /**
  * @returns {Preprocessor}
+ *   Preprocess a value.
  */
 function preprocess() {
-  let column = 1
-  let buffer = ''
+  let column = 1;
+  let buffer = '';
   /** @type {boolean | undefined} */
-  let start = true
+  let start = true;
   /** @type {boolean | undefined} */
-  let atCarriageReturn
-  return preprocessor
+  let atCarriageReturn;
+  return preprocessor;
 
   /** @type {Preprocessor} */
   // eslint-disable-next-line complexity
   function preprocessor(value, encoding, end) {
     /** @type {Array<Chunk>} */
-    const chunks = []
+    const chunks = [];
     /** @type {RegExpMatchArray | null} */
-    let match
+    let match;
     /** @type {number} */
-    let next
+    let next;
     /** @type {number} */
-    let startPosition
+    let startPosition;
     /** @type {number} */
-    let endPosition
+    let endPosition;
     /** @type {Code} */
-    let code
-    value =
-      buffer +
-      (typeof value === 'string'
-        ? value.toString()
-        : new TextDecoder(encoding || undefined).decode(value))
-    startPosition = 0
-    buffer = ''
+    let code;
+    value = buffer + (typeof value === 'string' ? value.toString() : new TextDecoder(encoding || undefined).decode(value));
+    startPosition = 0;
+    buffer = '';
     if (start) {
       // To do: `markdown-rs` actually parses BOMs (byte order mark).
       if (value.charCodeAt(0) === 65279) {
-        startPosition++
+        startPosition++;
       }
-      start = undefined
+      start = undefined;
     }
     while (startPosition < value.length) {
-      search.lastIndex = startPosition
-      match = search.exec(value)
-      endPosition =
-        match && match.index !== undefined ? match.index : value.length
-      code = value.charCodeAt(endPosition)
+      search.lastIndex = startPosition;
+      match = search.exec(value);
+      endPosition = match && match.index !== undefined ? match.index : value.length;
+      code = value.charCodeAt(endPosition);
       if (!match) {
-        buffer = value.slice(startPosition)
-        break
+        buffer = value.slice(startPosition);
+        break;
       }
       if (code === 10 && startPosition === endPosition && atCarriageReturn) {
-        chunks.push(-3)
-        atCarriageReturn = undefined
+        chunks.push(-3);
+        atCarriageReturn = undefined;
       } else {
         if (atCarriageReturn) {
-          chunks.push(-5)
-          atCarriageReturn = undefined
+          chunks.push(-5);
+          atCarriageReturn = undefined;
         }
         if (startPosition < endPosition) {
-          chunks.push(value.slice(startPosition, endPosition))
-          column += endPosition - startPosition
+          chunks.push(value.slice(startPosition, endPosition));
+          column += endPosition - startPosition;
         }
         switch (code) {
-          case 0: {
-            chunks.push(65533)
-            column++
-            break
-          }
-          case 9: {
-            next = Math.ceil(column / 4) * 4
-            chunks.push(-2)
-            while (column++ < next) chunks.push(-1)
-            break
-          }
-          case 10: {
-            chunks.push(-4)
-            column = 1
-            break
-          }
-          default: {
-            atCarriageReturn = true
-            column = 1
-          }
+          case 0:
+            {
+              chunks.push(65533);
+              column++;
+              break;
+            }
+          case 9:
+            {
+              next = Math.ceil(column / 4) * 4;
+              chunks.push(-2);
+              while (column++ < next) chunks.push(-1);
+              break;
+            }
+          case 10:
+            {
+              chunks.push(-4);
+              column = 1;
+              break;
+            }
+          default:
+            {
+              atCarriageReturn = true;
+              column = 1;
+            }
         }
       }
-      startPosition = endPosition + 1
+      startPosition = endPosition + 1;
     }
     if (end) {
-      if (atCarriageReturn) chunks.push(-5)
-      if (buffer) chunks.push(buffer)
-      chunks.push(null)
+      if (atCarriageReturn) chunks.push(-5);
+      if (buffer) chunks.push(buffer);
+      chunks.push(null);
     }
-    return chunks
+    return chunks;
   }
 }
-
 ;// CONCATENATED MODULE: ./node_modules/micromark/lib/postprocess.js
 /**
- * @typedef {import('micromark-util-types').Event} Event
+ * @import {Event} from 'micromark-util-types'
  */
 
 
 
 /**
  * @param {Array<Event>} events
+ *   Events.
  * @returns {Array<Event>}
+ *   Events.
  */
 function postprocess(events) {
   while (!subtokenize(events)) {
     // Empty
   }
-  return events
+  return events;
 }
-
 // EXTERNAL MODULE: ./node_modules/markdownlint/helpers/shared.cjs
 var shared = __nccwpck_require__(3408);
-;// CONCATENATED MODULE: ./node_modules/markdownlint/helpers/micromark-parse.mjs
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/micromark-parse.mjs
 // @ts-check
 
 
@@ -55752,8 +55751,8 @@ var shared = __nccwpck_require__(3408);
 /** @typedef {import("micromark-util-types").State} State */
 /** @typedef {import("micromark-util-types").Token} Token */
 /** @typedef {import("micromark-util-types").Tokenizer} Tokenizer */
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
 /** @typedef {import("./micromark-types.d.mts")} */
-/** @typedef {import("../lib/markdownlint.mjs").MicromarkToken} MicromarkToken */
 
 /**
  * Parse options.
@@ -56054,7 +56053,7 @@ const ignoredChildTypes = new Set(
   [ "codeFencedFence", "definition", "reference", "resource" ]
 );
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md044 = ({
   "names": [ "MD044", "proper-names" ],
   "description": "Proper names should have the correct capitalization",
@@ -56095,7 +56094,7 @@ const ignoredChildTypes = new Set(
     const exclusions = [];
     const scannedTokens = new Set();
     for (const name of names) {
-      const escapedName = (0,helpers/* escapeForRegExp */.If)(name);
+      const escapedName = (0,helpers_helpers/* escapeForRegExp */.If)(name);
       const startNamePattern = /^\W/.test(name) ? "" : "\\b_*";
       const endNamePattern = /\W$/.test(name) ? "" : "_*\\b";
       const namePattern = `(${startNamePattern})(${escapedName})${endNamePattern}`;
@@ -56116,7 +56115,7 @@ const ignoredChildTypes = new Set(
           };
           if (
             !names.includes(nameMatch) &&
-            !exclusions.some((exclusion) => (0,helpers/* hasOverlap */.UM)(exclusion, nameRange))
+            !exclusions.some((exclusion) => (0,helpers_helpers/* hasOverlap */.UM)(exclusion, nameRange))
           ) {
             /** @type {import("../helpers/helpers.cjs").FileRange[]} */
             let autolinkRanges = [];
@@ -56131,8 +56130,8 @@ const ignoredChildTypes = new Set(
               exclusions.push(...autolinkRanges);
               scannedTokens.add(token);
             }
-            if (!autolinkRanges.some((autolinkRange) => (0,helpers/* hasOverlap */.UM)(autolinkRange, nameRange))) {
-              (0,helpers/* addErrorDetailIf */.qC)(
+            if (!autolinkRanges.some((autolinkRange) => (0,helpers_helpers/* hasOverlap */.UM)(autolinkRange, nameRange))) {
+              (0,helpers_helpers/* addErrorDetailIf */.qC)(
                 onError,
                 token.startLine,
                 name,
@@ -56162,9 +56161,9 @@ const ignoredChildTypes = new Set(
 
 
 
-const altRe = (0,helpers/* getHtmlAttributeRe */.Xi)("alt");
+const altRe = (0,helpers_helpers/* getHtmlAttributeRe */.Xi)("alt");
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md045 = ({
   "names": [ "MD045", "no-alt-text" ],
   "description": "Images should have alternate text (alt text)",
@@ -56179,7 +56178,7 @@ const altRe = (0,helpers/* getHtmlAttributeRe */.Xi)("alt");
         const range = (image.startLine === image.endLine) ?
           [ image.startColumn, image.endColumn - image.startColumn ] :
           undefined;
-        (0,helpers/* addError */.CN)(
+        (0,helpers_helpers/* addError */.CN)(
           onError,
           image.startLine,
           undefined,
@@ -56202,9 +56201,9 @@ const altRe = (0,helpers/* getHtmlAttributeRe */.Xi)("alt");
       ) {
         const range = [
           startColumn,
-          text.replace(helpers/* nextLinesRe */.gi, "").length
+          text.replace(helpers_helpers/* nextLinesRe */.gi, "").length
         ];
-        (0,helpers/* addError */.CN)(
+        (0,helpers_helpers/* addError */.CN)(
           onError,
           startLine,
           undefined,
@@ -56227,7 +56226,7 @@ const tokenTypeToStyle = {
   "codeIndented": "indented"
 };
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md046 = ({
   "names": [ "MD046", "code-block-style" ],
   "description": "Code block style",
@@ -56240,7 +56239,7 @@ const tokenTypeToStyle = {
       if (expectedStyle === "consistent") {
         expectedStyle = tokenTypeToStyle[type];
       }
-      (0,helpers/* addErrorDetailIf */.qC)(
+      (0,helpers_helpers/* addErrorDetailIf */.qC)(
         onError,
         startLine,
         expectedStyle,
@@ -56254,7 +56253,7 @@ const tokenTypeToStyle = {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md047 = ({
   "names": [ "MD047", "single-trailing-newline" ],
   "description": "Files should end with a single newline character",
@@ -56263,8 +56262,8 @@ const tokenTypeToStyle = {
   "function": function MD047(params, onError) {
     const lastLineNumber = params.lines.length;
     const lastLine = params.lines[lastLineNumber - 1];
-    if (!(0,helpers/* isBlankLine */.pB)(lastLine)) {
-      (0,helpers/* addError */.CN)(
+    if (!(0,helpers_helpers/* isBlankLine */.pB)(lastLine)) {
+      (0,helpers_helpers/* addError */.CN)(
         onError,
         lastLineNumber,
         undefined,
@@ -56301,7 +56300,7 @@ function fencedCodeBlockStyleFor(markup) {
   }
 };
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md048 = ({
   "names": [ "MD048", "code-fence-style" ],
   "description": "Code fence style",
@@ -56318,7 +56317,7 @@ function fencedCodeBlockStyleFor(markup) {
       if (expectedStyle === "consistent") {
         expectedStyle = fencedCodeBlockStyleFor(text);
       }
-      (0,helpers/* addErrorDetailIf */.qC)(
+      (0,helpers_helpers/* addErrorDetailIf */.qC)(
         onError,
         startLine,
         expectedStyle,
@@ -56352,8 +56351,8 @@ function emphasisOrStrongStyleFor(markup) {
 };
 
 /**
- * @param {import("./markdownlint.mjs").RuleParams} params Rule parameters.
- * @param {import("./markdownlint.mjs").RuleOnError} onError Error-reporting callback.
+ * @param {import("markdownlint").RuleParams} params Rule parameters.
+ * @param {import("markdownlint").RuleOnError} onError Error-reporting callback.
  * @param {import("micromark-util-types").TokenType} type Token type.
  * @param {import("micromark-util-types").TokenType} typeSequence Token sequence type.
  * @param {"*" | "**"} asterisk Asterisk kind.
@@ -56388,7 +56387,7 @@ const impl =
           );
           if (!underscoreIntraword) {
             for (const sequence of [ startSequence, endSequence ]) {
-              (0,helpers/* addError */.CN)(
+              (0,helpers_helpers/* addError */.CN)(
                 onError,
                 sequence.startLine,
                 `Expected: ${style}; Actual: ${markupStyle}`,
@@ -56407,7 +56406,7 @@ const impl =
     }
   };
 
-/** @type {import("./markdownlint.mjs").Rule[]} */
+/** @type {import("markdownlint").Rule[]} */
 /* harmony default export */ const md049_md050 = ([
   {
     "names": [ "MD049", "emphasis-style" ],
@@ -56453,8 +56452,8 @@ const impl =
 
 
 // Regular expression for identifying HTML anchor names
-const idRe = (0,helpers/* getHtmlAttributeRe */.Xi)("id");
-const nameRe = (0,helpers/* getHtmlAttributeRe */.Xi)("name");
+const idRe = (0,helpers_helpers/* getHtmlAttributeRe */.Xi)("id");
+const nameRe = (0,helpers_helpers/* getHtmlAttributeRe */.Xi)("name");
 const anchorRe = /\{(#[a-z\d]+(?:[-_][a-z\d]+)*)\}/gu;
 const lineFragmentRe = /^#(?:L\d+(?:C\d+)?-L\d+(?:C\d+)?|L\d+)$/;
 
@@ -56468,7 +56467,7 @@ const tokensInclude = new Set(
  * Converts a Markdown heading into an HTML fragment according to the rules
  * used by GitHub.
  *
- * @param {import("../helpers/micromark-helpers.cjs").Token} headingText Heading text token.
+ * @param {import("markdownlint").MicromarkToken} headingText Heading text token.
  * @returns {string} Fragment string for heading.
  */
 function convertHeadingToHTMLFragment(headingText) {
@@ -56497,7 +56496,7 @@ function convertHeadingToHTMLFragment(headingText) {
 /**
  * Unescapes the text of a String-type micromark Token.
  *
- * @param {import("../helpers/micromark-helpers.cjs").Token} token String-type micromark Token.
+ * @param {import("markdownlint").MicromarkToken} token String-type micromark Token.
  * @returns {string} Unescaped token text.
  */
 function unescapeStringTokenText(token) {
@@ -56506,7 +56505,7 @@ function unescapeStringTokenText(token) {
     .join("");
 }
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md051 = ({
   "names": [ "MD051", "link-fragments" ],
   "description": "Link fragments should be valid",
@@ -56549,7 +56548,7 @@ function unescapeStringTokenText(token) {
     }
 
     // Process link and definition fragments
-    /** @type {import("../helpers/micromark-helpers.cjs").TokenType[][]} */
+    /** @type {import("markdownlint").MicromarkTokenType[][]} */
     const parentChilds = [
       [ "link", "resourceDestinationString" ],
       [ "definition", "definitionDestinationString" ]
@@ -56586,7 +56585,7 @@ function unescapeStringTokenText(token) {
               // @ts-ignore
               (fixInfo || {}).insertText = mixedCaseKey;
               if (!ignoreCase && (mixedCaseKey !== text)) {
-                (0,helpers/* addError */.CN)(
+                (0,helpers_helpers/* addError */.CN)(
                   onError,
                   link.startLine,
                   `Expected: ${mixedCaseKey}; Actual: ${text}`,
@@ -56596,7 +56595,7 @@ function unescapeStringTokenText(token) {
                 );
               }
             } else {
-              (0,helpers/* addError */.CN)(
+              (0,helpers_helpers/* addError */.CN)(
                 onError,
                 link.startLine,
                 undefined,
@@ -56617,7 +56616,7 @@ function unescapeStringTokenText(token) {
 
 
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md052 = ({
   "names": [ "MD052", "reference-links-images" ],
   "description":
@@ -56639,7 +56638,7 @@ function unescapeStringTokenText(token) {
           const [ lineIndex, index, length ] = data;
           // Context will be incomplete if reporting for a multi-line link
           const context = lines[lineIndex].slice(index, index + length);
-          (0,helpers/* addError */.CN)(
+          (0,helpers_helpers/* addError */.CN)(
             onError,
             lineIndex + 1,
             `Missing link or image reference definition: "${label}"`,
@@ -56660,7 +56659,7 @@ function unescapeStringTokenText(token) {
 
 const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md053 = ({
   "names": [ "MD053", "link-image-reference-definitions" ],
   "description": "Link and image reference definitions should be needed",
@@ -56686,11 +56685,11 @@ const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
         !shortcuts.has(label)
       ) {
         const line = lines[lineIndex];
-        (0,helpers/* addError */.CN)(
+        (0,helpers_helpers/* addError */.CN)(
           onError,
           lineIndex + 1,
           `Unused link or image reference definition: "${label}"`,
-          (0,helpers/* ellipsify */.qq)(line),
+          (0,helpers_helpers/* ellipsify */.qq)(line),
           [ 1, line.length ],
           singleLineDefinition(line) ? deleteFixInfo : undefined
         );
@@ -56701,11 +56700,11 @@ const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
       const [ label, lineIndex ] = duplicateDefinition;
       if (!ignored.has(label)) {
         const line = lines[lineIndex];
-        (0,helpers/* addError */.CN)(
+        (0,helpers_helpers/* addError */.CN)(
           onError,
           lineIndex + 1,
           `Duplicate link or image reference definition: "${label}"`,
-          (0,helpers/* ellipsify */.qq)(line),
+          (0,helpers_helpers/* ellipsify */.qq)(line),
           [ 1, line.length ],
           singleLineDefinition(line) ? deleteFixInfo : undefined
         );
@@ -56735,7 +56734,7 @@ const autolinkAble = (destination) => {
   return !autolinkDisallowedRe.test(destination);
 };
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md054 = ({
   "names": [ "MD054", "link-image-style" ],
   "description": "Link and image style",
@@ -56822,10 +56821,10 @@ const autolinkAble = (destination) => {
             };
           }
         }
-        (0,helpers/* addErrorContext */.Xr)(
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           startLine,
-          text.replace(helpers/* nextLinesRe */.gi, ""),
+          text.replace(helpers_helpers/* nextLinesRe */.gi, ""),
           undefined,
           undefined,
           range,
@@ -56852,7 +56851,7 @@ const makeRange = (start, end) => [ start, end - start + 1 ];
 
 /** @typedef {import("micromark-extension-gfm-table")} */
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md055 = ({
   "names": [ "MD055", "table-pipe-style" ],
   "description": "Table pipe style",
@@ -56884,7 +56883,7 @@ const makeRange = (start, end) => [ start, end - start + 1 ];
         expectedTrailingPipe = actualTrailingPipe;
       }
       if (actualLeadingPipe !== expectedLeadingPipe) {
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           firstCell.startLine,
           expectedStyle,
@@ -56895,7 +56894,7 @@ const makeRange = (start, end) => [ start, end - start + 1 ];
         );
       }
       if (actualTrailingPipe !== expectedTrailingPipe) {
-        (0,helpers/* addErrorDetailIf */.qC)(
+        (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           lastCell.endLine,
           expectedStyle,
@@ -56920,7 +56919,7 @@ const md056_makeRange = (start, end) => [ start, end - start + 1 ];
 
 /** @typedef {import("micromark-extension-gfm-table")} */
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md056 = ({
   "names": [ "MD056", "table-column-count" ],
   "description": "Table column count",
@@ -56948,7 +56947,7 @@ const md056_makeRange = (start, end) => [ start, end - start + 1 ];
         detail = "Too many cells, extra data will be missing";
         range = md056_makeRange(cells[expectedCount].startColumn, row.endColumn - 1);
       }
-      (0,helpers/* addErrorDetailIf */.qC)(
+      (0,helpers_helpers/* addErrorDetailIf */.qC)(
         onError,
         row.endLine,
         expectedCount,
@@ -56970,7 +56969,7 @@ const md056_makeRange = (start, end) => [ start, end - start + 1 ];
 
 /** @typedef {import("micromark-extension-gfm-table")} */
 
-/** @type {import("./markdownlint.mjs").Rule} */
+/** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md058 = ({
   "names": [ "MD058", "blanks-around-tables" ],
   "description": "Tables should be surrounded by blank lines",
@@ -56986,8 +56985,8 @@ const md056_makeRange = (start, end) => [ start, end - start + 1 ];
 
       // Look for a blank line above the table
       const firstLineNumber = table.startLine;
-      if (!(0,helpers/* isBlankLine */.pB)(lines[firstLineNumber - 2])) {
-        (0,helpers/* addErrorContext */.Xr)(
+      if (!(0,helpers_helpers/* isBlankLine */.pB)(lines[firstLineNumber - 2])) {
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           firstLineNumber,
           lines[firstLineNumber - 1].trim(),
@@ -57002,8 +57001,8 @@ const md056_makeRange = (start, end) => [ start, end - start + 1 ];
 
       // Look for a blank line below the table
       const lastLineNumber = table.endLine;
-      if (!(0,helpers/* isBlankLine */.pB)(lines[lastLineNumber])) {
-        (0,helpers/* addErrorContext */.Xr)(
+      if (!(0,helpers_helpers/* isBlankLine */.pB)(lines[lastLineNumber])) {
+        (0,helpers_helpers/* addErrorContext */.Xr)(
           onError,
           lastLineNumber,
           lines[lastLineNumber - 1].trim(),
@@ -57154,7 +57153,6 @@ const dynamicRequire = (0,external_node_module_namespaceObject.createRequire)(im
 
 
 
-
 /**
  * Validate the list of rules for structure and reuse.
  *
@@ -57180,7 +57178,7 @@ function validateRuleList(ruleList, synchronous) {
       const value = rule[property];
       if (!result &&
         (!value || !Array.isArray(value) || (value.length === 0) ||
-         !value.every(helpers/* isString */.Kg) || value.some(helpers/* isEmptyString */.jw))) {
+         !value.every(helpers_helpers/* isString */.Kg) || value.some(helpers_helpers/* isEmptyString */.jw))) {
         result = newError(property, value);
       }
     }
@@ -57206,7 +57204,7 @@ function validateRuleList(ruleList, synchronous) {
     if (
       !result &&
       rule.information &&
-      !helpers/* isUrl */.gU(rule.information)
+      !helpers_helpers/* isUrl */.gU(rule.information)
     ) {
       result = newError("information", rule.information);
     }
@@ -57324,7 +57322,7 @@ function removeFrontMatter(content, frontMatter) {
     if (frontMatterMatch && !frontMatterMatch.index) {
       const contentMatched = frontMatterMatch[0];
       content = content.slice(contentMatched.length);
-      frontMatterLines = contentMatched.split(helpers/* newLineRe */.Or);
+      frontMatterLines = contentMatched.split(helpers_helpers/* newLineRe */.Or);
       if ((frontMatterLines.length > 0) &&
           (frontMatterLines[frontMatterLines.length - 1] === "")) {
         frontMatterLines.length--;
@@ -57478,7 +57476,7 @@ function getEnabledRulesPerLineNumber(
     for (const [ lineIndex, line ] of input.entries()) {
       if (!noInlineConfig) {
         let match = null;
-        while ((match = helpers/* inlineCommentStartRe */.q5.exec(line))) {
+        while ((match = helpers_helpers/* inlineCommentStartRe */.q5.exec(line))) {
           const action = match[2].toUpperCase();
           const startIndex = match.index + match[1].length;
           const endIndex = line.indexOf("-->", startIndex);
@@ -57625,7 +57623,7 @@ function lintContent(
   const { effectiveConfig, enabledRulesPerLineNumber, enabledRuleList } =
     getEnabledRulesPerLineNumber(
       ruleList,
-      content.split(helpers/* newLineRe */.Or),
+      content.split(helpers_helpers/* newLineRe */.Or),
       frontMatterLines,
       noInlineConfig,
       config,
@@ -57643,9 +57641,9 @@ function lintContent(
   );
   // Hide the content of HTML comments from rules
   const preClearedContent = content;
-  content = helpers/* clearHtmlCommentText */.X6(content);
+  content = helpers_helpers/* clearHtmlCommentText */.X6(content);
   // Parse content into lines and get markdown-it tokens
-  const lines = content.split(helpers/* newLineRe */.Or);
+  const lines = content.split(helpers_helpers/* newLineRe */.Or);
   const markdownitTokens = needMarkdownItTokens ?
     dynamicRequire("./markdownit.cjs").getMarkdownItTokens(markdownItPlugins, preClearedContent, lines) :
     [];
@@ -57711,7 +57709,7 @@ function lintContent(
     // eslint-disable-next-line jsdoc/require-jsdoc
     function onError(errorInfo) {
       if (!errorInfo ||
-        !helpers/* isNumber */.Et(errorInfo.lineNumber) ||
+        !helpers_helpers/* isNumber */.Et(errorInfo.lineNumber) ||
         (errorInfo.lineNumber < 1) ||
         (errorInfo.lineNumber > lines.length)) {
         throwError("lineNumber");
@@ -57721,23 +57719,23 @@ function lintContent(
         return;
       }
       if (errorInfo.detail &&
-        !helpers/* isString */.Kg(errorInfo.detail)) {
+        !helpers_helpers/* isString */.Kg(errorInfo.detail)) {
         throwError("detail");
       }
       if (errorInfo.context &&
-        !helpers/* isString */.Kg(errorInfo.context)) {
+        !helpers_helpers/* isString */.Kg(errorInfo.context)) {
         throwError("context");
       }
       if (errorInfo.information &&
-        !helpers/* isUrl */.gU(errorInfo.information)) {
+        !helpers_helpers/* isUrl */.gU(errorInfo.information)) {
         throwError("information");
       }
       if (errorInfo.range &&
         (!Array.isArray(errorInfo.range) ||
           (errorInfo.range.length !== 2) ||
-          !helpers/* isNumber */.Et(errorInfo.range[0]) ||
+          !helpers_helpers/* isNumber */.Et(errorInfo.range[0]) ||
           (errorInfo.range[0] < 1) ||
-          !helpers/* isNumber */.Et(errorInfo.range[1]) ||
+          !helpers_helpers/* isNumber */.Et(errorInfo.range[1]) ||
           (errorInfo.range[1] < 1) ||
           ((errorInfo.range[0] + errorInfo.range[1] - 1) >
           lines[errorInfo.lineNumber - 1].length))) {
@@ -57746,11 +57744,11 @@ function lintContent(
       const fixInfo = errorInfo.fixInfo;
       const cleanFixInfo = {};
       if (fixInfo) {
-        if (!helpers/* isObject */.Gv(fixInfo)) {
+        if (!helpers_helpers/* isObject */.Gv(fixInfo)) {
           throwError("fixInfo");
         }
         if (fixInfo.lineNumber !== undefined) {
-          if ((!helpers/* isNumber */.Et(fixInfo.lineNumber) ||
+          if ((!helpers_helpers/* isNumber */.Et(fixInfo.lineNumber) ||
             (fixInfo.lineNumber < 1) ||
             (fixInfo.lineNumber > lines.length))) {
             throwError("fixInfo.lineNumber");
@@ -57760,7 +57758,7 @@ function lintContent(
         }
         const effectiveLineNumber = fixInfo.lineNumber || errorInfo.lineNumber;
         if (fixInfo.editColumn !== undefined) {
-          if ((!helpers/* isNumber */.Et(fixInfo.editColumn) ||
+          if ((!helpers_helpers/* isNumber */.Et(fixInfo.editColumn) ||
             (fixInfo.editColumn < 1) ||
             (fixInfo.editColumn >
               lines[effectiveLineNumber - 1].length + 1))) {
@@ -57769,7 +57767,7 @@ function lintContent(
           cleanFixInfo.editColumn = fixInfo.editColumn;
         }
         if (fixInfo.deleteCount !== undefined) {
-          if ((!helpers/* isNumber */.Et(fixInfo.deleteCount) ||
+          if ((!helpers_helpers/* isNumber */.Et(fixInfo.deleteCount) ||
             (fixInfo.deleteCount < -1) ||
             (fixInfo.deleteCount >
               lines[effectiveLineNumber - 1].length))) {
@@ -57778,7 +57776,7 @@ function lintContent(
           cleanFixInfo.deleteCount = fixInfo.deleteCount;
         }
         if (fixInfo.insertText !== undefined) {
-          if (!helpers/* isString */.Kg(fixInfo.insertText)) {
+          if (!helpers_helpers/* isString */.Kg(fixInfo.insertText)) {
             throwError("fixInfo.insertText");
           }
           cleanFixInfo.insertText = fixInfo.insertText;
@@ -57972,10 +57970,10 @@ function lintInput(options, synchronous, callback) {
     [ options.customRules || [] ]
       .flat()
       .map((rule) => ({
-        "names": helpers/* cloneIfArray */.YW(rule.names),
+        "names": helpers_helpers/* cloneIfArray */.YW(rule.names),
         "description": rule.description,
-        "information": helpers/* cloneIfUrl */.c0(rule.information),
-        "tags": helpers/* cloneIfArray */.YW(rule.tags),
+        "information": helpers_helpers/* cloneIfUrl */.c0(rule.information),
+        "tags": helpers_helpers/* cloneIfArray */.YW(rule.tags),
         "parser": rule.parser,
         "asynchronous": rule.asynchronous,
         "function": rule.function
@@ -57998,7 +57996,7 @@ function lintInput(options, synchronous, callback) {
   const config = options.config || { "default": true };
   const configParsers = options.configParsers || null;
   const frontMatter = (options.frontMatter === undefined) ?
-    helpers/* frontMatterRe */.Q9 :
+    helpers_helpers/* frontMatterRe */.Q9 :
     options.frontMatter;
   const handleRuleFailures = !!options.handleRuleFailures;
   const noInlineConfig = !!options.noInlineConfig;
@@ -58098,30 +58096,35 @@ function lintInput(options, synchronous, callback) {
  * @param {LintCallback} callback Callback (err, result) function.
  * @returns {void}
  */
-function markdownlint(options, callback) {
+function lintAsync(options, callback) {
   return lintInput(options, false, callback);
 }
-
-const markdownlintPromisify = external_node_util_.promisify && (0,external_node_util_.promisify)(markdownlint);
 
 /**
  * Lint specified Markdown files.
  *
- * @param {Options} options Configuration options.
+ * @param {Options | null} options Configuration options.
  * @returns {Promise<LintResults>} Results object.
  */
-function markdownlintPromise(options) {
-  // @ts-ignore
-  return markdownlintPromisify(options);
+function lintPromise(options) {
+  return new Promise((resolve, reject) => {
+    lintAsync(options, (error, results) => {
+      if (error || !results) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
 }
 
 /**
- * Lint specified Markdown files synchronously.
+ * Lint specified Markdown files.
  *
  * @param {Options | null} options Configuration options.
  * @returns {LintResults} Results object.
  */
-function markdownlintSync(options) {
+function lintSync(options) {
   let results = null;
   lintInput(options, true, function callback(error, res) {
     if (error) {
@@ -58173,8 +58176,8 @@ function resolveConfigExtends(configFile, referenceId, fs, callback) {
  * @returns {string} Resolved path to file.
  */
 function resolveConfigExtendsSync(configFile, referenceId, fs) {
-  const configFileDirname = external_node_path_namespaceObject.dirname(configFile);
-  const resolvedExtendsFile = external_node_path_namespaceObject.resolve(configFileDirname, referenceId);
+  const configFileDirname = path.dirname(configFile);
+  const resolvedExtendsFile = path.resolve(configFileDirname, referenceId);
   try {
     fs.accessSync(resolvedExtendsFile);
     return resolvedExtendsFile;
@@ -58197,7 +58200,7 @@ function resolveConfigExtendsSync(configFile, referenceId, fs) {
  *
  * @param {Configuration} config Configuration object.
  * @param {string} file Configuration file name.
- * @param {ConfigurationParser[]} parsers Parsing
+ * @param {ConfigurationParser[] | undefined} parsers Parsing
  * function(s).
  * @param {Object} fs File system implementation.
  * @param {ReadConfigCallback} callback Callback (err, result) function.
@@ -58208,10 +58211,10 @@ function extendConfig(config, file, parsers, fs, callback) {
   if (configExtends) {
     return resolveConfigExtends(
       file,
-      helpers/* expandTildePath */.ww(configExtends, external_node_os_namespaceObject_0),
+      helpers_helpers/* expandTildePath */.ww(configExtends, external_node_os_namespaceObject_0),
       fs,
       // eslint-disable-next-line no-use-before-define
-      (_, resolvedExtends) => readConfig(
+      (_, resolvedExtends) => readConfigAsync(
         // @ts-ignore
         resolvedExtends,
         parsers,
@@ -58233,33 +58236,38 @@ function extendConfig(config, file, parsers, fs, callback) {
   return callback(null, config);
 }
 
-const extendConfigPromisify = external_node_util_.promisify && (0,external_node_util_.promisify)(extendConfig);
-
 /**
  * Extend specified configuration object.
  *
  * @param {Configuration} config Configuration object.
  * @param {string} file Configuration file name.
- * @param {ConfigurationParser[]} [parsers] Parsing function(s).
- * @param {Object} [fs] File system implementation.
+ * @param {ConfigurationParser[] | undefined} parsers Parsing function(s).
+ * @param {Object} fs File system implementation.
  * @returns {Promise<Configuration>} Configuration object.
  */
 function extendConfigPromise(config, file, parsers, fs) {
-  // @ts-ignore
-  return extendConfigPromisify(config, file, parsers, fs);
+  return new Promise((resolve, reject) => {
+    extendConfig(config, file, parsers, fs, (error, results) => {
+      if (error || !results) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
 }
 
 /**
  * Read specified configuration file.
  *
  * @param {string} file Configuration file name.
- * @param {ConfigurationParser[] | ReadConfigCallback} parsers Parsing
+ * @param {ConfigurationParser[] | ReadConfigCallback} [parsers] Parsing
  * function(s).
  * @param {Object} [fs] File system implementation.
  * @param {ReadConfigCallback} [callback] Callback (err, result) function.
  * @returns {void}
  */
-function readConfig(file, parsers, fs, callback) {
+function readConfigAsync(file, parsers, fs, callback) {
   if (!callback) {
     if (fs) {
       callback = fs;
@@ -58275,7 +58283,7 @@ function readConfig(file, parsers, fs, callback) {
     fs = external_node_fs_namespaceObject_0;
   }
   // Read file
-  file = helpers/* expandTildePath */.ww(file, external_node_os_namespaceObject_0);
+  file = helpers_helpers/* expandTildePath */.ww(file, external_node_os_namespaceObject_0);
   fs.readFile(file, "utf8", (err, content) => {
     if (err) {
       // @ts-ignore
@@ -58294,8 +58302,6 @@ function readConfig(file, parsers, fs, callback) {
   });
 }
 
-const readConfigPromisify = external_node_util_.promisify && (0,external_node_util_.promisify)(readConfig);
-
 /**
  * Read specified configuration file.
  *
@@ -58305,25 +58311,31 @@ const readConfigPromisify = external_node_util_.promisify && (0,external_node_ut
  * @returns {Promise<Configuration>} Configuration object.
  */
 function readConfigPromise(file, parsers, fs) {
-  // @ts-ignore
-  return readConfigPromisify(file, parsers, fs);
+  return new Promise((resolve, reject) => {
+    readConfigAsync(file, parsers, fs, (error, results) => {
+      if (error || !results) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
 }
 
 /**
- * Read specified configuration file synchronously.
+ * Read specified configuration file.
  *
  * @param {string} file Configuration file name.
  * @param {ConfigurationParser[]} [parsers] Parsing function(s).
  * @param {Object} [fs] File system implementation.
  * @returns {Configuration} Configuration object.
- * @throws An Error if processing fails.
  */
 function readConfigSync(file, parsers, fs) {
   if (!fs) {
-    fs = external_node_fs_namespaceObject_0;
+    fs = nodeFs;
   }
   // Read file
-  file = helpers/* expandTildePath */.ww(file, external_node_os_namespaceObject_0);
+  file = helpers.expandTildePath(file, os);
   const content = fs.readFileSync(file, "utf8");
   // Try to parse file
   const { config, message } = parseConfiguration(file, content, parsers);
@@ -58336,7 +58348,7 @@ function readConfigSync(file, parsers, fs) {
     delete config.extends;
     const resolvedExtends = resolveConfigExtendsSync(
       file,
-      helpers/* expandTildePath */.ww(configExtends, external_node_os_namespaceObject_0),
+      helpers.expandTildePath(configExtends, os),
       fs
     );
     return {
@@ -58387,8 +58399,8 @@ function applyFix(line, fixInfo, lineEnding = "\n") {
  * @returns {string} Fixed content.
  */
 function applyFixes(input, errors) {
-  const lineEnding = helpers/* getPreferredLineEnding */.Z_(input, external_node_os_namespaceObject_0);
-  const lines = input.split(helpers/* newLineRe */.Or);
+  const lineEnding = helpers_helpers/* getPreferredLineEnding */.Z_(input, external_node_os_namespaceObject_0);
+  const lines = input.split(helpers_helpers/* newLineRe */.Or);
   // Normalize fixInfo objects
   let fixInfos = errors
     .filter((error) => error.fixInfo)
@@ -58467,20 +58479,6 @@ function applyFixes(input, errors) {
 function getVersion() {
   return version;
 }
-
-// Export a/synchronous/Promise APIs
-markdownlint.sync = markdownlintSync;
-markdownlint.readConfig = readConfig;
-markdownlint.readConfigSync = readConfigSync;
-markdownlint.getVersion = getVersion;
-markdownlint.promises = {
-  "markdownlint": markdownlintPromise,
-  "extendConfig": extendConfigPromise,
-  "readConfig": readConfigPromise
-};
-markdownlint.applyFix = applyFix;
-markdownlint.applyFixes = applyFixes;
-/* harmony default export */ const lib_markdownlint = (markdownlint);
 
 // Type declarations
 
@@ -58746,6 +58744,44 @@ markdownlint.applyFixes = applyFixes;
  * @param {string} [path] Resolved path to file.
  * @returns {void}
  */
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/exports.mjs
+// @ts-check
+
+
+
+/** @typedef {import("./markdownlint.mjs").Configuration} Configuration */
+/** @typedef {import("./markdownlint.mjs").ConfigurationParser} ConfigurationParser */
+/** @typedef {import("./markdownlint.mjs").ConfigurationStrict} ConfigurationStrict */
+/** @typedef {import("./markdownlint.mjs").FixInfo} FixInfo */
+/** @typedef {import("./markdownlint.mjs").LintCallback} LintCallback */
+/** @typedef {import("./markdownlint.mjs").LintContentCallback} LintContentCallback */
+/** @typedef {import("./markdownlint.mjs").LintError} LintError */
+/** @typedef {import("./markdownlint.mjs").LintResults} LintResults */
+/** @typedef {import("./markdownlint.mjs").MarkdownItToken} MarkdownItToken */
+/** @typedef {import("./markdownlint.mjs").MarkdownParsers} MarkdownParsers */
+/** @typedef {import("./markdownlint.mjs").MicromarkToken} MicromarkToken */
+/** @typedef {import("./markdownlint.mjs").MicromarkTokenType} MicromarkTokenType */
+/** @typedef {import("./markdownlint.mjs").Options} Options */
+/** @typedef {import("./markdownlint.mjs").ParserMarkdownIt} ParserMarkdownIt */
+/** @typedef {import("./markdownlint.mjs").ParserMicromark} ParserMicromark */
+/** @typedef {import("./markdownlint.mjs").Plugin} Plugin */
+/** @typedef {import("./markdownlint.mjs").ReadConfigCallback} ReadConfigCallback */
+/** @typedef {import("./markdownlint.mjs").ResolveConfigExtendsCallback} ResolveConfigExtendsCallback */
+/** @typedef {import("./markdownlint.mjs").Rule} Rule */
+/** @typedef {import("./markdownlint.mjs").RuleConfiguration} RuleConfiguration */
+/** @typedef {import("./markdownlint.mjs").RuleFunction} RuleFunction */
+/** @typedef {import("./markdownlint.mjs").RuleOnError} RuleOnError */
+/** @typedef {import("./markdownlint.mjs").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
+/** @typedef {import("./markdownlint.mjs").RuleOnErrorFixInfoNormalized} RuleOnErrorFixInfoNormalized */
+/** @typedef {import("./markdownlint.mjs").RuleOnErrorInfo} RuleOnErrorInfo */
+/** @typedef {import("./markdownlint.mjs").RuleParams} RuleParams */
+/** @typedef {import("./markdownlint.mjs").ToStringCallback} ToStringCallback */
+
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/exports-promise.mjs
+// @ts-check
+
+
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/append-to-array.mjs
 // @ts-check
@@ -62740,16 +62776,7 @@ const pathPosix = external_node_path_namespaceObject.posix;
 
 
 
-const {
-  applyFixes: markdownlint_cli2_applyFixes,
-  "getVersion": getLibraryVersion,
-  "promises": markdownlintPromises
-} = lib_markdownlint;
-const {
-  markdownlint: markdownlint_cli2_markdownlint,
-  "extendConfig": markdownlintExtendConfig,
-  "readConfig": markdownlintReadConfig
-} = markdownlintPromises;
+
 
 
 
@@ -62759,7 +62786,7 @@ const {
 const packageName = "markdownlint-cli2";
 const packageVersion = "0.15.0";
 const libraryName = "markdownlint";
-const libraryVersion = getLibraryVersion();
+const libraryVersion = getVersion();
 const bannerMessage = `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`;
 const dotOnlySubstitute = "*.{md,markdown}";
 const utf8 = "utf8";
@@ -62795,15 +62822,15 @@ const posixPath = (p) => p.split(external_node_path_namespaceObject.sep).join(pa
 
 // Resolves module paths relative to the specified directory
 const resolveModulePaths = (dir, modulePaths) => (
-  modulePaths.map((path) => external_node_path_namespaceObject.resolve(dir, (0,helpers/* expandTildePath */.ww)(path, external_node_os_namespaceObject)))
+  modulePaths.map((path) => external_node_path_namespaceObject.resolve(dir, (0,helpers_helpers/* expandTildePath */.ww)(path, external_node_os_namespaceObject)))
 );
 
 // Read a JSON(C) or YAML file and return the object
-const markdownlint_cli2_readConfig = (fs, dir, name, otherwise) => () => {
+const readConfigFile = (fs, dir, name, otherwise) => () => {
   const file = pathPosix.join(dir, name);
   return fs.promises.access(file).
     then(
-      () => markdownlintReadConfig(
+      () => readConfigPromise(
         file,
         getParsers(),
         fs
@@ -62819,7 +62846,7 @@ const importOrRequireResolve = async (dirOrDirs, id, noRequire) => {
       return null;
     }
     const dirs = Array.isArray(dirOrDirs) ? dirOrDirs : [ dirOrDirs ];
-    const expandId = (0,helpers/* expandTildePath */.ww)(id, external_node_os_namespaceObject);
+    const expandId = (0,helpers_helpers/* expandTildePath */.ww)(id, external_node_os_namespaceObject);
     const errors = [];
     try {
       return resolve_and_require(markdownlint_cli2_dynamicRequire, expandId, dirs);
@@ -62878,7 +62905,7 @@ const importOrRequireConfig = (fs, dir, name, noRequire, otherwise) => () => {
 // Extend a config object if it has 'extends' property
 const getExtendedConfig = (config, configPath, fs) => {
   if (config.extends) {
-    return markdownlintExtendConfig(
+    return extendConfigPromise(
       config,
       configPath,
       getParsers(),
@@ -62911,7 +62938,7 @@ const readOptionsOrConfig = async (configPath, fs, noRequire) => {
       basename.endsWith(".markdownlint.yaml") ||
       basename.endsWith(".markdownlint.yml")
     ) {
-      config = await markdownlintReadConfig(configPath, getParsers(), fs);
+      config = await readConfigPromise(configPath, getParsers(), fs);
     } else if (
       basename.endsWith(".markdownlint.cjs") ||
       basename.endsWith(".markdownlint.mjs")
@@ -63102,19 +63129,19 @@ const getAndProcessDirInfo = (
 
     // Load markdownlint object(s)
     const readConfigs =
-      markdownlint_cli2_readConfig(
+      readConfigFile(
         fs,
         dir,
         ".markdownlint.jsonc",
-        markdownlint_cli2_readConfig(
+        readConfigFile(
           fs,
           dir,
           ".markdownlint.json",
-          markdownlint_cli2_readConfig(
+          readConfigFile(
             fs,
             dir,
             ".markdownlint.yaml",
-            markdownlint_cli2_readConfig(
+            readConfigFile(
               fs,
               dir,
               ".markdownlint.yml",
@@ -63522,7 +63549,7 @@ const lintFiles = (fs, dirInfos, fileContents) => {
       fs
     };
     // Invoke markdownlint
-    let task = markdownlint_cli2_markdownlint(options);
+    let task = lintPromise(options);
     // For any fixable errors, read file, apply fixes, and write it back
     if (markdownlintOptions.fix) {
       task = task.then((results) => {
@@ -63538,14 +63565,14 @@ const lintFiles = (fs, dirInfos, fileContents) => {
             options.files.push(fileName);
             subTasks.push(fs.promises.readFile(fileName, utf8).
               then((original) => {
-                const fixed = markdownlint_cli2_applyFixes(original, errorInfos);
+                const fixed = applyFixes(original, errorInfos);
                 return fs.promises.writeFile(fileName, fixed, utf8);
               })
             );
           }
         }
         return Promise.all(subTasks).
-          then(() => markdownlint_cli2_markdownlint(options)).
+          then(() => lintPromise(options)).
           then((fixResults) => ({
             ...results,
             ...fixResults
