@@ -50498,7 +50498,7 @@ const resolveAndRequire = __nccwpck_require__(2034);
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.15.0";
+const packageVersion = "0.16.0";
 const libraryName = "markdownlint";
 const libraryVersion = getLibraryVersion();
 const bannerMessage = `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`;
@@ -50565,11 +50565,18 @@ const importOrRequireResolve = async (dirOrDirs, id, noRequire) => {
     const dirs = Array.isArray(dirOrDirs) ? dirOrDirs : [ dirOrDirs ];
     const expandId = expandTildePath(id);
     const errors = [];
+    // Try to load via require(...)
     try {
-      return resolveAndRequire(dynamicRequire, expandId, dirs);
+      const isModule = /\.mjs$/iu.test(expandId);
+      if (!isModule) {
+        // Try not to use require for modules due to breaking change in Node 22.12:
+        // https://github.com/nodejs/node/releases/tag/v22.12.0
+        return resolveAndRequire(dynamicRequire, expandId, dirs);
+      }
     } catch (error) {
       errors.push(error);
     }
+    // Try to load via import(...)
     try {
       // eslint-disable-next-line n/no-unsupported-features/node-builtins
       const isURL = !pathDefault.isAbsolute(expandId) && URL.canParse(expandId);
@@ -50582,6 +50589,7 @@ const importOrRequireResolve = async (dirOrDirs, id, noRequire) => {
     } catch (error) {
       errors.push(error);
     }
+    // Give up
     throw new AggregateError(
       errors,
       `Unable to require or import module '${id}'.`
