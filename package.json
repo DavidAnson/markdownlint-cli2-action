@@ -28,7 +28,7 @@
     "markdownlint-cli2": "0.16.0"
   },
   "devDependencies": {
-    "@eslint/js": "9.16.0",
+    "@eslint/js": "9.17.0",
     "@stylistic/eslint-plugin": "2.12.1",
     "@vercel/ncc": "0.38.3",
     "eslint": "9.16.0",
