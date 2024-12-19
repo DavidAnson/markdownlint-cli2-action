@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@actions/core": "1.11.1",
-    "markdownlint-cli2": "DavidAnson/markdownlint-cli2#esm"
+    "markdownlint-cli2": "DavidAnson/markdownlint-cli2#next"
   },
   "devDependencies": {
     "@eslint/js": "9.16.0",

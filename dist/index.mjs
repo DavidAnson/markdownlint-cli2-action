@@ -16230,7 +16230,7 @@ const kClosedResolve = Symbol('kClosedResolve')
 const channels = {}
 
 try {
-  const diagnosticsChannel = __nccwpck_require__(1637)
+  const diagnosticsChannel = __nccwpck_require__(4018)
   channels.sendHeaders = diagnosticsChannel.channel('undici:client:sendHeaders')
   channels.beforeConnect = diagnosticsChannel.channel('undici:client:beforeConnect')
   channels.connectError = diagnosticsChannel.channel('undici:client:connectError')
@@ -19890,7 +19890,7 @@ const channels = {}
 let extractBody
 
 try {
-  const diagnosticsChannel = __nccwpck_require__(1637)
+  const diagnosticsChannel = __nccwpck_require__(4018)
   channels.create = diagnosticsChannel.channel('undici:request:create')
   channels.bodySent = diagnosticsChannel.channel('undici:request:bodySent')
   channels.headers = diagnosticsChannel.channel('undici:request:headers')
@@ -33296,7 +33296,7 @@ module.exports = {
 
 
 
-const diagnosticsChannel = __nccwpck_require__(1637)
+const diagnosticsChannel = __nccwpck_require__(4018)
 const { uid, states } = __nccwpck_require__(5913)
 const {
   kReadyState,
@@ -34043,7 +34043,7 @@ module.exports = {
 
 
 const { Writable } = __nccwpck_require__(2203)
-const diagnosticsChannel = __nccwpck_require__(1637)
+const diagnosticsChannel = __nccwpck_require__(4018)
 const { parserStates, opcodes, states, emptyBuffer } = __nccwpck_require__(5913)
 const { kReadyState, kSentClose, kResponse, kReceivedClose } = __nccwpck_require__(2933)
 const { isValidStatusCode, failWebsocketConnection, websocketMessageReceived } = __nccwpck_require__(3574)
@@ -35304,7 +35304,7 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("crypto");
 
 /***/ }),
 
-/***/ 1637:
+/***/ 4018:
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("diagnostics_channel");
@@ -37107,11 +37107,11 @@ module.exports.Or = newLineRe;
 module.exports.gi = nextLinesRe;
 
 // @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("markdownlint").RuleOnError} RuleOnError */
+/** @typedef {import("../lib/exports.mjs").RuleOnError} RuleOnError */
 // @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("markdownlint").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
+/** @typedef {import("../lib/exports.mjs").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
 // @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
+/** @typedef {import("../lib/exports.mjs").MicromarkToken} MicromarkToken */
 // eslint-disable-next-line jsdoc/valid-types
 /** @typedef {import("micromark-extension-gfm-footnote", { with: { "resolution-mode": "import" } })} */
 // eslint-disable-next-line jsdoc/valid-types
@@ -37653,7 +37653,7 @@ const { flatTokensSymbol, htmlFlowSymbol } = __nccwpck_require__(3408);
 // eslint-disable-next-line jsdoc/valid-types
 /** @typedef {import("micromark-util-types", { with: { "resolution-mode": "import" } }).TokenType} TokenType */
 // @ts-expect-error https://github.com/microsoft/TypeScript/issues/52529
-/** @typedef {import("markdownlint").MicromarkToken} Token */
+/** @typedef {import("../lib/exports.mjs").MicromarkToken} Token */
 
 /**
  * Determines if a Micromark token is within an htmlFlow type.
@@ -37724,12 +37724,11 @@ function addRangeToSet(set, start, end) {
  * Filter a list of Micromark tokens by predicate.
  *
  * @param {Token[]} tokens Micromark tokens.
- * @param {AllowedPredicate} [allowed] Allowed token predicate.
+ * @param {AllowedPredicate} allowed Allowed token predicate.
  * @param {TransformPredicate} [transformChildren] Transform predicate.
  * @returns {Token[]} Filtered tokens.
  */
 function filterByPredicate(tokens, allowed, transformChildren) {
-  allowed = allowed || (() => true);
   const result = [];
   const queue = [
     {
@@ -37924,7 +37923,11 @@ const nonContentTokens = new Set([
   "lineEnding",
   "lineEndingBlank",
   "linePrefix",
-  "listItemIndent"
+  "listItemIndent",
+  "undefinedReference",
+  "undefinedReferenceCollapsed",
+  "undefinedReferenceFull",
+  "undefinedReferenceShortcut"
 ]);
 
 module.exports = {
@@ -38086,12 +38089,10 @@ __nccwpck_require__.d(constructs_namespaceObject, {
 var core = __nccwpck_require__(7484);
 ;// CONCATENATED MODULE: external "node:fs"
 const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
-var external_node_fs_namespaceObject_0 = /*#__PURE__*/__nccwpck_require__.t(external_node_fs_namespaceObject, 2);
 ;// CONCATENATED MODULE: external "node:module"
 const external_node_module_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:module");
 ;// CONCATENATED MODULE: external "node:os"
 const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
-var external_node_os_namespaceObject_0 = /*#__PURE__*/__nccwpck_require__.t(external_node_os_namespaceObject, 2);
 ;// CONCATENATED MODULE: external "node:path"
 const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
 ;// CONCATENATED MODULE: external "node:url"
@@ -38775,6 +38776,22 @@ const {convertPathToPattern} = out;
 
 // EXTERNAL MODULE: ./node_modules/micromatch/index.js
 var micromatch = __nccwpck_require__(8785);
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/node-imports-node.mjs
+// @ts-check
+
+
+const node_imports_node_fs = { access: external_node_fs_namespaceObject.access, accessSync: external_node_fs_namespaceObject.accessSync, readFile: external_node_fs_namespaceObject.readFile, readFileSync: external_node_fs_namespaceObject.readFileSync };
+
+
+const node_imports_node_module = { createRequire: external_node_module_namespaceObject.createRequire };
+
+
+const node_imports_node_os = { EOL: external_node_os_namespaceObject.EOL, homedir: external_node_os_namespaceObject.homedir };
+
+// eslint-disable-next-line unicorn/import-style
+
+const node_imports_node_path = { dirname: external_node_path_namespaceObject.dirname, resolve: external_node_path_namespaceObject.resolve };
+
 // EXTERNAL MODULE: ./node_modules/markdownlint/helpers/helpers.cjs
 var helpers_helpers = __nccwpck_require__(3810);
 // EXTERNAL MODULE: ./node_modules/markdownlint/helpers/micromark-helpers.cjs
@@ -38856,7 +38873,7 @@ const fixableRuleNames = (/* unused pure expression or super */ null && ([
   "MD058"
 ]));
 const homepage = "https://github.com/DavidAnson/markdownlint";
-const version = "0.37.0";
+const version = "0.37.2";
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md001.mjs
 // @ts-check
@@ -40399,13 +40416,14 @@ const isList = (token) => (
       }
 
       // Find the "visual" end of the list
+      const flattenedChildren = (0,micromark_helpers.filterByPredicate)(
+        list.children,
+        (token) => !micromark_helpers.nonContentTokens.has(token.type),
+        (token) => micromark_helpers.nonContentTokens.has(token.type) ? [] : token.children
+      );
       let endLine = list.endLine;
-      const flattenedChildren = (0,micromark_helpers.filterByPredicate)(list.children);
-      for (const child of flattenedChildren.reverse()) {
-        if (!micromark_helpers.nonContentTokens.has(child.type)) {
-          endLine = child.endLine;
-          break;
-        }
+      if (flattenedChildren.length > 0) {
+        endLine = flattenedChildren[flattenedChildren.length - 1].endLine;
       }
 
       // Look for a blank line below the list
@@ -57142,11 +57160,9 @@ for (const rule of rules) {
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/markdownlint.mjs
 // @ts-check
 
+// @ts-ignore
 
-
-const dynamicRequire = (0,external_node_module_namespaceObject.createRequire)(import.meta.url);
-
-
+const dynamicRequire = node_imports_node_module.createRequire(import.meta.url);
 
 
 
@@ -58004,7 +58020,7 @@ function lintInput(options, synchronous, callback) {
     3 :
     options.resultVersion;
   const markdownItPlugins = options.markdownItPlugins || [];
-  const fs = options.fs || external_node_fs_namespaceObject_0;
+  const fs = options.fs || node_imports_node_fs;
   const aliasToRuleNames = mapAliasToRuleNames(ruleList);
   const results = newResults(ruleList);
   let done = false;
@@ -58148,8 +58164,8 @@ function lintSync(options) {
  * @returns {void}
  */
 function resolveConfigExtends(configFile, referenceId, fs, callback) {
-  const configFileDirname = external_node_path_namespaceObject.dirname(configFile);
-  const resolvedExtendsFile = external_node_path_namespaceObject.resolve(configFileDirname, referenceId);
+  const configFileDirname = node_imports_node_path.dirname(configFile);
+  const resolvedExtendsFile = node_imports_node_path.resolve(configFileDirname, referenceId);
   fs.access(resolvedExtendsFile, (err) => {
     if (err) {
       // Not a file, try require.resolve
@@ -58211,7 +58227,7 @@ function extendConfig(config, file, parsers, fs, callback) {
   if (configExtends) {
     return resolveConfigExtends(
       file,
-      helpers_helpers/* expandTildePath */.ww(configExtends, external_node_os_namespaceObject_0),
+      helpers_helpers/* expandTildePath */.ww(configExtends, node_imports_node_os),
       fs,
       // eslint-disable-next-line no-use-before-define
       (_, resolvedExtends) => readConfigAsync(
@@ -58280,10 +58296,10 @@ function readConfigAsync(file, parsers, fs, callback) {
     }
   }
   if (!fs) {
-    fs = external_node_fs_namespaceObject_0;
+    fs = node_imports_node_fs;
   }
   // Read file
-  file = helpers_helpers/* expandTildePath */.ww(file, external_node_os_namespaceObject_0);
+  file = helpers_helpers/* expandTildePath */.ww(file, node_imports_node_os);
   fs.readFile(file, "utf8", (err, content) => {
     if (err) {
       // @ts-ignore
@@ -58399,7 +58415,7 @@ function applyFix(line, fixInfo, lineEnding = "\n") {
  * @returns {string} Fixed content.
  */
 function applyFixes(input, errors) {
-  const lineEnding = helpers_helpers/* getPreferredLineEnding */.Z_(input, external_node_os_namespaceObject_0);
+  const lineEnding = helpers_helpers/* getPreferredLineEnding */.Z_(input, node_imports_node_os);
   const lines = input.split(helpers_helpers/* newLineRe */.Or);
   // Normalize fixInfo objects
   let fixInfos = errors
@@ -58834,24 +58850,23 @@ const mergeOptions = (first, second) => {
 
 /* harmony default export */ const merge_options = (mergeOptions);
 
-;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/resolve-and-require.mjs
+;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/resolve-module.mjs
 // @ts-check
 
 /**
- * Wrapper for calling Node's require.resolve/require with an additional path.
- * @param {object} req Node's require implementation (or equivalent).
- * @param {string} id Package identifier to require.
- * @param {string[]} dirs Directories to include when resolving paths.
- * @returns {object} Exported module content.
+ * Wrapper for calling Node's require.resolve with additional paths.
+ * @param {object} require Node's require implementation (or equivalent).
+ * @param {string} request Module path to require.
+ * @param {string[]} paths Paths to resolve module location from.
+ * @returns {string} Resolved file name.
  */
-const resolveAndRequire = (req, id, dirs) => {
-  const resolvePaths = req.resolve.paths ? req.resolve.paths("") : [];
-  const paths = [ ...dirs, ...resolvePaths ];
-  const resolved = req.resolve(id, { paths });
-  return req(resolved);
+const resolveModule = (require, request, paths) => {
+  const resolvePaths = require.resolve.paths ? require.resolve.paths("") : [];
+  const allPaths = [ ...paths, ...resolvePaths ];
+  return require.resolve(request, { "paths": allPaths });
 };
 
-/* harmony default export */ const resolve_and_require = (resolveAndRequire);
+/* harmony default export */ const resolve_module = (resolveModule);
 
 // EXTERNAL MODULE: ./node_modules/jsonc-parser/lib/umd/main.js
 var main = __nccwpck_require__(9547);
@@ -62765,7 +62780,7 @@ const parsers = [
 ;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/markdownlint-cli2.mjs
 // @ts-ignore
 
-// Requires
+// Imports
 
 
 const markdownlint_cli2_dynamicRequire = (0,external_node_module_namespaceObject.createRequire)(import.meta.url);
@@ -62830,73 +62845,65 @@ const readConfigFile = (fs, dir, name, otherwise) => () => {
     );
 };
 
-// Import or resolve/require a module ID with a custom directory in the path
-const importOrRequireResolve = async (dirOrDirs, id, noRequire) => {
-  if (typeof id === "string") {
-    if (noRequire) {
-      return null;
-    }
-    const dirs = Array.isArray(dirOrDirs) ? dirOrDirs : [ dirOrDirs ];
-    const expandId = (0,helpers_helpers/* expandTildePath */.ww)(id, external_node_os_namespaceObject);
-    const errors = [];
-    // Try to load via require(...)
+// Import a module ID with a custom directory in the path
+const importModule = async (dirOrDirs, id, noImport) => {
+  if (typeof id !== "string") {
+    return id;
+  } else if (noImport) {
+    return null;
+  }
+  const dirs = Array.isArray(dirOrDirs) ? dirOrDirs : [ dirOrDirs ];
+  const expandId = (0,helpers_helpers/* expandTildePath */.ww)(id, external_node_os_namespaceObject);
+  const errors = [];
+  let moduleName = null;
+  try {
     try {
-      const isModule = /\.mjs$/iu.test(expandId);
-      if (!isModule) {
-        // Try not to use require for modules due to breaking change in Node 22.12:
-        // https://github.com/nodejs/node/releases/tag/v22.12.0
-        return resolve_and_require(markdownlint_cli2_dynamicRequire, expandId, dirs);
-      }
+      moduleName = (0,external_node_url_namespaceObject.pathToFileURL)(resolve_module(markdownlint_cli2_dynamicRequire, expandId, dirs));
     } catch (error) {
       errors.push(error);
+      moduleName =
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        (!external_node_path_namespaceObject.isAbsolute(expandId) && URL.canParse(expandId))
+          ? new URL(expandId)
+          : (0,external_node_url_namespaceObject.pathToFileURL)(external_node_path_namespaceObject.resolve(dirs[0], expandId));
     }
-    // Try to load via import(...)
-    try {
-      // eslint-disable-next-line n/no-unsupported-features/node-builtins
-      const isURL = !external_node_path_namespaceObject.isAbsolute(expandId) && URL.canParse(expandId);
-      const urlString = (
-        isURL ? new URL(expandId) : (0,external_node_url_namespaceObject.pathToFileURL)(external_node_path_namespaceObject.resolve(dirs[0], expandId))
-      ).toString();
-      // eslint-disable-next-line no-inline-comments
-      const module = await import(/* webpackIgnore: true */ urlString);
-      return module.default;
-    } catch (error) {
-      errors.push(error);
-    }
-    // Give up
+    // eslint-disable-next-line no-inline-comments
+    const module = await import(/* webpackIgnore: true */ moduleName);
+    return module.default;
+  } catch (error) {
+    errors.push(error);
     throw new AggregateError(
       errors,
-      `Unable to require or import module '${id}'.`
+      `Unable to import module '${id}'.`
     );
   }
-  return id;
 };
 
-// Import or require an array of modules by ID
-const importOrRequireIds = (dirs, ids, noRequire) => (
+// Import an array of modules by ID
+const importModuleIds = (dirs, ids, noImport) => (
   Promise.all(
     ids.map(
-      (id) => importOrRequireResolve(dirs, id, noRequire)
+      (id) => importModule(dirs, id, noImport)
     )
   ).then((results) => results.filter(Boolean))
 );
 
-// Import or require an array of modules by ID (preserving parameters)
-const importOrRequireIdsAndParams = (dirs, idsAndParams, noRequire) => (
+// Import an array of modules by ID (preserving parameters)
+const importModuleIdsAndParams = (dirs, idsAndParams, noImport) => (
   Promise.all(
     idsAndParams.map(
-      (idAndParams) => importOrRequireResolve(dirs, idAndParams[0], noRequire).
+      (idAndParams) => importModule(dirs, idAndParams[0], noImport).
         then((module) => module && [ module, ...idAndParams.slice(1) ])
     )
   ).then((results) => results.filter(Boolean))
 );
 
-// Import or require a JavaScript file and return the exported object
-const importOrRequireConfig = (fs, dir, name, noRequire, otherwise) => () => {
+// Import a JavaScript file and return the exported object
+const importConfig = (fs, dir, name, noImport, otherwise) => () => {
   const file = pathPosix.join(dir, name);
   return fs.promises.access(file).
     then(
-      () => importOrRequireResolve(dir, name, noRequire),
+      () => importModule(dir, name, noImport),
       otherwise
     );
 };
@@ -62916,7 +62923,7 @@ const getExtendedConfig = (config, configPath, fs) => {
 };
 
 // Read an options or config file in any format and return the object
-const readOptionsOrConfig = async (configPath, fs, noRequire) => {
+const readOptionsOrConfig = async (configPath, fs, noImport) => {
   const basename = pathPosix.basename(configPath);
   const dirname = pathPosix.dirname(configPath);
   let options = null;
@@ -62930,7 +62937,7 @@ const readOptionsOrConfig = async (configPath, fs, noRequire) => {
       basename.endsWith(".markdownlint-cli2.cjs") ||
       basename.endsWith(".markdownlint-cli2.mjs")
     ) {
-      options = await importOrRequireResolve(dirname, basename, noRequire);
+      options = await importModule(dirname, basename, noImport);
     } else if (
       basename.endsWith(".markdownlint.jsonc") ||
       basename.endsWith(".markdownlint.json") ||
@@ -62942,7 +62949,7 @@ const readOptionsOrConfig = async (configPath, fs, noRequire) => {
       basename.endsWith(".markdownlint.cjs") ||
       basename.endsWith(".markdownlint.mjs")
     ) {
-      config = await importOrRequireResolve(dirname, basename, noRequire);
+      config = await importModule(dirname, basename, noImport);
     } else {
       throw new Error(
         "File name should be (or end with) one of the supported types " +
@@ -63053,7 +63060,7 @@ const getAndProcessDirInfo = (
   dirToDirInfo,
   dir,
   relativeDir,
-  noRequire,
+  noImport,
   allowPackageJson
 ) => {
   // Create dirInfo
@@ -63087,10 +63094,10 @@ const getAndProcessDirInfo = (
               () => fs.promises.readFile(file, utf8).then(yaml_parse),
               () => fs.promises.access(captureFile(markdownlintCli2Cjs)).
                 then(
-                  () => importOrRequireResolve(dir, file, noRequire),
+                  () => importModule(dir, file, noImport),
                   () => fs.promises.access(captureFile(markdownlintCli2Mjs)).
                     then(
-                      () => importOrRequireResolve(dir, file, noRequire),
+                      () => importModule(dir, file, noImport),
                       () => (allowPackageJson
                         ? fs.promises.access(captureFile(packageJson))
                         // eslint-disable-next-line prefer-promise-reject-errors
@@ -63144,16 +63151,16 @@ const getAndProcessDirInfo = (
               fs,
               dir,
               ".markdownlint.yml",
-              importOrRequireConfig(
+              importConfig(
                 fs,
                 dir,
                 ".markdownlint.cjs",
-                noRequire,
-                importOrRequireConfig(
+                noImport,
+                importConfig(
                   fs,
                   dir,
                   ".markdownlint.mjs",
-                  noRequire,
+                  noImport,
                   markdownlint_cli2_noop
                 )
               )
@@ -63182,7 +63189,7 @@ const getBaseOptions = async (
   options,
   fixDefault,
   noGlobs,
-  noRequire
+  noImport
 ) => {
   const tasks = [];
   const dirToDirInfo = {};
@@ -63192,7 +63199,7 @@ const getBaseOptions = async (
     dirToDirInfo,
     baseDir,
     relativeDir,
-    noRequire,
+    noImport,
     true
   );
   await Promise.all(tasks);
@@ -63233,7 +63240,7 @@ const enumerateFiles = async (
   dirToDirInfo,
   gitignore,
   ignoreFiles,
-  noRequire
+  noImport
 ) => {
   const tasks = [];
   /** @type {import("globby").Options} */
@@ -63301,7 +63308,7 @@ const enumerateFiles = async (
       dirToDirInfo,
       dir,
       null,
-      noRequire,
+      noImport,
       false
     );
     dirInfo.files.push(file);
@@ -63314,7 +63321,7 @@ const enumerateParents = async (
   fs,
   baseDir,
   dirToDirInfo,
-  noRequire
+  noImport
 ) => {
   const tasks = [];
 
@@ -63343,7 +63350,7 @@ const enumerateParents = async (
           dirToDirInfo,
           dir,
           null,
-          noRequire,
+          noImport,
           false
         );
       lastDirInfo.parent = dirInfo;
@@ -63368,7 +63375,7 @@ const createDirInfos = async (
   optionsOverride,
   gitignore,
   ignoreFiles,
-  noRequire
+  noImport
 ) => {
   await enumerateFiles(
     fs,
@@ -63378,13 +63385,13 @@ const createDirInfos = async (
     dirToDirInfo,
     gitignore,
     ignoreFiles,
-    noRequire
+    noImport
   );
   await enumerateParents(
     fs,
     baseDir,
     dirToDirInfo,
-    noRequire
+    noImport
   );
 
   // Merge file lists with identical configuration
@@ -63415,10 +63422,10 @@ const createDirInfos = async (
       );
       if (markdownlintOptions && markdownlintOptions.customRules) {
         tasks.push(
-          importOrRequireIds(
+          importModuleIds(
             [ effectiveDir, ...effectiveModulePaths ],
             markdownlintOptions.customRules,
-            noRequire
+            noImport
           ).then((customRules) => {
             // Expand nested arrays (for packages that export multiple rules)
             markdownlintOptions.customRules = customRules.flat();
@@ -63427,10 +63434,10 @@ const createDirInfos = async (
       }
       if (markdownlintOptions && markdownlintOptions.markdownItPlugins) {
         tasks.push(
-          importOrRequireIdsAndParams(
+          importModuleIdsAndParams(
             [ effectiveDir, ...effectiveModulePaths ],
             markdownlintOptions.markdownItPlugins,
-            noRequire
+            noImport
           ).then((markdownItPlugins) => {
             markdownlintOptions.markdownItPlugins = markdownItPlugins;
           })
@@ -63623,7 +63630,7 @@ const outputSummary = async (
   modulePaths,
   logMessage,
   logError,
-  noRequire
+  noImport
 ) => {
   const errorsPresent = (summary.length > 0);
   if (errorsPresent || outputFormatters) {
@@ -63636,7 +63643,7 @@ const outputSummary = async (
     const dir = relativeDir || baseDir;
     const dirs = [ dir, ...modulePaths ];
     const formattersAndParams = outputFormatters
-      ? await importOrRequireIdsAndParams(dirs, outputFormatters, noRequire)
+      ? await importModuleIdsAndParams(dirs, outputFormatters, noImport)
       // eslint-disable-next-line no-inline-comments, unicorn/no-await-expression-member
       : [ [ (await Promise.resolve(/* import() eager */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 7928, 19))).default ] ];
     await Promise.all(formattersAndParams.map((formatterAndParams) => {
@@ -63656,7 +63663,7 @@ const markdownlint_cli2_main = async (params) => {
     optionsDefault,
     optionsOverride,
     fileContents,
-    noRequire,
+    noImport,
     allowStdin
   } = params;
   let {
@@ -63713,7 +63720,7 @@ const markdownlint_cli2_main = async (params) => {
       const resolvedConfigPath =
         posixPath(external_node_path_namespaceObject.resolve(baseDirSystem, configPath));
       optionsArgv =
-        await readOptionsOrConfig(resolvedConfigPath, fs, noRequire);
+        await readOptionsOrConfig(resolvedConfigPath, fs, noImport);
       relativeDir = pathPosix.dirname(resolvedConfigPath);
     }
     // Process arguments and get base options
@@ -63726,7 +63733,7 @@ const markdownlint_cli2_main = async (params) => {
       optionsArgv || optionsDefault,
       fixDefault,
       noGlobs,
-      noRequire
+      noImport
     );
   } finally {
     if (!baseOptions?.baseMarkdownlintOptions.noBanner) {
@@ -63785,7 +63792,7 @@ const markdownlint_cli2_main = async (params) => {
       optionsOverride,
       gitignore,
       ignoreFiles,
-      noRequire
+      noImport
     );
   // Output linting status
   if (showProgress) {
@@ -63823,7 +63830,7 @@ const markdownlint_cli2_main = async (params) => {
     modulePaths,
     logMessage,
     logError,
-    noRequire
+    noImport
   );
   // Return result
   return errorsPresent ? 1 : 0;
