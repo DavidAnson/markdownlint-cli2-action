@@ -38873,7 +38873,7 @@ const fixableRuleNames = (/* unused pure expression or super */ null && ([
   "MD058"
 ]));
 const homepage = "https://github.com/DavidAnson/markdownlint";
-const version = "0.37.2";
+const version = "0.37.3";
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md001.mjs
 // @ts-check
@@ -55758,8 +55758,8 @@ var shared = __nccwpck_require__(3408);
 
 
 
-// micromark-core-commonmark is not a dependency because this instance must match what's used by micromark
-// eslint-disable-next-line n/no-extraneous-import
+// micromark-core-commonmark must exactly match what's used by micromark for the shim below to work correctly
+// Unfortunately, omitting this dependency from package.json breaks strict dependency resolution (e.g., pnpm)
 
 
 
@@ -62802,7 +62802,7 @@ const pathPosix = external_node_path_namespaceObject.posix;
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.17.0";
+const packageVersion = "0.17.1";
 const libraryName = "markdownlint";
 const libraryVersion = getVersion();
 const bannerMessage = `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`;
