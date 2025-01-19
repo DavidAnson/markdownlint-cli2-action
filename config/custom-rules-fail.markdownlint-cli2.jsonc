@@ -1,0 +1,14 @@
+{
+  "config": {
+    "custom-rule-markdown-it": {
+      "error": true
+    },
+    "custom-rule-micromark": {
+      "error": true
+    }
+  },
+  "customRules": [
+    "../test/custom-rule-markdown-it.cjs",
+    "../test/custom-rule-micromark.cjs"
+  ]
+}

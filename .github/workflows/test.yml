@@ -51,7 +51,7 @@ jobs:
       with:
         globs: |
           *.md
-          test/*
+          test/*.md
       continue-on-error: true
       id: test
     - run: exit 1
@@ -63,7 +63,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: ./
       with:
-        globs: '*.md,test/*'
+        globs: '*.md,test/*.md'
         separator: ','
       continue-on-error: true
       id: test
@@ -78,7 +78,7 @@ jobs:
     - uses: ./
       with:
         config: 'config/test.markdownlint.jsonc'
-        globs: 'test/*'
+        globs: 'test/*.md'
       continue-on-error: true
       id: test
     - run: exit 1
@@ -91,7 +91,7 @@ jobs:
     - uses: ./
       with:
         config: 'invalid.markdownlint.jsonc'
-        globs: 'test/*'
+        globs: 'test/*.md'
       continue-on-error: true
       id: test
     - run: exit 1
@@ -104,4 +104,28 @@ jobs:
     - uses: ./
       with:
         fix: true
-        globs: 'test/*'
+        globs: 'test/*.md'
+  rules-pass:
+    name: custom rules (README.md, 0 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - run: rm .markdownlint.json
+    - uses: ./
+      with:
+        config: 'config/custom-rules-pass.markdownlint-cli2.jsonc'
+        globs: 'README.md'
+  rules-fail:
+    name: custom rules (README.md, 2 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - run: rm .markdownlint.json
+    - uses: ./
+      with:
+        config: 'config/custom-rules-fail.markdownlint-cli2.jsonc'
+        globs: 'README.md'
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'

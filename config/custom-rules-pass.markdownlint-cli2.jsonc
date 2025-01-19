@@ -1,0 +1,6 @@
+{
+  "customRules": [
+    "../test/custom-rule-markdown-it.cjs",
+    "../test/custom-rule-micromark.cjs"
+  ]
+}
