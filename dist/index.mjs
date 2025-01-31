@@ -55177,6 +55177,8 @@ function subtokenize(eventsArray) {
             otherEvent[1].type = "lineEnding";
             lineIndex = otherIndex;
           }
+        } else if (otherEvent[1].type === "linePrefix") {
+          // Move past.
         } else {
           break;
         }
