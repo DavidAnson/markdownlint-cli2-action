@@ -55177,7 +55177,7 @@ function subtokenize(eventsArray) {
             otherEvent[1].type = "lineEnding";
             lineIndex = otherIndex;
           }
-        } else if (otherEvent[1].type === "linePrefix") {
+        } else if (otherEvent[1].type === "linePrefix" || otherEvent[1].type === "listItemIndent") {
           // Move past.
         } else {
           break;
@@ -55218,7 +55218,13 @@ function subcontent(events, eventIndex) {
   let startPosition = eventIndex - 1;
   /** @type {Array<number>} */
   const startPositions = [];
-  const tokenizer = token._tokenizer || context.parser[token.contentType](token.start);
+  let tokenizer = token._tokenizer;
+  if (!tokenizer) {
+    tokenizer = context.parser[token.contentType](token.start);
+    if (token._contentTypeTextTrailing) {
+      tokenizer._contentTypeTextTrailing = true;
+    }
+  }
   const childEvents = tokenizer.events;
   /** @type {Array<[number, number]>} */
   const jumps = [];
