@@ -61110,6 +61110,7 @@ const characterEntities = {
 ;// CONCATENATED MODULE: ./node_modules/decode-named-character-reference/index.js
 
 
+// To do: next major: use `Object.hasOwn`.
 const own = {}.hasOwnProperty
 
 /**
