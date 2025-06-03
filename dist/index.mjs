@@ -7751,18 +7751,8 @@ const factory = options => new Ignore(options)
 const isPathValid = path =>
   checkPath(path && checkPath.convert(path), path, RETURN_FALSE)
 
-
-// Windows
-// --------------------------------------------------------------
 /* istanbul ignore next */
-if (
-  // Detect `process` so that it can run in browsers.
-  typeof process !== 'undefined'
-  && (
-    process.env && process.env.IGNORE_TEST_WIN32
-    || process.platform === 'win32'
-  )
-) {
+const setupWindows = () => {
   /* eslint no-control-regex: "off" */
   const makePosix = str => /^\\\\\?\\/.test(str)
   || /["<>|\u0000-\u001F]+/u.test(str)
@@ -7779,6 +7769,18 @@ if (
     || isNotRelative(path)
 }
 
+
+// Windows
+// --------------------------------------------------------------
+/* istanbul ignore next */
+if (
+  // Detect `process` so that it can run in browsers.
+  typeof process !== 'undefined'
+  && process.platform === 'win32'
+) {
+  setupWindows()
+}
+
 // COMMONJS_EXPORTS ////////////////////////////////////////////////////////////
 
 module.exports = factory
@@ -7789,6 +7791,9 @@ module.exports = factory
 factory.default = factory
 
 module.exports.isPathValid = isPathValid
+
+// For testing purposes
+define(module.exports, Symbol.for('setupWindows'), setupWindows)
 
 
 /***/ }),
