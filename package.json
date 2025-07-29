@@ -29,7 +29,7 @@
     "@stylistic/eslint-plugin": "5.2.2",
     "@vercel/ncc": "0.38.3",
     "eslint": "9.32.0",
-    "eslint-plugin-n": "17.21.0",
+    "eslint-plugin-n": "17.21.3",
     "eslint-plugin-unicorn": "60.0.0"
   }
 }
