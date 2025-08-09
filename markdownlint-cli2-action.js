@@ -4,6 +4,8 @@
 
 const core = require("@actions/core");
 const { "main": markdownlintCli2 } = require("markdownlint-cli2");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const logMessage = core.info;
 const outputFormatter = (options) => {
@@ -49,6 +51,38 @@ const outputFormatter = (options) => {
   }
 };
 
+const makeFileFormatter = (destPath) => (options) => {
+  const { results, logMessage } = options;
+
+  const findings = results.map((r) => ({
+    file: r.fileName,
+    line: r.lineNumber,
+    column: r.errorRange ? r.errorRange[0] : null,
+    endColumn: r.errorRange ? r.errorRange[0] + r.errorRange[1] - 1 : null,
+    rule: r.ruleNames.join("/"),
+    rulePrimary: r.ruleNames[0],
+    description: r.ruleDescription,
+    detail: r.errorDetail || null,
+    context: r.errorContext || null,
+    infoUrl: r.ruleInformation || null
+  }));
+
+  const outFile = path.resolve(destPath || "markdownlint-results.json");
+  try {
+    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    const payload = {
+      tool: "markdownlint-cli2",
+      version: 1,
+      count: findings.length,
+      results: findings
+    };
+    fs.writeFileSync(outFile, JSON.stringify(payload, null, 2));
+    logMessage(`Wrote markdownlint results to: ${outFile} (${findings.length} issues)`);
+  } catch (e) {
+    core.warning(`Failed to write results file: ${e instanceof Error ? e.message : String(e)}`);
+  }
+};
+
 const separator = core.getInput("separator") || "\n";
 const argv =
   core.getInput("globs").
@@ -64,11 +98,21 @@ if (fix) {
   argv.push("--fix");
 }
 
+const outputFormatters = [[ outputFormatter ]]
+
+const resultsFile =
+    core.getInput("results-file") ||
+    process.env.MARKDOWNLINT_RESULTS_FILE ||
+    "markdownlint-results.json";
+if (resultsFile && resultsFile.length > 0) {
+    outputFormatters.push([makeFileFormatter(resultsFile)])
+}
+
 const parameters = {
   argv,
   logMessage,
   "optionsOverride": {
-    "outputFormatters": [ [ outputFormatter ] ]
+    "outputFormatters": outputFormatters
   }
 };
 markdownlintCli2(parameters).then(
