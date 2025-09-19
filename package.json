@@ -27,7 +27,7 @@
   "devDependencies": {
     "@eslint/js": "9.35.0",
     "@stylistic/eslint-plugin": "5.3.1",
-    "@vercel/ncc": "0.38.3",
+    "@vercel/ncc": "0.38.4",
     "eslint": "9.35.0",
     "eslint-plugin-n": "17.23.1",
     "eslint-plugin-unicorn": "61.0.2"
