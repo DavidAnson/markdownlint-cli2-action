@@ -9906,21 +9906,22 @@ module.exports = function(num) {
 
 
 
+/** @typedef {import("../markdownlint-cli2.mjs").OutputFormatterOptions} OutputFormatterOptions */
+
 // Formats markdownlint-cli2 results in the style of `markdownlint-cli`
-const outputFormatter = (options) => {
+const outputFormatter = (/** @type {OutputFormatterOptions} */ options) => {
   const { results, logError } = options;
   for (const errorInfo of results) {
-    const { fileName, lineNumber, ruleNames, ruleDescription, errorDetail,
-      errorContext, errorRange } = errorInfo;
-    const ruleName = ruleNames.join("/");
-    const description = ruleDescription +
-      (errorDetail ? ` [${errorDetail}]` : "") +
-      (errorContext ? ` [Context: "${errorContext}"]` : "");
-    const column = (errorRange && errorRange[0]) || 0;
-    const columnText = column ? `:${column}` : "";
-    logError(
-      `${fileName}:${lineNumber}${columnText} ${ruleName} ${description}`
-    );
+    const { fileName, lineNumber, ruleNames, ruleDescription, errorDetail, errorContext, errorRange, severity } = errorInfo;
+    const rule = ruleNames.join("/");
+    const line = `:${lineNumber}`;
+    const rangeStart = (errorRange && errorRange[0]) || 0;
+    const column = rangeStart ? `:${rangeStart}` : "";
+    const description = ruleDescription;
+    const detail = (errorDetail ? ` [${errorDetail}]` : "");
+    const context = (errorContext ? ` [Context: "${errorContext}"]` : "");
+    const sev = (severity ? ` ${severity}` : "");
+    logError(`${fileName}${line}${column}${sev} ${rule} ${description}${detail}${context}`);
   }
   return Promise.resolve();
 };
@@ -16840,7 +16841,7 @@ const {
 /** @type {import('http2')} */
 let http2
 try {
-  http2 = __nccwpck_require__(5675)
+  http2 = __nccwpck_require__(8056)
 } catch {
   // @ts-ignore
   http2 = { constants: {} }
@@ -35993,7 +35994,7 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("http");
 
 /***/ }),
 
-/***/ 5675:
+/***/ 8056:
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("http2");
@@ -37876,10 +37877,11 @@ module.exports.cloneIfArray = cloneIfArray;
 /**
  * Clones the input if it is a URL.
  *
- * @param {Object} url Object of unknown type.
+ * @param {Object | undefined} url Object of unknown type.
  * @returns {Object} Clone of obj iff obj is a URL.
  */
 function cloneIfUrl(url) {
+  // @ts-ignore
   return isUrl(url) ? new URL(url) : url;
 }
 module.exports.cloneIfUrl = cloneIfUrl;
@@ -37904,7 +37906,7 @@ module.exports.getHtmlAttributeRe = function getHtmlAttributeRe(name) {
 function isBlankLine(line) {
   const startComment = "<!--";
   const endComment = "-->";
-  const removeComments = (s) => {
+  const removeComments = (/** @type {string} */ s) => {
     while (true) {
       const start = s.indexOf(startComment);
       const end = s.indexOf(endComment);
@@ -37942,8 +37944,8 @@ const startsWithPipeRe = /^ *\|/;
 const notCrLfRe = /[^\r\n]/g;
 const notSpaceCrLfRe = /[^ \r\n]/g;
 const trailingSpaceRe = / +[\r\n]/g;
-const replaceTrailingSpace = (s) => s.replace(notCrLfRe, safeCommentCharacter);
-module.exports.clearHtmlCommentText = function clearHtmlCommentText(text) {
+const replaceTrailingSpace = (/** @type {string} */ s) => s.replace(notCrLfRe, safeCommentCharacter);
+module.exports.clearHtmlCommentText = function clearHtmlCommentText(/** @type {string} */ text) {
   let i = 0;
   while ((i = text.indexOf(htmlCommentBegin, i)) !== -1) {
     const j = text.indexOf(htmlCommentEnd, i + 2);
@@ -37985,7 +37987,7 @@ module.exports.clearHtmlCommentText = function clearHtmlCommentText(text) {
 };
 
 // Escapes a string for use in a RegExp
-module.exports.escapeForRegExp = function escapeForRegExp(str) {
+module.exports.escapeForRegExp = function escapeForRegExp(/** @type {string} */ str) {
   return str.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 };
 
@@ -38073,8 +38075,8 @@ module.exports.addErrorDetailIf = addErrorDetailIf;
  * @param {RuleOnErrorFixInfo} [fixInfo] RuleOnErrorFixInfo instance.
  * @returns {void}
  */
-function addErrorContext(
-  onError, lineNumber, context, start, end, range, fixInfo) {
+function addErrorContext(onError, lineNumber, context, start, end, range, fixInfo) {
+  // Normalize new line characters so Linux and Windows trim consistently
   context = ellipsify(context.replace(newLineRe, "\n"), start, end);
   addError(onError, lineNumber, undefined, context, range, fixInfo);
 }
@@ -38120,7 +38122,7 @@ module.exports.hasOverlap = function hasOverlap(rangeA, rangeB) {
 
 // Determines if the front matter includes a title
 module.exports.frontMatterHasTitle =
-  function frontMatterHasTitle(frontMatterLines, frontMatterTitlePattern) {
+  function frontMatterHasTitle(/** @type {readonly string[]} */ frontMatterLines, /** @type {string} */ frontMatterTitlePattern) {
     const ignoreFrontMatter =
       (frontMatterTitlePattern !== undefined) && !frontMatterTitlePattern;
     const frontMatterTitleRe =
@@ -38133,17 +38135,30 @@ module.exports.frontMatterHasTitle =
   };
 
 /**
+ * Result object for getReferenceLinkImageData.
+ *
+ * @typedef {Object} GetReferenceLinkImageDataResult
+ * @property {Map<string, number[][]>} references References.
+ * @property {Map<string, number[][]>} shortcuts Shortcuts.
+ * @property {Map<string, [number, string]>} definitions Definitions.
+ * @property {[string, number][]} duplicateDefinitions Duplicate definitions.
+ * @property {number[]} definitionLineIndices Definition line indices.
+ */
+
+/**
  * Returns an object with information about reference links and images.
  *
  * @param {MicromarkToken[]} tokens Micromark tokens.
- * @returns {Object} Reference link/image data.
+ * @returns {GetReferenceLinkImageDataResult} Reference link/image data.
  */
 function getReferenceLinkImageData(tokens) {
-  const normalizeReference = (s) => s.toLowerCase().trim().replace(/\s+/g, " ");
-  const getText = (t) => t?.children.filter((c) => c.type !== "blockQuotePrefix").map((c) => c.text).join("");
+  const normalizeReference = (/** @type {string} */ s) => s.toLowerCase().trim().replace(/\s+/g, " ");
+  const getText = (/** @type {MicromarkToken} */ t) => t?.children.filter((c) => c.type !== "blockQuotePrefix").map((c) => c.text).join("");
+  /** @type {Map<string, number[][]>} */
   const references = new Map();
+  /** @type {Map<string, number[][]>} */
   const shortcuts = new Map();
-  const addReferenceToDictionary = (token, label, isShortcut) => {
+  const addReferenceToDictionary = (/** @type {MicromarkToken} */ token, /** @type {string} */ label, /** @type {boolean} */ isShortcut) => {
     const referenceDatum = [
       token.startLine - 1,
       token.startColumn - 1,
@@ -38155,8 +38170,11 @@ function getReferenceLinkImageData(tokens) {
     referenceData.push(referenceDatum);
     dictionary.set(reference, referenceData);
   };
+  /** @type {Map<string, [number, string]>} */
   const definitions = new Map();
+  /** @type {number[]} */
   const definitionLineIndices = [];
+  /** @type {[string, number][]} */
   const duplicateDefinitions = [];
   const filteredTokens =
     micromark.filterByTypes(
@@ -38198,7 +38216,7 @@ function getReferenceLinkImageData(tokens) {
               micromark.getDescendantsByType(parent, [ "definitionDestination", "definitionDestinationRaw", "definitionDestinationString" ])[0]?.text;
             definitions.set(
               reference,
-              [ token.startLine - 1, destinationString ]
+              [ token.startLine - 1, destinationString || "" ]
             );
           }
         }
@@ -38255,7 +38273,7 @@ module.exports.getReferenceLinkImageData = getReferenceLinkImageData;
  * Gets the most common line ending, falling back to the platform default.
  *
  * @param {string} input Markdown content to analyze.
- * @param {Object} [os] Node.js "os" module.
+ * @param {{EOL: string}} [os] Node.js "os" module.
  * @returns {string} Preferred line ending.
  */
 function getPreferredLineEnding(input, os) {
@@ -38295,7 +38313,7 @@ module.exports.getPreferredLineEnding = getPreferredLineEnding;
  * Expands a path with a tilde to an absolute path.
  *
  * @param {string} file Path that may begin with a tilde.
- * @param {Object} os Node.js "os" module.
+ * @param {{homedir: () => string}} os Node.js "os" module.
  * @returns {string} Absolute path (or original path).
  */
 function expandTildePath(file, os) {
@@ -38303,6 +38321,145 @@ function expandTildePath(file, os) {
   return homedir ? file.replace(/^~($|\/|\\)/, `${homedir}$1`) : file;
 }
 module.exports.expandTildePath = expandTildePath;
+
+/** @typedef {import("../lib/markdownlint.mjs").LintError[]} LintErrors */
+/** @typedef {import("../lib/markdownlint.mjs").LintResults} LintResults */
+
+/**
+ * Converts lint errors from resultVersion 3 to 2.
+ *
+ * @param {LintErrors} errors Lint errors (v3).
+ * @returns {LintErrors} Lint errors (v2).
+ */
+function convertLintErrorsVersion3To2(errors) {
+  const noPrevious = {
+    "ruleNames": [],
+    "lineNumber": -1
+  };
+  return errors.filter((error, index, array) => {
+    // @ts-ignore
+    delete error.fixInfo;
+    // @ts-ignore
+    delete error.severity;
+    const previous = array[index - 1] || noPrevious;
+    return (
+      (error.ruleNames[0] !== previous.ruleNames[0]) ||
+      (error.lineNumber !== previous.lineNumber)
+    );
+  });
+}
+
+/**
+ * Converts lint errors from resultVersion 2 to 1.
+ *
+ * @param {LintErrors} errors Lint errors (v2).
+ * @returns {LintErrors} Lint errors (v1).
+ */
+function convertLintErrorsVersion2To1(errors) {
+  for (const error of errors) {
+    // @ts-ignore
+    error.ruleName = error.ruleNames[0];
+    // @ts-ignore
+    error.ruleAlias = error.ruleNames[1] || error.ruleName;
+    // @ts-ignore
+    delete error.ruleNames;
+  }
+  return errors;
+}
+
+/**
+ * Converts lint errors from resultVersion 2 to 0.
+ *
+ * @param {LintErrors} errors Lint errors (v2).
+ * @returns {LintErrors} Lint errors (v0).
+ */
+function convertLintErrorsVersion2To0(errors) {
+  /** @type {Object.<string, number[]>} */
+  const dictionary = {};
+  for (const error of errors) {
+    const ruleName = error.ruleNames[0];
+    const ruleLines = dictionary[ruleName] || [];
+    ruleLines.push(error.lineNumber);
+    dictionary[ruleName] = ruleLines;
+  }
+  // @ts-ignore
+  return dictionary;
+}
+
+/**
+ * Copies and transforms lint results from resultVersion 3 to ?.
+ *
+ * @param {LintResults} results Lint results (v3).
+ * @param {(errors: LintErrors) => LintErrors} transform Lint errors (v?).
+ * @returns {LintResults} Lint results (v?).
+ */
+function copyAndTransformResults(results, transform) {
+  /** @type {Object.<string, LintErrors>} */
+  const newResults = {};
+  Object.defineProperty(newResults, "toString", { "value": results.toString });
+  for (const key of Object.keys(results)) {
+    const arr = results[key].map((r) => ({ ...r }));
+    newResults[key] = transform(arr);
+  }
+  // @ts-ignore
+  return newResults;
+}
+
+/**
+ * Converts lint results from resultVersion 3 to 0.
+ *
+ * @param {LintResults} results Lint results (v3).
+ * @returns {LintResults} Lint results (v0).
+ */
+module.exports.convertToResultVersion0 = function convertToResultVersion0(results) {
+  return copyAndTransformResults(results, (r) => convertLintErrorsVersion2To0(convertLintErrorsVersion3To2(r)));
+};
+
+/**
+ * Converts lint results from resultVersion 3 to 1.
+ *
+ * @param {LintResults} results Lint results (v3).
+ * @returns {LintResults} Lint results (v1).
+ */
+module.exports.convertToResultVersion1 = function convertToResultVersion1(results) {
+  return copyAndTransformResults(results, (r) => convertLintErrorsVersion2To1(convertLintErrorsVersion3To2(r)));
+};
+
+/**
+ * Converts lint results from resultVersion 3 to 2.
+ *
+ * @param {LintResults} results Lint results (v3).
+ * @returns {LintResults} Lint results (v2).
+ */
+module.exports.convertToResultVersion2 = function convertToResultVersion2(results) {
+  return copyAndTransformResults(results, convertLintErrorsVersion3To2);
+};
+
+/**
+ * Formats lint results to an array of strings.
+ *
+ * @param {LintResults|undefined} lintResults Lint results.
+ * @returns {string[]} Lint error strings.
+ */
+module.exports.formatLintResults = function formatLintResults(lintResults) {
+  const results = [];
+  const entries = Object.entries(lintResults || {});
+  entries.sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [ source, lintErrors ] of entries) {
+    for (const lintError of lintErrors) {
+      const { lineNumber, ruleNames, ruleDescription, errorDetail, errorContext, errorRange, severity } = lintError;
+      const rule = ruleNames.join("/");
+      const line = `:${lineNumber}`;
+      const rangeStart = (errorRange && errorRange[0]) || 0;
+      const column = rangeStart ? `:${rangeStart}` : "";
+      const description = ruleDescription;
+      const detail = (errorDetail ? ` [${errorDetail}]` : "");
+      const context = (errorContext ? ` [Context: "${errorContext}"]` : "");
+      results.push(`${source}${line}${column} ${severity} ${rule} ${description}${detail}${context}`);
+    }
+  }
+  return results;
+};
 
 
 /***/ }),
@@ -38314,7 +38471,7 @@ module.exports.expandTildePath = expandTildePath;
 
 
 
-const { flatTokensSymbol, htmlFlowSymbol } = __nccwpck_require__(3408);
+const { flatTokensSymbol, htmlFlowSymbol, newLineRe } = __nccwpck_require__(3408);
 
 // eslint-disable-next-line jsdoc/valid-types
 /** @typedef {import("micromark-util-types", { with: { "resolution-mode": "import" } }).TokenType} TokenType */
@@ -38329,6 +38486,7 @@ const { flatTokensSymbol, htmlFlowSymbol } = __nccwpck_require__(3408);
  * @returns {boolean} True iff the token is within an htmlFlow type.
  */
 function inHtmlFlow(token) {
+  // @ts-ignore
   return Boolean(token[htmlFlowSymbol]);
 }
 
@@ -38438,8 +38596,11 @@ function filterByPredicate(tokens, allowed, transformChildren) {
  * @returns {Token[]} Filtered tokens.
  */
 function filterByTypes(tokens, types, htmlFlow) {
-  const predicate = (token) => types.includes(token.type) && (htmlFlow || !inHtmlFlow(token));
-  const flatTokens = tokens[flatTokensSymbol];
+  const predicate = (/** @type {Token} */ token) => types.includes(token.type) && (htmlFlow || !inHtmlFlow(token));
+  /** @type {Token[]} */
+  const flatTokens =
+    // @ts-ignore
+    tokens[flatTokensSymbol];
   if (flatTokens) {
     return flatTokens.filter(predicate);
   }
@@ -38475,7 +38636,7 @@ function getBlockQuotePrefixText(tokens, lineNumber, count = 1) {
 function getDescendantsByType(parent, typePath) {
   let tokens = Array.isArray(parent) ? parent : [ parent ];
   for (const type of typePath) {
-    const predicate = (token) => Array.isArray(type) ? type.includes(token.type) : (type === token.type);
+    const predicate = (/** @type {Token} */ token) => Array.isArray(type) ? type.includes(token.type) : (type === token.type);
     tokens = tokens.flatMap((t) => t.children.filter(predicate));
   }
   return tokens;
@@ -38528,12 +38689,11 @@ function getHeadingStyle(heading) {
  * @returns {string} Heading text.
  */
 function getHeadingText(heading) {
-  const headingText = getDescendantsByType(heading, [ [ "atxHeadingText", "setextHeadingText" ] ])
+  return getDescendantsByType(heading, [ [ "atxHeadingText", "setextHeadingText" ] ])
     .flatMap((descendant) => descendant.children.filter((child) => child.type !== "htmlText"))
     .map((data) => data.text)
     .join("")
-    .replace(/[\r\n]+/g, " ");
-  return headingText || "";
+    .replace(newLineRe, " ");
 }
 
 /**
@@ -38611,6 +38771,7 @@ const nonContentTokens = new Set([
   "blockQuoteMarker",
   "blockQuotePrefix",
   "blockQuotePrefixWhitespace",
+  "gfmFootnoteDefinitionIndent",
   "lineEnding",
   "lineEndingBlank",
   "linePrefix",
@@ -38670,6 +38831,8 @@ module.exports.nextLinesRe = /[\r\n][\s\S]*$/;
 // @ts-check
 
 
+
+/* eslint-disable jsdoc/reject-any-type */
 
 /**
  * Calls require for markdownit.cjs. Used to synchronously defer loading because module.createRequire is buggy under webpack (https://github.com/webpack/webpack/issues/16724).
@@ -38819,6 +38982,7 @@ function annotateAndFreezeTokens(tokens, lines) {
     }
     // Annotate children with lineNumber
     if (token.children) {
+      /** @type {number[]} */
       const codeSpanExtraLines = [];
       if (token.children.some((child) => child.type === "code_inline")) {
         forEachInlineCodeSpan(token.content, (code) => {
@@ -38832,7 +38996,7 @@ function annotateAndFreezeTokens(tokens, lines) {
         if ((child.type === "softbreak") || (child.type === "hardbreak")) {
           lineNumber++;
         } else if (child.type === "code_inline") {
-          lineNumber += codeSpanExtraLines.shift();
+          lineNumber += codeSpanExtraLines.shift() || 0;
         }
       }
     }
@@ -47538,10 +47702,10 @@ const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(impo
 const external_node_url_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:url");
 ;// CONCATENATED MODULE: external "node:process"
 const external_node_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:process");
-// EXTERNAL MODULE: external "node:events"
-var external_node_events_ = __nccwpck_require__(8474);
 // EXTERNAL MODULE: external "node:stream"
 var external_node_stream_ = __nccwpck_require__(7075);
+// EXTERNAL MODULE: external "node:events"
+var external_node_events_ = __nccwpck_require__(8474);
 ;// CONCATENATED MODULE: external "node:stream/promises"
 const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
 ;// CONCATENATED MODULE: ./node_modules/@sindresorhus/merge-streams/index.js
@@ -47570,17 +47734,12 @@ function mergeStreams(streams) {
 		passThroughStream.add(stream);
 	}
 
-	if (streams.length === 0) {
-		endStream(passThroughStream);
-	}
-
 	return passThroughStream;
 }
 
 const getHighWaterMark = (streams, objectMode) => {
 	if (streams.length === 0) {
-		// @todo Use `node:stream` `getDefaultHighWaterMark(objectMode)` in next major release
-		return 16_384;
+		return (0,external_node_stream_.getDefaultHighWaterMark)(objectMode);
 	}
 
 	const highWaterMarks = streams
@@ -47594,6 +47753,8 @@ class MergedStream extends external_node_stream_.PassThrough {
 	#ended = new Set([]);
 	#aborted = new Set([]);
 	#onFinished;
+	#unpipeEvent = Symbol('unpipe');
+	#streamPromises = new WeakMap();
 
 	add(stream) {
 		validateStream(stream);
@@ -47604,39 +47765,49 @@ class MergedStream extends external_node_stream_.PassThrough {
 
 		this.#streams.add(stream);
 
-		this.#onFinished ??= onMergedStreamFinished(this, this.#streams);
-		endWhenStreamsDone({
+		this.#onFinished ??= onMergedStreamFinished(this, this.#streams, this.#unpipeEvent);
+		const streamPromise = endWhenStreamsDone({
 			passThroughStream: this,
 			stream,
 			streams: this.#streams,
 			ended: this.#ended,
 			aborted: this.#aborted,
 			onFinished: this.#onFinished,
+			unpipeEvent: this.#unpipeEvent,
 		});
+		this.#streamPromises.set(stream, streamPromise);
 
 		stream.pipe(this, {end: false});
 	}
 
-	remove(stream) {
+	async remove(stream) {
 		validateStream(stream);
 
 		if (!this.#streams.has(stream)) {
 			return false;
 		}
 
+		const streamPromise = this.#streamPromises.get(stream);
+		if (streamPromise === undefined) {
+			return false;
+		}
+
+		this.#streamPromises.delete(stream);
+
 		stream.unpipe(this);
+		await streamPromise;
 		return true;
 	}
 }
 
-const onMergedStreamFinished = async (passThroughStream, streams) => {
+const onMergedStreamFinished = async (passThroughStream, streams, unpipeEvent) => {
 	updateMaxListeners(passThroughStream, PASSTHROUGH_LISTENERS_COUNT);
 	const controller = new AbortController();
 
 	try {
 		await Promise.race([
 			onMergedStreamEnd(passThroughStream, controller),
-			onInputStreamsUnpipe(passThroughStream, streams, controller),
+			onInputStreamsUnpipe(passThroughStream, streams, unpipeEvent, controller),
 		]);
 	} finally {
 		controller.abort();
@@ -47645,10 +47816,15 @@ const onMergedStreamFinished = async (passThroughStream, streams) => {
 };
 
 const onMergedStreamEnd = async (passThroughStream, {signal}) => {
-	await (0,promises_namespaceObject.finished)(passThroughStream, {signal, cleanup: true});
+	try {
+		await (0,promises_namespaceObject.finished)(passThroughStream, {signal, cleanup: true});
+	} catch (error) {
+		errorOrAbortStream(passThroughStream, error);
+		throw error;
+	}
 };
 
-const onInputStreamsUnpipe = async (passThroughStream, streams, {signal}) => {
+const onInputStreamsUnpipe = async (passThroughStream, streams, unpipeEvent, {signal}) => {
 	for await (const [unpipedStream] of (0,external_node_events_.on)(passThroughStream, 'unpipe', {signal})) {
 		if (streams.has(unpipedStream)) {
 			unpipedStream.emit(unpipeEvent);
@@ -47662,22 +47838,36 @@ const validateStream = stream => {
 	}
 };
 
-const endWhenStreamsDone = async ({passThroughStream, stream, streams, ended, aborted, onFinished}) => {
+const endWhenStreamsDone = async ({passThroughStream, stream, streams, ended, aborted, onFinished, unpipeEvent}) => {
 	updateMaxListeners(passThroughStream, PASSTHROUGH_LISTENERS_PER_STREAM);
 	const controller = new AbortController();
 
 	try {
 		await Promise.race([
-			afterMergedStreamFinished(onFinished, stream),
-			onInputStreamEnd({passThroughStream, stream, streams, ended, aborted, controller}),
-			onInputStreamUnpipe({stream, streams, ended, aborted, controller}),
+			afterMergedStreamFinished(onFinished, stream, controller),
+			onInputStreamEnd({
+				passThroughStream,
+				stream,
+				streams,
+				ended,
+				aborted,
+				controller,
+			}),
+			onInputStreamUnpipe({
+				stream,
+				streams,
+				ended,
+				aborted,
+				unpipeEvent,
+				controller,
+			}),
 		]);
 	} finally {
 		controller.abort();
 		updateMaxListeners(passThroughStream, -PASSTHROUGH_LISTENERS_PER_STREAM);
 	}
 
-	if (streams.size === ended.size + aborted.size) {
+	if (streams.size > 0 && streams.size === ended.size + aborted.size) {
 		if (ended.size === 0 && aborted.size > 0) {
 			abortStream(passThroughStream);
 		} else {
@@ -47686,25 +47876,27 @@ const endWhenStreamsDone = async ({passThroughStream, stream, streams, ended, ab
 	}
 };
 
-// This is the error thrown by `finished()` on `stream.destroy()`
-const isAbortError = error => error?.code === 'ERR_STREAM_PREMATURE_CLOSE';
-
-const afterMergedStreamFinished = async (onFinished, stream) => {
+const afterMergedStreamFinished = async (onFinished, stream, {signal}) => {
 	try {
 		await onFinished;
-		abortStream(stream);
-	} catch (error) {
-		if (isAbortError(error)) {
+		if (!signal.aborted) {
 			abortStream(stream);
-		} else {
-			errorStream(stream, error);
+		}
+	} catch (error) {
+		if (!signal.aborted) {
+			errorOrAbortStream(stream, error);
 		}
 	}
 };
 
 const onInputStreamEnd = async ({passThroughStream, stream, streams, ended, aborted, controller: {signal}}) => {
 	try {
-		await (0,promises_namespaceObject.finished)(stream, {signal, cleanup: true, readable: true, writable: false});
+		await (0,promises_namespaceObject.finished)(stream, {
+			signal,
+			cleanup: true,
+			readable: true,
+			writable: false,
+		});
 		if (streams.has(stream)) {
 			ended.add(stream);
 		}
@@ -47721,20 +47913,34 @@ const onInputStreamEnd = async ({passThroughStream, stream, streams, ended, abor
 	}
 };
 
-const onInputStreamUnpipe = async ({stream, streams, ended, aborted, controller: {signal}}) => {
+const onInputStreamUnpipe = async ({stream, streams, ended, aborted, unpipeEvent, controller: {signal}}) => {
 	await (0,external_node_events_.once)(stream, unpipeEvent, {signal});
+
+	if (!stream.readable) {
+		return (0,external_node_events_.once)(signal, 'abort', {signal});
+	}
+
 	streams.delete(stream);
 	ended.delete(stream);
 	aborted.delete(stream);
 };
-
-const unpipeEvent = Symbol('unpipe');
 
 const endStream = stream => {
 	if (stream.writable) {
 		stream.end();
 	}
 };
+
+const errorOrAbortStream = (stream, error) => {
+	if (isAbortError(error)) {
+		abortStream(stream);
+	} else {
+		errorStream(stream, error);
+	}
+};
+
+// This is the error thrown by `finished()` on `stream.destroy()`
+const isAbortError = error => error?.code === 'ERR_STREAM_PREMATURE_CLOSE';
 
 const abortStream = stream => {
 	if (stream.readable || stream.writable) {
@@ -47912,9 +48118,41 @@ const ignoreFilesGlobOptions = {
 
 const GITIGNORE_FILES_PATTERN = '**/.gitignore';
 
-const applyBaseToPattern = (pattern, base) => isNegativePattern(pattern)
-	? '!' + external_node_path_namespaceObject.posix.join(base, pattern.slice(1))
-	: external_node_path_namespaceObject.posix.join(base, pattern);
+// Apply base path to gitignore patterns based on .gitignore spec 2.22.1
+// https://git-scm.com/docs/gitignore#_pattern_format
+// See also https://github.com/sindresorhus/globby/issues/146
+const applyBaseToPattern = (pattern, base) => {
+	if (!base) {
+		return pattern;
+	}
+
+	const isNegative = isNegativePattern(pattern);
+	const cleanPattern = isNegative ? pattern.slice(1) : pattern;
+
+	// Check if pattern has non-trailing slashes
+	const slashIndex = cleanPattern.indexOf('/');
+	const hasNonTrailingSlash = slashIndex !== -1 && slashIndex !== cleanPattern.length - 1;
+
+	let result;
+	if (!hasNonTrailingSlash) {
+		// "If there is no separator at the beginning or middle of the pattern,
+		// then the pattern may also match at any level below the .gitignore level."
+		// So patterns like '*.log' or 'temp' or 'build/' (trailing slash) match recursively.
+		result = external_node_path_namespaceObject.posix.join(base, '**', cleanPattern);
+	} else if (cleanPattern.startsWith('/')) {
+		// "If there is a separator at the beginning [...] of the pattern,
+		// then the pattern is relative to the directory level of the particular .gitignore file itself."
+		// Leading slash anchors the pattern to the .gitignore's directory.
+		result = external_node_path_namespaceObject.posix.join(base, cleanPattern.slice(1));
+	} else {
+		// "If there is a separator [...] middle [...] of the pattern,
+		// then the pattern is relative to the directory level of the particular .gitignore file itself."
+		// Patterns like 'src/foo' are relative to the .gitignore's directory.
+		result = external_node_path_namespaceObject.posix.join(base, cleanPattern);
+	}
+
+	return isNegative ? '!' + result : result;
+};
 
 const parseIgnoreFile = (file, cwd) => {
 	const base = slash(external_node_path_namespaceObject.relative(cwd, external_node_path_namespaceObject.dirname(file.filePath)));
@@ -47935,6 +48173,20 @@ const toRelativePath = (fileOrDirectory, cwd) => {
 		throw new Error(`Path ${fileOrDirectory} is not in cwd ${cwd}`);
 	}
 
+	// Normalize relative paths:
+	// - Git treats './foo' as 'foo' when checking against patterns
+	// - Patterns starting with './' in .gitignore are invalid and don't match anything
+	// - The ignore library expects normalized paths without './' prefix
+	if (fileOrDirectory.startsWith('./')) {
+		return fileOrDirectory.slice(2);
+	}
+
+	// Paths with ../ point outside cwd and cannot match patterns from this directory
+	// Return undefined to indicate this path is outside scope
+	if (fileOrDirectory.startsWith('../')) {
+		return undefined;
+	}
+
 	return fileOrDirectory;
 };
 
@@ -47945,6 +48197,11 @@ const getIsIgnoredPredicate = (files, cwd) => {
 	return fileOrDirectory => {
 		fileOrDirectory = toPath(fileOrDirectory);
 		fileOrDirectory = toRelativePath(fileOrDirectory, cwd);
+		// If path is outside cwd (undefined), it can't be ignored by patterns in cwd
+		if (fileOrDirectory === undefined) {
+			return false;
+		}
+
 		return fileOrDirectory ? ignores.ignores(slash(fileOrDirectory)) : false;
 	};
 };
@@ -47967,12 +48224,10 @@ const isIgnoredByIgnoreFiles = async (patterns, options) => {
 		...ignoreFilesGlobOptions,
 	});
 
-	const files = await Promise.all(
-		paths.map(async filePath => ({
-			filePath,
-			content: await external_node_fs_promises_namespaceObject.readFile(filePath, 'utf8'),
-		})),
-	);
+	const files = await Promise.all(paths.map(async filePath => ({
+		filePath,
+		content: await external_node_fs_promises_namespaceObject.readFile(filePath, 'utf8'),
+	})));
 
 	return getIsIgnoredPredicate(files, cwd);
 };
@@ -48010,6 +48265,7 @@ const isGitIgnoredSync = options => isIgnoredByIgnoreFilesSync(GITIGNORE_FILES_P
 
 
 
+
 const assertPatternsInput = patterns => {
 	if (patterns.some(pattern => typeof pattern !== 'string')) {
 		throw new TypeError('Patterns must be a string or an array of strings');
@@ -48019,6 +48275,19 @@ const assertPatternsInput = patterns => {
 const normalizePathForDirectoryGlob = (filePath, cwd) => {
 	const path = isNegativePattern(filePath) ? filePath.slice(1) : filePath;
 	return external_node_path_namespaceObject.isAbsolute(path) ? path : external_node_path_namespaceObject.join(cwd, path);
+};
+
+const shouldExpandGlobstarDirectory = pattern => {
+	const match = pattern?.match(/\*\*\/([^/]+)$/);
+	if (!match) {
+		return false;
+	}
+
+	const dirname = match[1];
+	const hasWildcards = /[*?[\]{}]/.test(dirname);
+	const hasExtension = external_node_path_namespaceObject.extname(dirname) && !dirname.startsWith('.');
+
+	return !hasWildcards && !hasExtension;
 };
 
 const getDirectoryGlob = ({directoryPath, files, extensions}) => {
@@ -48033,9 +48302,19 @@ const directoryToGlob = async (directoryPaths, {
 	files,
 	extensions,
 } = {}) => {
-	const globs = await Promise.all(directoryPaths.map(async directoryPath =>
-		(await isDirectory(normalizePathForDirectoryGlob(directoryPath, cwd))) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath),
-	);
+	const globs = await Promise.all(directoryPaths.map(async directoryPath => {
+		// Check pattern without negative prefix
+		const checkPattern = isNegativePattern(directoryPath) ? directoryPath.slice(1) : directoryPath;
+
+		// Expand globstar directory patterns like **/dirname to **/dirname/**
+		if (shouldExpandGlobstarDirectory(checkPattern)) {
+			return getDirectoryGlob({directoryPath, files, extensions});
+		}
+
+		// Original logic for checking actual directories
+		const pathToCheck = normalizePathForDirectoryGlob(directoryPath, cwd);
+		return (await isDirectory(pathToCheck)) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath;
+	}));
 
 	return globs.flat();
 };
@@ -48044,7 +48323,19 @@ const directoryToGlobSync = (directoryPaths, {
 	cwd = external_node_process_namespaceObject.cwd(),
 	files,
 	extensions,
-} = {}) => directoryPaths.flatMap(directoryPath => isDirectorySync(normalizePathForDirectoryGlob(directoryPath, cwd)) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath);
+} = {}) => directoryPaths.flatMap(directoryPath => {
+	// Check pattern without negative prefix
+	const checkPattern = isNegativePattern(directoryPath) ? directoryPath.slice(1) : directoryPath;
+
+	// Expand globstar directory patterns like **/dirname to **/dirname/**
+	if (shouldExpandGlobstarDirectory(checkPattern)) {
+		return getDirectoryGlob({directoryPath, files, extensions});
+	}
+
+	// Original logic for checking actual directories
+	const pathToCheck = normalizePathForDirectoryGlob(directoryPath, cwd);
+	return isDirectorySync(pathToCheck) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath;
+});
 
 const toPatternsArray = patterns => {
 	patterns = [...new Set([patterns].flat())];
@@ -48098,16 +48389,12 @@ const getIgnoreFilesPatterns = options => {
 
 const getFilter = async options => {
 	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
-	return createFilterFunction(
-		ignoreFilesPatterns.length > 0 && await isIgnoredByIgnoreFiles(ignoreFilesPatterns, options),
-	);
+	return createFilterFunction(ignoreFilesPatterns.length > 0 && await isIgnoredByIgnoreFiles(ignoreFilesPatterns, options));
 };
 
 const getFilterSync = options => {
 	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
-	return createFilterFunction(
-		ignoreFilesPatterns.length > 0 && isIgnoredByIgnoreFilesSync(ignoreFilesPatterns, options),
-	);
+	return createFilterFunction(ignoreFilesPatterns.length > 0 && isIgnoredByIgnoreFilesSync(ignoreFilesPatterns, options));
 };
 
 const createFilterFunction = isIgnored => {
@@ -48180,21 +48467,19 @@ const generateTasks = async (patterns, options) => {
 
 	const directoryToGlobOptions = normalizeExpandDirectoriesOption(expandDirectories, cwd);
 
-	return Promise.all(
-		globTasks.map(async task => {
-			let {patterns, options} = task;
+	return Promise.all(globTasks.map(async task => {
+		let {patterns, options} = task;
 
-			[
-				patterns,
-				options.ignore,
-			] = await Promise.all([
-				directoryToGlob(patterns, directoryToGlobOptions),
-				directoryToGlob(options.ignore, {cwd}),
-			]);
+		[
+			patterns,
+			options.ignore,
+		] = await Promise.all([
+			directoryToGlob(patterns, directoryToGlobOptions),
+			directoryToGlob(options.ignore, {cwd}),
+		]);
 
-			return {patterns, options};
-		}),
-	);
+		return {patterns, options};
+	}));
 };
 
 const generateTasksSync = (patterns, options) => {
@@ -48239,17 +48524,20 @@ const globbyStream = normalizeArgumentsSync((patterns, options) => {
 	const tasks = generateTasksSync(patterns, options);
 	const filter = getFilterSync(options);
 	const streams = tasks.map(task => out.stream(task.patterns, task.options));
+
+	if (streams.length === 0) {
+		return external_node_stream_.Readable.from([]);
+	}
+
 	const stream = mergeStreams(streams).filter(fastGlobResult => filter(fastGlobResult));
 
-	// TODO: Make it return a web stream at some point.
+	// Returning a web stream will require revisiting once Readable.toWeb integration is viable.
 	// return Readable.toWeb(stream);
 
 	return stream;
 });
 
-const isDynamicPattern = normalizeArgumentsSync(
-	(patterns, options) => patterns.some(pattern => out.isDynamicPattern(pattern, options)),
-);
+const isDynamicPattern = normalizeArgumentsSync((patterns, options) => patterns.some(pattern => out.isDynamicPattern(pattern, options)));
 
 const generateGlobTasks = normalizeArguments(generateTasks);
 const generateGlobTasksSync = normalizeArgumentsSync(generateTasksSync);
@@ -48286,6 +48574,7 @@ var micromark_helpers = __nccwpck_require__(1670);
 /** @typedef {import("markdownlint").RuleParams} RuleParams */
 /** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
 /** @typedef {import("markdownlint").MicromarkTokenType} MicromarkTokenType */
+/** @typedef {import("../helpers/helpers.cjs").GetReferenceLinkImageDataResult} GetReferenceLinkImageDataResult */
 
 /** @type {Map<string, object>} */
 const map = new Map();
@@ -48316,11 +48605,12 @@ function micromarkTokens() {
  * Gets a cached object value - computes it and caches it.
  *
  * @param {string} name Cache object name.
- * @param {Function} getValue Getter for object value.
+ * @param {() => Object} getValue Getter for object value.
  * @returns {Object} Object value.
  */
 function getCached(name, getValue) {
   if (map.has(name)) {
+    // @ts-ignore
     return map.get(name);
   }
   const value = getValue();
@@ -48336,6 +48626,7 @@ function getCached(name, getValue) {
  * @returns {MicromarkToken[]} Filtered tokens.
  */
 function filterByTypesCached(types, htmlFlow) {
+  // @ts-ignore
   return getCached(
     // eslint-disable-next-line prefer-rest-params
     JSON.stringify(arguments),
@@ -48346,9 +48637,10 @@ function filterByTypesCached(types, htmlFlow) {
 /**
  * Gets a reference link and image data object.
  *
- * @returns {Object} Reference link and image data object.
+ * @returns {GetReferenceLinkImageDataResult} Reference link and image data object.
  */
 function getReferenceLinkImageData() {
+  // @ts-ignore
   return getCached(
     getReferenceLinkImageData.name,
     () => (0,helpers_helpers.getReferenceLinkImageData)(micromarkTokens())
@@ -48358,17 +48650,18 @@ function getReferenceLinkImageData() {
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/constants.mjs
 // @ts-check
 
+/** @type {string[]} */
 const deprecatedRuleNames = (/* unused pure expression or super */ null && ([]));
 const fixableRuleNames = (/* unused pure expression or super */ null && ([
   "MD004", "MD005", "MD007", "MD009", "MD010", "MD011",
   "MD012", "MD014", "MD018", "MD019", "MD020", "MD021",
-  "MD022", "MD023", "MD026", "MD027", "MD030", "MD031",
-  "MD032", "MD034", "MD037", "MD038", "MD039", "MD044",
-  "MD047", "MD049", "MD050", "MD051", "MD053", "MD054",
-  "MD058"
+  "MD022", "MD023", "MD026", "MD027", "MD029", "MD030",
+  "MD031", "MD032", "MD034", "MD037", "MD038", "MD039",
+  "MD044", "MD047", "MD049", "MD050", "MD051", "MD053",
+  "MD054", "MD058"
 ]));
 const homepage = "https://github.com/DavidAnson/markdownlint";
-const version = "0.38.0";
+const version = "0.39.0";
 
 // EXTERNAL MODULE: ./node_modules/markdownlint/lib/defer-require.cjs
 var defer_require = __nccwpck_require__(9489);
@@ -48388,7 +48681,11 @@ var resolve_module = __nccwpck_require__(8284);
   "tags": [ "headings" ],
   "parser": "micromark",
   "function": function MD001(params, onError) {
-    let prevLevel = Number.MAX_SAFE_INTEGER;
+    const hasTitle = (0,helpers_helpers.frontMatterHasTitle)(
+      params.frontMatterLines,
+      params.config.front_matter_title
+    );
+    let prevLevel = hasTitle ? 1 : Number.MAX_SAFE_INTEGER;
     for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
       const level = (0,micromark_helpers.getHeadingLevel)(heading);
       if (level > prevLevel) {
@@ -48460,21 +48757,9 @@ var resolve_module = __nccwpck_require__(8284);
 
 
 
-const markerToStyle = {
-  "-": "dash",
-  "+": "plus",
-  "*": "asterisk"
-};
-const styleToMarker = {
-  "dash": "-",
-  "plus": "+",
-  "asterisk": "*"
-};
-const differentItemStyle = {
-  "dash": "plus",
-  "plus": "asterisk",
-  "asterisk": "dash"
-};
+const markerToStyle = (/** @type {string} */ marker) => (marker === "-") ? "dash" : ((marker === "+") ? "plus" : "asterisk");
+const styleToMarker = (/** @type {string} */ style) => (style === "dash") ? "-" : ((style === "plus") ? "+" : "*");
+const differentItemStyle = (/** @type {string} */ style) => (style === "dash") ? "plus" : ((style === "plus") ? "asterisk" : "dash");
 const validStyles = new Set([
   "asterisk",
   "consistent",
@@ -48492,6 +48777,7 @@ const validStyles = new Set([
   "function": function MD004(params, onError) {
     const style = String(params.config.style || "consistent");
     let expectedStyle = validStyles.has(style) ? style : "dash";
+    /** @type {("asterisk"|"dash"|"plus")[]} */
     const nestingStyles = [];
     for (const listUnordered of filterByTypesCached([ "listUnordered" ])) {
       let nesting = 0;
@@ -48505,12 +48791,12 @@ const validStyles = new Set([
       }
       const listItemMarkers = (0,micromark_helpers.getDescendantsByType)(listUnordered, [ "listItemPrefix", "listItemMarker" ]);
       for (const listItemMarker of listItemMarkers) {
-        const itemStyle = markerToStyle[listItemMarker.text];
+        const itemStyle = markerToStyle(listItemMarker.text);
         if (style === "sublist") {
           if (!nestingStyles[nesting]) {
             nestingStyles[nesting] =
               (itemStyle === nestingStyles[nesting - 1]) ?
-                differentItemStyle[itemStyle] :
+                differentItemStyle(itemStyle) :
                 itemStyle;
           }
           expectedStyle = nestingStyles[nesting];
@@ -48530,7 +48816,7 @@ const validStyles = new Set([
           {
             "editColumn": column,
             "deleteCount": length,
-            "insertText": styleToMarker[expectedStyle]
+            "insertText": styleToMarker(expectedStyle)
           }
         );
       }
@@ -48665,8 +48951,9 @@ const unorderedParentTypes =
         const nesting = unorderedListNesting.get(parent);
         if (nesting !== undefined) {
           // listItemPrefix for listUnordered
+          const baseIndent = ((0,micromark_helpers.getParentOfType)(token, [ "gfmFootnoteDefinition" ])) ? 4 : 0;
           const expectedIndent =
-            (startIndented ? startIndent : 0) + (nesting * indent);
+            baseIndent + (startIndented ? startIndent : 0) + (nesting * indent);
           const blockQuoteAdjustment =
             (lastBlockQuotePrefix?.endLine === startLine) ?
               (lastBlockQuotePrefix.endColumn - 1) :
@@ -48710,14 +48997,18 @@ const unorderedParentTypes =
   "function": function MD009(params, onError) {
     let brSpaces = params.config.br_spaces;
     brSpaces = Number((brSpaces === undefined) ? 2 : brSpaces);
+    const codeBlocks = params.config.code_blocks;
+    const includeCode = (codeBlocks === undefined) ? false : !!codeBlocks;
     const listItemEmptyLines = !!params.config.list_item_empty_lines;
     const strict = !!params.config.strict;
     const codeBlockLineNumbers = new Set();
-    for (const codeBlock of filterByTypesCached([ "codeFenced" ])) {
-      (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine + 1, codeBlock.endLine - 1);
-    }
-    for (const codeBlock of filterByTypesCached([ "codeIndented" ])) {
-      (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
+    if (!includeCode) {
+      for (const codeBlock of filterByTypesCached([ "codeFenced" ])) {
+        (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine + 1, codeBlock.endLine - 1);
+      }
+      for (const codeBlock of filterByTypesCached([ "codeIndented" ])) {
+        (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
+      }
     }
     const listItemLineNumbers = new Set();
     if (listItemEmptyLines) {
@@ -48808,7 +49099,7 @@ const tabRe = /\t+/g;
     const includeCode = (codeBlocks === undefined) ? true : !!codeBlocks;
     const ignoreCodeLanguages = new Set(
       (params.config.ignore_code_languages || [])
-        .map((language) => language.toLowerCase())
+        .map((/** @type {void} */ language) => String(language).toLowerCase())
     );
     const spacesPerTab = params.config.spaces_per_tab;
     const spaceMultiplier = (spacesPerTab === undefined) ?
@@ -49322,15 +49613,18 @@ function validateHeadingSpaces(onError, heading, delta) {
 
 
 
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
+
 const defaultLines = 1;
 
-const getLinesFunction = (linesParam) => {
+// eslint-disable-next-line jsdoc/reject-any-type
+const getLinesFunction = (/** @type {any} */ linesParam) => {
   if (Array.isArray(linesParam)) {
     const linesArray = new Array(6).fill(defaultLines);
     for (const [ index, value ] of [ ...linesParam.entries() ].slice(0, 6)) {
       linesArray[index] = value;
     }
-    return (heading) => linesArray[(0,micromark_helpers.getHeadingLevel)(heading) - 1];
+    return (/** @type {MicromarkToken} */ heading) => linesArray[(0,micromark_helpers.getHeadingLevel)(heading) - 1];
   }
   // Coerce linesParam to a number
   const lines = (linesParam === undefined) ? defaultLines : Number(linesParam);
@@ -49701,13 +49995,17 @@ const listStyleExamples = {
 };
 
 /**
- * Gets the value of an ordered list item prefix token.
+ * Gets the column and text of an ordered list item prefix token.
  *
  * @param {import("markdownlint").MicromarkToken} listItemPrefix List item prefix token.
- * @returns {number} List item value.
+ * @returns {{column: number, value: number}} List item value column and text.
  */
 function getOrderedListItemValue(listItemPrefix) {
-  return Number((0,micromark_helpers.getDescendantsByType)(listItemPrefix, [ "listItemValue" ])[0].text);
+  const listItemValue = (0,micromark_helpers.getDescendantsByType)(listItemPrefix, [ "listItemValue" ])[0];
+  return {
+    "column": listItemValue.startColumn,
+    "value": Number(listItemValue.text)
+  };
 }
 
 /** @type {import("markdownlint").Rule} */
@@ -49717,34 +50015,40 @@ function getOrderedListItemValue(listItemPrefix) {
   "tags": [ "ol" ],
   "parser": "micromark",
   "function": function MD029(params, onError) {
-    const style = String(params.config.style || "one_or_ordered");
+    const style = String(params.config.style);
     for (const listOrdered of filterByTypesCached([ "listOrdered" ])) {
       const listItemPrefixes = (0,micromark_helpers.getDescendantsByType)(listOrdered, [ "listItemPrefix" ]);
       let expected = 1;
       let incrementing = false;
       // Check for incrementing number pattern 1/2/3 or 0/1/2
       if (listItemPrefixes.length >= 2) {
-        const firstValue = getOrderedListItemValue(listItemPrefixes[0]);
-        const secondValue = getOrderedListItemValue(listItemPrefixes[1]);
-        if ((secondValue !== 1) || (firstValue === 0)) {
+        const first = getOrderedListItemValue(listItemPrefixes[0]);
+        const second = getOrderedListItemValue(listItemPrefixes[1]);
+        if ((second.value !== 1) || (first.value === 0)) {
           incrementing = true;
-          if (firstValue === 0) {
+          if (first.value === 0) {
             expected = 0;
           }
         }
       }
       // Determine effective style
-      let listStyle = style;
-      if (listStyle === "one_or_ordered") {
-        listStyle = incrementing ? "ordered" : "one";
-      } else if (listStyle === "zero") {
+      const listStyle = ((style === "one") || (style === "ordered") || (style === "zero")) ?
+        style :
+        (incrementing ? "ordered" : "one");
+      if (listStyle === "zero") {
         expected = 0;
       } else if (listStyle === "one") {
         expected = 1;
       }
       // Validate each list item marker
       for (const listItemPrefix of listItemPrefixes) {
-        const actual = getOrderedListItemValue(listItemPrefix);
+        const orderedListItemValue = getOrderedListItemValue(listItemPrefix);
+        const actual = orderedListItemValue.value;
+        const fixInfo = {
+          "editColumn": orderedListItemValue.column,
+          "deleteCount": orderedListItemValue.value.toString().length,
+          "insertText": expected.toString()
+        };
         (0,helpers_helpers.addErrorDetailIf)(
           onError,
           listItemPrefix.startLine,
@@ -49752,7 +50056,8 @@ function getOrderedListItemValue(listItemPrefix) {
           actual,
           "Style: " + listStyleExamples[listStyle],
           undefined,
-          [ listItemPrefix.startColumn, listItemPrefix.endColumn - listItemPrefix.startColumn ]
+          [ listItemPrefix.startColumn, listItemPrefix.endColumn - listItemPrefix.startColumn ],
+          fixInfo
         );
         if (listStyle === "ordered") {
           expected++;
@@ -49830,7 +50135,6 @@ function getOrderedListItemValue(listItemPrefix) {
 
 const codeFencePrefixRe = /^(.*?)[`~]/;
 
-// eslint-disable-next-line jsdoc/valid-types
 /** @typedef {readonly string[]} ReadonlyStringArray */
 
 /**
@@ -49892,7 +50196,9 @@ function addError(onError, lines, lineNumber, top) {
 
 
 
-const isList = (token) => (
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
+
+const isList = (/** @type {MicromarkToken} */ token) => (
   (token.type === "listOrdered") || (token.type === "listUnordered")
 );
 
@@ -49970,6 +50276,11 @@ const isList = (token) => (
 
 
 
+/** @typedef {import("micromark-extension-gfm-table")} */
+
+// eslint-disable-next-line jsdoc/reject-any-type
+const toLowerCaseStringArray = (/** @type {any} */ arr) => Array.isArray(arr) ? arr.map((elm) => String(elm).toLowerCase()) : [];
+
 /** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md033 = ({
   "names": [ "MD033", "no-inline-html" ],
@@ -49977,27 +50288,30 @@ const isList = (token) => (
   "tags": [ "html" ],
   "parser": "micromark",
   "function": function MD033(params, onError) {
-    let allowedElements = params.config.allowed_elements;
-    allowedElements = Array.isArray(allowedElements) ? allowedElements : [];
-    allowedElements = allowedElements.map((element) => element.toLowerCase());
+    const allowedElements = toLowerCaseStringArray(params.config.allowed_elements);
+    // If not defined, use allowedElements for backward compatibility
+    const tableAllowedElements = toLowerCaseStringArray(params.config.table_allowed_elements || params.config.allowed_elements);
     for (const token of filterByTypesCached([ "htmlText" ], true)) {
       const htmlTagInfo = (0,micromark_helpers.getHtmlTagInfo)(token);
-      if (
-        htmlTagInfo &&
-        !htmlTagInfo.close &&
-        !allowedElements.includes(htmlTagInfo.name.toLowerCase())
-      ) {
-        const range = [
-          token.startColumn,
-          token.text.replace(helpers_helpers.nextLinesRe, "").length
-        ];
-        (0,helpers_helpers.addError)(
-          onError,
-          token.startLine,
-          "Element: " + htmlTagInfo.name,
-          undefined,
-          range
-        );
+      if (htmlTagInfo && !htmlTagInfo.close) {
+        const elementName = htmlTagInfo?.name.toLowerCase();
+        const inTable = !!(0,micromark_helpers.getParentOfType)(token, [ "table" ]);
+        if (
+          (inTable || !allowedElements.includes(elementName)) &&
+          (!inTable || !tableAllowedElements.includes(elementName))
+        ) {
+          const range = [
+            token.startColumn,
+            token.text.replace(helpers_helpers.nextLinesRe, "").length
+          ];
+          (0,helpers_helpers.addError)(
+            onError,
+            token.startLine,
+            "Element: " + htmlTagInfo.name,
+            undefined,
+            range
+          );
+        }
       }
     }
   }
@@ -50009,6 +50323,7 @@ const isList = (token) => (
 
 
 
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
 /** @typedef {import("micromark-extension-gfm-autolink-literal")} */
 
 /** @type {import("markdownlint").Rule} */
@@ -50018,7 +50333,7 @@ const isList = (token) => (
   "tags": [ "links", "url" ],
   "parser": "micromark",
   "function": function MD034(params, onError) {
-    const literalAutolinks = (tokens) => (
+    const literalAutolinks = (/** @type {MicromarkToken[]} */ tokens) => (
       (0,micromark_helpers.filterByPredicate)(
         tokens,
         (token) => {
@@ -50128,14 +50443,16 @@ const isList = (token) => (
 
 
 
-/** @typedef {import("markdownlint").MicromarkTokenType} TokenType */
-/** @type {TokenType[][]} */
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
+/** @typedef {import("markdownlint").MicromarkTokenType} MicromarkTokenType */
+
+/** @type {MicromarkTokenType[][]} */
 const emphasisTypes = [
   [ "emphasis", "emphasisText" ],
   [ "strong", "strongText" ]
 ];
 
-const isParagraphChildMeaningful = (token) => !(
+const isParagraphChildMeaningful = (/** @type {MicromarkToken} */ token) => !(
   (token.type === "htmlText") ||
   ((token.type === "data") && (token.text.trim().length === 0))
 );
@@ -50228,15 +50545,17 @@ const isParagraphChildMeaningful = (token) => !(
           if (startMatch) {
             const [ startSpaceCharacter ] = startMatch;
             const startContext = `${marker}${startSpaceCharacter}`;
+            const column = startToken.endColumn;
+            const count = startSpaceCharacter.length - 1;
             (0,helpers_helpers.addError)(
               onError,
               startToken.startLine,
               undefined,
               startContext,
-              [ startToken.startColumn, startContext.length ],
+              [ column, count ],
               {
-                "editColumn": startToken.endColumn,
-                "deleteCount": startSpaceCharacter.length - 1
+                "editColumn": column,
+                "deleteCount": count
               }
             );
           }
@@ -50249,16 +50568,17 @@ const isParagraphChildMeaningful = (token) => !(
           if (endMatch) {
             const [ endSpaceCharacter ] = endMatch;
             const endContext = `${endSpaceCharacter}${marker}`;
+            const column = endToken.startColumn - (endSpaceCharacter.length - 1);
+            const count = endSpaceCharacter.length - 1;
             (0,helpers_helpers.addError)(
               onError,
               endToken.startLine,
               undefined,
               endContext,
-              [ endToken.endColumn - endContext.length, endContext.length ],
+              [ column, count ],
               {
-                "editColumn":
-                  endToken.startColumn - (endSpaceCharacter.length - 1),
-                "deleteCount": endSpaceCharacter.length - 1
+                "editColumn": column,
+                "deleteCount": count
               }
             );
           }
@@ -50518,6 +50838,8 @@ function getHtmlFlowTagName(token) {
 
 
 
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
+
 /** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md042 = ({
   "names": [ "MD042", "no-empty-links" ],
@@ -50526,9 +50848,9 @@ function getHtmlFlowTagName(token) {
   "parser": "micromark",
   "function": function MD042(params, onError) {
     const { definitions } = getReferenceLinkImageData();
-    const isReferenceDefinitionHash = (token) => {
+    const isReferenceDefinitionHash = (/** @type {MicromarkToken} */ token) => {
       const definition = definitions.get(token.text.trim());
-      return (definition && (definition[1] === "#"));
+      return Boolean(definition && (definition[1] === "#"));
     };
     const links = filterByTypesCached([ "link" ]);
     for (const link of links) {
@@ -50593,8 +50915,8 @@ function getHtmlFlowTagName(token) {
     let matchAny = false;
     let hasError = false;
     let anyHeadings = false;
-    const getExpected = () => requiredHeadings[i++] || "[None]";
-    const handleCase = (str) => (matchCase ? str : str.toLowerCase());
+    const getExpected = () => String(requiredHeadings[i++] || "[None]");
+    const handleCase = (/** @type {string} */ str) => (matchCase ? str : str.toLowerCase());
     for (const heading of filterByTypesCached([ "atxHeading", "setextHeading" ])) {
       if (!hasError) {
         const headingText = (0,micromark_helpers.getHeadingText)(heading);
@@ -65511,7 +65833,9 @@ function parseInternal(
   const events = getEvents(markdown, micromarkParseOptions);
 
   // Create Token objects
+  /** @type {MicromarkToken[]} */
   const document = [];
+  /** @type {MicromarkToken[]} */
   let flatTokens = [];
   /** @type {MicromarkToken} */
   const root = {
@@ -65581,6 +65905,7 @@ function parseInternal(
         );
         current.children = tokens;
         // Avoid stack overflow of Array.push(...spread)
+        // @ts-ignore
         // eslint-disable-next-line unicorn/prefer-spread
         flatTokens = flatTokens.concat(tokens[shared.flatTokensSymbol]);
       }
@@ -65638,7 +65963,7 @@ const ignoredChildTypes = new Set(
   "function": function MD044(params, onError) {
     let names = params.config.names;
     names = Array.isArray(names) ? names : [];
-    names.sort((a, b) => (b.length - a.length) || a.localeCompare(b));
+    names.sort((/** @type {string} */ a, /** @type {string} */ b) => (b.length - a.length) || a.localeCompare(b));
     if (names.length === 0) {
       // Nothing to check; avoid doing any work
       return;
@@ -65799,10 +66124,9 @@ const ariaHiddenRe = (0,helpers_helpers.getHtmlAttributeRe)("aria-hidden");
 
 
 
-const tokenTypeToStyle = {
-  "codeFenced": "fenced",
-  "codeIndented": "indented"
-};
+/** @typedef {import("markdownlint").MicromarkTokenType} MicromarkTokenType */
+
+const tokenTypeToStyle = (/** @type {MicromarkTokenType} */ tokenType) => (tokenType === "codeFenced") ? "fenced" : "indented";
 
 /** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md046 = ({
@@ -65815,13 +66139,14 @@ const tokenTypeToStyle = {
     for (const token of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
       const { startLine, type } = token;
       if (expectedStyle === "consistent") {
-        expectedStyle = tokenTypeToStyle[type];
+        expectedStyle = tokenTypeToStyle(type);
       }
       (0,helpers_helpers.addErrorDetailIf)(
         onError,
         startLine,
         expectedStyle,
-        tokenTypeToStyle[type]);
+        tokenTypeToStyle(type)
+      );
     }
   }
 });
@@ -66257,7 +66582,7 @@ const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
     const lines = params.lines;
     const { references, shortcuts, definitions, duplicateDefinitions } =
       getReferenceLinkImageData();
-    const singleLineDefinition = (line) => (
+    const singleLineDefinition = (/** @type {string} */ line) => (
       line.replace(linkReferenceDefinitionRe, "").trim().length > 0
     );
     const deleteFixInfo = {
@@ -66308,9 +66633,9 @@ const linkReferenceDefinitionRe = /^ {0,3}\[([^\]]*[^\\])\]:/;
 
 
 const backslashEscapeRe = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g;
-const removeBackslashEscapes = (text) => text.replace(backslashEscapeRe, "$1");
+const removeBackslashEscapes = (/** @type {string} **/ text) => text.replace(backslashEscapeRe, "$1");
 const autolinkDisallowedRe = /[ <>]/;
-const autolinkAble = (destination) => {
+const autolinkAble = (/** @type {string} */ destination) => {
   try {
     // eslint-disable-next-line no-new
     new URL(destination);
@@ -66376,9 +66701,11 @@ const autolinkAble = (destination) => {
           const referenceString = (0,micromark_helpers.getDescendantsByType)(link, [ "reference", "referenceString" ])[0]?.text;
           const isCollapsed = (referenceString === undefined);
           const definition = definitions.get(referenceString || label);
-          destination = definition && definition[1];
-          isError = destination &&
-            (isShortcut ? !shortcut : (isCollapsed ? !collapsed : !full));
+          destination = (definition && definition[1]) || "";
+          isError = Boolean(
+            destination &&
+            (isShortcut ? !shortcut : (isCollapsed ? !collapsed : !full))
+          );
         }
       }
       if (isError) {
@@ -66428,15 +66755,16 @@ const autolinkAble = (destination) => {
 
 
 
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
+/** @typedef {import("micromark-extension-gfm-table")} */
+
 const whitespaceTypes = new Set([ "linePrefix", "whitespace" ]);
-const ignoreWhitespace = (tokens) => tokens.filter(
+const ignoreWhitespace = (/** @type {MicromarkToken[]} */ tokens) => tokens.filter(
   (token) => !whitespaceTypes.has(token.type)
 );
-const firstOrNothing = (items) => items[0];
-const lastOrNothing = (items) => items[items.length - 1];
-const makeRange = (start, end) => [ start, end - start + 1 ];
-
-/** @typedef {import("micromark-extension-gfm-table")} */
+const firstOrNothing = (/** @type {MicromarkToken[]} */ items) => items[0];
+const lastOrNothing = (/** @type {MicromarkToken[]} */ items) => items[items.length - 1];
+const makeRange = (/** @type {number} */ start, /** @type {number} */ end) => [ start, end - start + 1 ];
 
 /** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md055 = ({
@@ -66502,7 +66830,7 @@ const makeRange = (start, end) => [ start, end - start + 1 ];
 
 
 
-const md056_makeRange = (start, end) => [ start, end - start + 1 ];
+const md056_makeRange = (/** @type {number} */ start, /** @type {number} */ end) => [ start, end - start + 1 ];
 
 /** @typedef {import("micromark-extension-gfm-table")} */
 
@@ -66679,6 +67007,129 @@ function normalize(str) {
   }
 });
 
+;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md060.mjs
+// @ts-check
+
+
+
+
+/** @typedef {import("micromark-extension-gfm-table")} */
+/** @typedef {import("markdownlint").RuleOnErrorInfo} RuleOnErrorInfo */
+
+/**
+ * Adds a RuleOnErrorInfo object to a list of RuleOnErrorInfo objects.
+ *
+ * @param {RuleOnErrorInfo[]} errors List of errors.
+ * @param {number} lineNumber Line number.
+ * @param {number} column Column number.
+ * @param {string} detail Detail message.
+ */
+function md060_addError(errors, lineNumber, column, detail) {
+  errors.push({
+    lineNumber,
+    detail,
+    "range": [ column, 1 ]
+  });
+}
+
+/** @type {import("markdownlint").Rule} */
+/* harmony default export */ const md060 = ({
+  "names": [ "MD060", "table-column-style" ],
+  "description": "Table column style",
+  "tags": [ "table" ],
+  "parser": "micromark",
+  "function": function MD060(params, onError) {
+    const style = String(params.config.style || "any");
+    const styleAlignedAllowed = (style === "any") || (style === "aligned");
+    const styleCompactAllowed = (style === "any") || (style === "compact");
+    const styleTightAllowed = (style === "any") || (style === "tight");
+
+    // Scan all tables/rows
+    const tables = filterByTypesCached([ "table" ]);
+    for (const table of tables) {
+      const rows = (0,micromark_helpers.filterByTypes)(table.children, [ "tableDelimiterRow", "tableRow" ]);
+      const headingRow = rows[0];
+
+      // Determine errors for style "aligned"
+      /** @type {RuleOnErrorInfo[]} */
+      const errorsIfAligned = [];
+      if (styleAlignedAllowed) {
+        const headingDividerColumns = (0,micromark_helpers.filterByTypes)(headingRow.children, [ "tableCellDivider" ]).map((divider) => divider.startColumn);
+        for (const row of rows.slice(1)) {
+          const remainingHeadingDividerColumns = new Set(headingDividerColumns);
+          const rowDividerColumns = (0,micromark_helpers.filterByTypes)(row.children, [ "tableCellDivider" ]).map((divider) => divider.startColumn);
+          for (const dividerColumn of rowDividerColumns) {
+            if ((remainingHeadingDividerColumns.size > 0) && !remainingHeadingDividerColumns.delete(dividerColumn)) {
+              md060_addError(errorsIfAligned, row.startLine, dividerColumn, "Table pipe does not align with heading for style \"aligned\"");
+            }
+          }
+        }
+      }
+
+      // Determine errors for styles "compact" and "tight"
+      /** @type {RuleOnErrorInfo[]} */
+      const errorsIfCompact = [];
+      /** @type {RuleOnErrorInfo[]} */
+      const errorsIfTight = [];
+      if (
+        (styleCompactAllowed || styleTightAllowed) &&
+        !(styleAlignedAllowed && (errorsIfAligned.length === 0))
+      ) {
+        for (const row of rows) {
+          const tokensOfInterest = (0,micromark_helpers.filterByTypes)(row.children, [ "tableCellDivider", "tableContent", "whitespace" ]);
+          for (let i = 0; i < tokensOfInterest.length; i++) {
+            const { startColumn, startLine, type } = tokensOfInterest[i];
+            if (type === "tableCellDivider") {
+              const previous = tokensOfInterest[i - 1];
+              if (previous) {
+                if (previous.type === "whitespace") {
+                  if (previous.text.length !== 1) {
+                    md060_addError(errorsIfCompact, startLine, startColumn, "Table pipe has extra space to the left for style \"compact\"");
+                  }
+                  md060_addError(errorsIfTight, startLine, startColumn, "Table pipe has space to the left for style \"tight\"");
+                } else {
+                  md060_addError(errorsIfCompact, startLine, startColumn, "Table pipe is missing space to the left for style \"compact\"");
+                }
+              }
+              const next = tokensOfInterest[i + 1];
+              if (next) {
+                if (next.type === "whitespace") {
+                  if (next.endColumn !== row.endColumn) {
+                    if (next.text.length !== 1) {
+                      md060_addError(errorsIfCompact, startLine, startColumn, "Table pipe has extra space to the right for style \"compact\"");
+                    }
+                    md060_addError(errorsIfTight, startLine, startColumn, "Table pipe has space to the right for style \"tight\"");
+                  }
+                } else {
+                  md060_addError(errorsIfCompact, startLine, startColumn, "Table pipe is missing space to the right for style \"compact\"");
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Report errors for whatever (allowed) style has the fewest
+      let errorInfos = errorsIfAligned;
+      if (
+        styleCompactAllowed &&
+        ((errorsIfCompact.length < errorInfos.length) || !styleAlignedAllowed)
+      ) {
+        errorInfos = errorsIfCompact;
+      }
+      if (
+        styleTightAllowed &&
+        ((errorsIfTight.length < errorInfos.length) || (!styleAlignedAllowed && !styleCompactAllowed))
+      ) {
+        errorInfos = errorsIfTight;
+      }
+      for (const errorInfo of errorInfos) {
+        onError(errorInfo);
+      }
+    }
+  }
+});
+
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/rules.mjs
 // @ts-check
 
@@ -66728,6 +67179,7 @@ const [ md019, md021 ] = md019_md021;
 
 
 const [ md049, md050 ] = md049_md050;
+
 
 
 
@@ -66792,7 +67244,8 @@ const rules = [
   md056,
   // md057: See https://github.com/markdownlint/markdownlint
   md058,
-  md059
+  md059,
+  md060
 ];
 for (const rule of rules) {
   const name = rule.names[0].toLowerCase();
@@ -66808,7 +67261,7 @@ for (const rule of rules) {
  * Result of a call to parseConfiguration.
  *
  * @typedef {Object} ParseConfigurationResult
- * @property {Object | null} config Configuration object if successful.
+ * @property {import("markdownlint").Configuration | null} config Configuration object if successful.
  * @property {string | null} message Error message if an error occurred.
  */
 
@@ -66817,7 +67270,7 @@ for (const rule of rules) {
  *
  * @param {string} name Name of the configuration file.
  * @param {string} content Configuration content.
- * @param {import("./markdownlint.mjs").ConfigurationParser[]} [parsers] Parsing function(s).
+ * @param {import("markdownlint").ConfigurationParser[]} [parsers] Parsing function(s).
  * @returns {ParseConfigurationResult} Parse configuration result.
  */
 function parse_configuration_parseConfiguration(name, content, parsers) {
@@ -66832,8 +67285,9 @@ function parse_configuration_parseConfiguration(name, content, parsers) {
       config = (result && (typeof result === "object") && !Array.isArray(result)) ? result : {};
       // Succeeded
       return false;
-    } catch (error) {
-      errors.push(`Parser ${index++}: ${error.message}`);
+      // eslint-disable-next-line jsdoc/reject-any-type
+    } catch(/** @type {any} */ error) {
+      errors.push(`Parser ${index++}: ${error?.message}`);
     }
     // Failed, try the next parser
     return true;
@@ -66876,15 +67330,17 @@ function validateRuleList(ruleList, synchronous) {
     // No need to validate if only using built-in rules
     return result;
   }
+  /** @type {Object.<string, boolean>} */
   const allIds = {};
   for (const [ index, rule ] of ruleList.entries()) {
     const customIndex = index - lib_rules.length;
-    // eslint-disable-next-line jsdoc/require-jsdoc
-    function newError(property, value) {
+    // eslint-disable-next-line jsdoc/reject-any-type, jsdoc/require-jsdoc
+    function newError(/** @type {string} */ property, /** @type {any} */ value) {
       return new Error(
         `Property '${property}' of custom rule at index ${customIndex} is incorrect: '${value}'.`);
     }
     for (const property of [ "names", "tags" ]) {
+      // @ts-ignore
       const value = rule[property];
       if (!result &&
         (!value || !Array.isArray(value) || (value.length === 0) ||
@@ -66897,6 +67353,7 @@ function validateRuleList(ruleList, synchronous) {
       [ "function", "function" ]
     ]) {
       const property = propertyInfo[0];
+      // @ts-ignore
       const value = rule[property];
       if (!result && (!value || (typeof value !== propertyInfo[1]))) {
         result = newError(property, value);
@@ -66960,9 +67417,17 @@ function validateRuleList(ruleList, synchronous) {
  * @returns {LintResults} New LintResults instance.
  */
 function newResults(ruleList) {
-  const lintResults = {};
-  // eslint-disable-next-line jsdoc/require-jsdoc
+  /**
+   * Returns the string representation of a LintResults instance.
+   *
+   * @param {boolean} useAlias True if rule alias should be used instead of name.
+   * @returns {string} String representation of the instance.
+   * @this {LintResults}
+   */
   function toString(useAlias) {
+    // eslint-disable-next-line consistent-this, unicorn/no-this-assignment
+    const lintResults = this;
+    /** @type {Object.<string, Rule> | null} */
     let ruleNameToRule = null;
     const results = [];
     const keys = Object.keys(lintResults);
@@ -66973,6 +67438,7 @@ function newResults(ruleList) {
         for (const result of fileResults) {
           const ruleMoniker = result.ruleNames ?
             result.ruleNames.join("/") :
+            // @ts-ignore
             (result.ruleName + "/" + result.ruleAlias);
           results.push(
             file + ": " +
@@ -67013,19 +67479,29 @@ function newResults(ruleList) {
     }
     return results.join("\n");
   }
+  const lintResults = {};
   Object.defineProperty(lintResults, "toString", { "value": toString });
   // @ts-ignore
   return lintResults;
 }
 
 /**
+ * Result object for removeFrontMatter.
+ *
+ * @typedef {Object} RemoveFrontMatterResult
+ * @property {string} content Markdown content.
+ * @property {string[]} frontMatterLines Front matter lines.
+ */
+
+/**
  * Remove front matter (if present at beginning of content).
  *
  * @param {string} content Markdown content.
  * @param {RegExp | null} frontMatter Regular expression to match front matter.
- * @returns {Object} Trimmed content and front matter lines.
+ * @returns {RemoveFrontMatterResult} Trimmed content and front matter lines.
  */
 function removeFrontMatter(content, frontMatter) {
+  /** @type {string[]} */
   let frontMatterLines = [];
   if (frontMatter) {
     const frontMatterMatch = content.match(frontMatter);
@@ -67052,6 +67528,7 @@ function removeFrontMatter(content, frontMatter) {
  * @returns {Object.<string, string[]>} Map of alias to rule name.
  */
 function mapAliasToRuleNames(ruleList) {
+  /** @type {Object.<string, string[]>} */
   const aliasToRuleNames = {};
   // const tagToRuleNames = {};
   for (const rule of ruleList) {
@@ -67082,43 +67559,86 @@ function mapAliasToRuleNames(ruleList) {
 }
 
 /**
+ * Result object for getEffectiveConfig.
+ *
+ * @typedef {Object} GetEffectiveConfigResult
+ * @property {Configuration} effectiveConfig Effective configuration.
+ * @property {Map<string, boolean>} rulesEnabled Rules enabled.
+ * @property {Map<string, "error" | "warning">} rulesSeverity Rules severity.
+ */
+
+/**
  * Apply (and normalize) configuration object.
  *
  * @param {Rule[]} ruleList List of rules.
  * @param {Configuration} config Configuration object.
- * @param {Object.<string, string[]>} aliasToRuleNames Map of alias to rule
- * names.
- * @returns {Configuration} Effective configuration.
+ * @param {Object.<string, string[]>} aliasToRuleNames Map of alias to rule names.
+ * @returns {GetEffectiveConfigResult} Effective configuration and rule severities.
  */
 function getEffectiveConfig(ruleList, config, aliasToRuleNames) {
-  const defaultKey = Object.keys(config).filter(
-    (key) => key.toUpperCase() === "DEFAULT"
-  );
-  const ruleDefault = (defaultKey.length === 0) || !!config[defaultKey[0]];
+  let ruleDefaultEnable = true;
+  /** @type {"error" | "warning"} */
+  let ruleDefaultSeverity = "error";
+  Object.entries(config).every(([ key, value ]) => {
+    if (key.toUpperCase() === "DEFAULT") {
+      ruleDefaultEnable = !!value;
+      if (value === "warning") {
+        ruleDefaultSeverity = "warning";
+      }
+      return false;
+    }
+    return true;
+  });
   /** @type {Configuration} */
   const effectiveConfig = {};
-  for (const rule of ruleList) {
-    const ruleName = rule.names[0].toUpperCase();
-    effectiveConfig[ruleName] = ruleDefault;
+  /** @type {Map<string, boolean>} */
+  const rulesEnabled = new Map();
+  /** @type {Map<string, "error" | "warning">} */
+  const rulesSeverity = new Map();
+  const emptyObject = Object.freeze({});
+  for (const ruleName of ruleList.map((rule) => rule.names[0].toUpperCase())) {
+    effectiveConfig[ruleName] = emptyObject;
+    rulesEnabled.set(ruleName, ruleDefaultEnable);
+    rulesSeverity.set(ruleName, ruleDefaultSeverity);
   }
   // for (const ruleName of deprecatedRuleNames) {
   //   effectiveConfig[ruleName] = false;
   // }
-  for (const key of Object.keys(config)) {
-    let value = config[key];
-    if (value) {
-      if (!(value instanceof Object)) {
-        value = {};
-      }
-    } else {
-      value = false;
-    }
+  for (const [ key, value ] of Object.entries(config)) {
     const keyUpper = key.toUpperCase();
+    /** @type {boolean} */
+    let enabled = false;
+    /** @type {"error" | "warning"} */
+    let severity = "error";
+    let effectiveValue = {};
+    if (value) {
+      if (value instanceof Object) {
+        /** @type {{ enabled?: boolean, severity?: "error" | "warning" }} */
+        const valueObject = value;
+        enabled = (valueObject.enabled === undefined) ? true : !!valueObject.enabled;
+        severity = (valueObject.severity === "warning") ? "warning" : "error";
+        effectiveValue = Object.fromEntries(
+          Object.entries(value).filter(
+            ([ k ]) => (k !== "enabled") && (k !== "severity")
+          )
+        );
+      } else {
+        enabled = true;
+        severity = (value === "warning") ? "warning" : "error";
+      }
+    }
     for (const ruleName of (aliasToRuleNames[keyUpper] || [])) {
-      effectiveConfig[ruleName] = value;
+      Object.freeze(effectiveValue);
+      effectiveConfig[ruleName] = effectiveValue;
+      rulesEnabled.set(ruleName, enabled);
+      rulesSeverity.set(ruleName, severity);
     }
   }
-  return effectiveConfig;
+  return {
+    effectiveConfig,
+    rulesEnabled,
+    rulesSeverity
+  };
 }
 
 /**
@@ -67126,8 +67646,9 @@ function getEffectiveConfig(ruleList, config, aliasToRuleNames) {
  *
  * @typedef {Object} EnabledRulesPerLineNumberResult
  * @property {Configuration} effectiveConfig Effective configuration.
- * @property {any[]} enabledRulesPerLineNumber Enabled rules per line number.
+ * @property {Map<string, boolean>[]} enabledRulesPerLineNumber Enabled rules per line number.
  * @property {Rule[]} enabledRuleList Enabled rule list.
+ * @property {Map<string, "error" | "warning">} rulesSeverity Rules severity.
  */
 
 /**
@@ -67139,8 +67660,7 @@ function getEffectiveConfig(ruleList, config, aliasToRuleNames) {
  * @param {boolean} noInlineConfig Whether to allow inline configuration.
  * @param {Configuration} config Configuration object.
  * @param {ConfigurationParser[] | undefined} configParsers Configuration parsers.
- * @param {Object.<string, string[]>} aliasToRuleNames Map of alias to rule
- * names.
+ * @param {Object.<string, string[]>} aliasToRuleNames Map of alias to rule names.
  * @returns {EnabledRulesPerLineNumberResult} Effective configuration and enabled rules per line number.
  */
 function getEnabledRulesPerLineNumber(
@@ -67152,13 +67672,14 @@ function getEnabledRulesPerLineNumber(
   configParsers,
   aliasToRuleNames) {
   // Shared variables
-  let enabledRules = {};
-  let capturedRules = {};
-  const allRuleNames = [];
+  /** @type {Map<string, boolean>} */
+  let enabledRules = new Map();
+  /** @type {Map<string, boolean>} */
+  let capturedRules = enabledRules;
   const enabledRulesPerLineNumber = new Array(1 + frontMatterLines.length);
   // Helper functions
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function handleInlineConfig(input, forEachMatch, forEachLine) {
+  function handleInlineConfig(/** @type {string[]} */ input, /** @type {(act: string, par: string, ind: number) => void} */ forEachMatch, /** @type {(() => void)|undefined} */ forEachLine = undefined) {
     for (const [ lineIndex, line ] of input.entries()) {
       if (!noInlineConfig) {
         let match = null;
@@ -67179,7 +67700,7 @@ function getEnabledRulesPerLineNumber(
     }
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function configureFile(action, parameter) {
+  function configureFile(/** @type {string} */ action, /** @type {string} */ parameter) {
     if (action === "CONFIGURE-FILE") {
       const { "config": parsed } = parse_configuration_parseConfiguration(
         "CONFIGURE-FILE", parameter, configParsers
@@ -67193,26 +67714,27 @@ function getEnabledRulesPerLineNumber(
     }
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function applyEnableDisable(action, parameter, state) {
-    state = { ...state };
+  function applyEnableDisable(/** @type {string} */ action, /** @type {string} */ parameter, /** @type {Map<string, boolean>} */ state) {
+    state = new Map(state);
     const enabled = (action.startsWith("ENABLE"));
     const trimmed = parameter && parameter.trim();
+    // eslint-disable-next-line no-use-before-define
     const items = trimmed ? trimmed.toUpperCase().split(/\s+/) : allRuleNames;
     for (const nameUpper of items) {
       for (const ruleName of (aliasToRuleNames[nameUpper] || [])) {
-        state[ruleName] = enabled;
+        state.set(ruleName, enabled);
       }
     }
     return state;
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function enableDisableFile(action, parameter) {
+  function enableDisableFile(/** @type {string} */ action, /** @type {string} */ parameter) {
     if ((action === "ENABLE-FILE") || (action === "DISABLE-FILE")) {
       enabledRules = applyEnableDisable(action, parameter, enabledRules);
     }
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function captureRestoreEnableDisable(action, parameter) {
+  function captureRestoreEnableDisable(/** @type {string} */ action, /** @type {string} */ parameter) {
     if (action === "CAPTURE") {
       capturedRules = enabledRules;
     } else if (action === "RESTORE") {
@@ -67226,7 +67748,7 @@ function getEnabledRulesPerLineNumber(
     enabledRulesPerLineNumber.push(enabledRules);
   }
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function disableLineNextLine(action, parameter, lineNumber) {
+  function disableLineNextLine(/** @type {string} */ action, /** @type {string} */ parameter, /** @type {number} */ lineNumber) {
     const disableLine = (action === "DISABLE-LINE");
     const disableNextLine = (action === "DISABLE-NEXT-LINE");
     if (disableLine || disableNextLine) {
@@ -67242,29 +67764,24 @@ function getEnabledRulesPerLineNumber(
   }
   // Handle inline comments
   handleInlineConfig([ lines.join("\n") ], configureFile);
-  const effectiveConfig = getEffectiveConfig(
-    ruleList, config, aliasToRuleNames);
-  for (const rule of ruleList) {
-    const ruleName = rule.names[0].toUpperCase();
-    allRuleNames.push(ruleName);
-    enabledRules[ruleName] = !!effectiveConfig[ruleName];
-  }
+  const { effectiveConfig, rulesEnabled, rulesSeverity } = getEffectiveConfig(ruleList, config, aliasToRuleNames);
+  const allRuleNames = [ ...rulesEnabled.keys() ];
+  enabledRules = new Map(rulesEnabled);
   capturedRules = enabledRules;
   handleInlineConfig(lines, enableDisableFile);
   handleInlineConfig(lines, captureRestoreEnableDisable, updateLineState);
   handleInlineConfig(lines, disableLineNextLine);
   // Create the list of rules that are used at least once
-  const enabledRuleList = [];
-  for (const [ index, ruleName ] of allRuleNames.entries()) {
-    if (enabledRulesPerLineNumber.some((enabledRulesForLine) => enabledRulesForLine[ruleName])) {
-      enabledRuleList.push(ruleList[index]);
-    }
-  }
+  const enabledRuleList = ruleList.filter((rule) => {
+    const ruleName = rule.names[0].toUpperCase();
+    return enabledRulesPerLineNumber.some((enabledRulesForLine) => enabledRulesForLine.get(ruleName));
+  });
   // Return results
   return {
     effectiveConfig,
     enabledRulesPerLineNumber,
-    enabledRuleList
+    enabledRuleList,
+    rulesSeverity
   };
 }
 
@@ -67281,7 +67798,6 @@ function getEnabledRulesPerLineNumber(
  * @param {RegExp | null} frontMatter Regular expression for front matter.
  * @param {boolean} handleRuleFailures Whether to handle exceptions in rules.
  * @param {boolean} noInlineConfig Whether to allow inline configuration.
- * @param {number} resultVersion Version of the LintResults object to return.
  * @param {boolean} synchronous Whether to execute synchronously.
  * @param {LintContentCallback} callback Callback (err, result) function.
  * @returns {void}
@@ -67297,11 +67813,11 @@ function lintContent(
   frontMatter,
   handleRuleFailures,
   noInlineConfig,
-  resultVersion,
   synchronous,
   callback) {
   // Provide a consistent error-reporting callback
-  const callbackError = (error) => callback(error instanceof Error ? error : new Error(error));
+  // eslint-disable-next-line jsdoc/reject-any-type
+  const callbackError = (/** @type {any} */ error) => callback(error instanceof Error ? error : new Error(error));
   // Remove UTF-8 byte order marker (if present)
   content = content.replace(/^\uFEFF/, "");
   // Remove front matter
@@ -67309,7 +67825,7 @@ function lintContent(
   const { frontMatterLines } = removeFrontMatterResult;
   content = removeFrontMatterResult.content;
   // Get enabled rules per line (with HTML comments present)
-  const { effectiveConfig, enabledRulesPerLineNumber, enabledRuleList } =
+  const { effectiveConfig, enabledRulesPerLineNumber, enabledRuleList, rulesSeverity } =
     getEnabledRulesPerLineNumber(
       ruleList,
       content.split(helpers_helpers.newLineRe),
@@ -67336,7 +67852,7 @@ function lintContent(
   // Parse content into lines and get markdown-it tokens
   const lines = content.split(helpers_helpers.newLineRe);
   // Function to run after fetching markdown-it tokens (when needed)
-  const lintContentInternal = (markdownitTokens) => {
+  const lintContentInternal = (/** @type {MarkdownItToken[]} */ markdownitTokens) => {
     // Create (frozen) parameters for rules
     /** @type {MarkdownParsers} */
     // @ts-ignore
@@ -67367,7 +67883,8 @@ function lintContent(
       "config": null
     });
     // Function to run for each rule
-    let results = [];
+    /** @type {LintError[]} */
+    const results = [];
     /**
      * @param {Rule} rule Rule.
      * @returns {Promise<void> | null} Promise.
@@ -67385,19 +67902,21 @@ function lintContent(
       } else if (rule.parser === "micromark") {
         parsers = parsersMicromark;
       }
-      const params = {
+      const params = Object.freeze({
         ...paramsBase,
         ...tokens,
         parsers,
+        /** @type {RuleConfiguration} */
+        // @ts-ignore
         "config": effectiveConfig[ruleName]
-      };
+      });
       // eslint-disable-next-line jsdoc/require-jsdoc
-      function throwError(property) {
+      function throwError(/** @type {string} */ property) {
         throw new Error(
           `Value of '${property}' passed to onError by '${ruleName}' is incorrect for '${name}'.`);
       }
       // eslint-disable-next-line jsdoc/require-jsdoc
-      function onError(errorInfo) {
+      function onError(/** @type {RuleOnErrorInfo} */ errorInfo) {
         if (!errorInfo ||
           !helpers_helpers.isNumber(errorInfo.lineNumber) ||
           (errorInfo.lineNumber < 1) ||
@@ -67405,7 +67924,7 @@ function lintContent(
           throwError("lineNumber");
         }
         const lineNumber = errorInfo.lineNumber + frontMatterLines.length;
-        if (!enabledRulesPerLineNumber[lineNumber][ruleName]) {
+        if (!enabledRulesPerLineNumber[lineNumber].get(ruleName)) {
           return;
         }
         if (errorInfo.detail &&
@@ -67475,17 +67994,19 @@ function lintContent(
         const information = errorInfo.information || rule.information;
         results.push({
           lineNumber,
-          "ruleName": rule.names[0],
           "ruleNames": rule.names,
           "ruleDescription": rule.description,
           "ruleInformation": information ? information.href : null,
-          "errorDetail": errorInfo.detail || null,
-          "errorContext": errorInfo.context || null,
+          "errorDetail": errorInfo.detail?.replace(helpers_helpers.newLineRe, " ") || null,
+          "errorContext": errorInfo.context?.replace(helpers_helpers.newLineRe, " ") || null,
           "errorRange": errorInfo.range ? [ ...errorInfo.range ] : null,
-          "fixInfo": fixInfo ? cleanFixInfo : null
+          "fixInfo": fixInfo ? cleanFixInfo : null,
+          // @ts-ignore
+          "severity": rulesSeverity.get(ruleName)
         });
       }
       // Call (possibly external) rule function to report errors
+      // @ts-ignore
       const catchCallsOnError = (error) => onError({
         "lineNumber": 1,
         "detail": `This rule threw an exception: ${error.message || error}`
@@ -67502,7 +68023,7 @@ function lintContent(
       // Synchronous rule
       try {
         invokeRuleFunction();
-      } catch (error) {
+      } catch(error) {
         if (handleRuleFailures) {
           catchCallsOnError(error);
         } else {
@@ -67514,46 +68035,9 @@ function lintContent(
     const formatResults = () => {
       // Sort results by rule name by line number
       results.sort((a, b) => (
-        a.ruleName.localeCompare(b.ruleName) ||
+        a.ruleNames[0].localeCompare(b.ruleNames[0]) ||
         a.lineNumber - b.lineNumber
       ));
-      if (resultVersion < 3) {
-        // Remove fixInfo and multiple errors for the same rule and line number
-        const noPrevious = {
-          "ruleName": null,
-          "lineNumber": -1
-        };
-        results = results.filter((error, index, array) => {
-          delete error.fixInfo;
-          const previous = array[index - 1] || noPrevious;
-          return (
-            (error.ruleName !== previous.ruleName) ||
-            (error.lineNumber !== previous.lineNumber)
-          );
-        });
-      }
-      if (resultVersion === 0) {
-        // Return a dictionary of rule->[line numbers]
-        const dictionary = {};
-        for (const error of results) {
-          const ruleLines = dictionary[error.ruleName] || [];
-          ruleLines.push(error.lineNumber);
-          dictionary[error.ruleName] = ruleLines;
-        }
-        // @ts-ignore
-        results = dictionary;
-      } else if (resultVersion === 1) {
-        // Use ruleAlias instead of ruleNames
-        for (const error of results) {
-          error.ruleAlias = error.ruleNames[1] || error.ruleName;
-          delete error.ruleNames;
-        }
-      } else {
-        // resultVersion 2 or 3: Remove unwanted ruleName
-        for (const error of results) {
-          delete error.ruleName;
-        }
-      }
       return results;
     };
     // Run all rules
@@ -67573,7 +68057,7 @@ function lintContent(
       } else {
         callbackSuccess();
       }
-    } catch (error) {
+    } catch(error) {
       callbackError(error);
     } finally {
       initialize();
@@ -67611,8 +68095,7 @@ function lintContent(
  * @param {RegExp | null} frontMatter Regular expression for front matter.
  * @param {boolean} handleRuleFailures Whether to handle exceptions in rules.
  * @param {boolean} noInlineConfig Whether to allow inline configuration.
- * @param {number} resultVersion Version of the LintResults object to return.
- * @param {Object} fs File system implementation.
+ * @param {FsLike} fs File system implementation.
  * @param {boolean} synchronous Whether to execute synchronously.
  * @param {LintContentCallback} callback Callback (err, result) function.
  * @returns {void}
@@ -67627,12 +68110,11 @@ function lintFile(
   frontMatter,
   handleRuleFailures,
   noInlineConfig,
-  resultVersion,
   fs,
   synchronous,
   callback) {
   // eslint-disable-next-line jsdoc/require-jsdoc
-  function lintContentWrapper(err, content) {
+  function lintContentWrapper(/** @type {Error | null} */ err, /** @type {string} */ content) {
     if (err) {
       return callback(err);
     }
@@ -67647,7 +68129,6 @@ function lintFile(
       frontMatter,
       handleRuleFailures,
       noInlineConfig,
-      resultVersion,
       synchronous,
       callback
     );
@@ -67672,6 +68153,8 @@ function lintInput(options, synchronous, callback) {
   // Normalize inputs
   options = options || {};
   callback = callback || function noop() {};
+  /** @type {Rule[]} */
+  // @ts-ignore
   const customRuleList =
     [ options.customRules || [] ]
       .flat()
@@ -67691,6 +68174,7 @@ function lintInput(options, synchronous, callback) {
     callback(ruleErr);
     return;
   }
+  /** @type {string[]} */
   let files = [];
   if (Array.isArray(options.files)) {
     files = [ ...options.files ];
@@ -67706,12 +68190,14 @@ function lintInput(options, synchronous, callback) {
     options.frontMatter;
   const handleRuleFailures = !!options.handleRuleFailures;
   const noInlineConfig = !!options.noInlineConfig;
-  const resultVersion = (options.resultVersion === undefined) ?
-    3 :
-    options.resultVersion;
+  // @ts-ignore
+  // eslint-disable-next-line dot-notation
+  const resultVersion = (options["resultVersion"] === undefined) ? 3 : options["resultVersion"];
   const markdownItFactory =
     options.markdownItFactory ||
     (() => { throw new Error("The option 'markdownItFactory' was required (due to the option 'customRules' including a rule requiring the 'markdown-it' parser), but 'markdownItFactory' was not set."); });
+  /** @type {FsLike} */
+  // @ts-ignore
   const fs = options.fs || node_imports_node_fs;
   const aliasToRuleNames = mapAliasToRuleNames(ruleList);
   const results = newResults(ruleList);
@@ -67719,14 +68205,16 @@ function lintInput(options, synchronous, callback) {
   let concurrency = 0;
   // eslint-disable-next-line jsdoc/require-jsdoc
   function lintWorker() {
-    let currentItem = null;
+    /** @type {string | undefined} */
+    let currentItem = undefined;
     // eslint-disable-next-line jsdoc/require-jsdoc
-    function lintWorkerCallback(err, result) {
+    function lintWorkerCallback(/** @type {Error | null} */ err, /** @type {LintError[] | undefined} */ result) {
       concurrency--;
       if (err) {
         done = true;
         return callback(err);
       }
+      // @ts-ignore
       results[currentItem] = result;
       if (!synchronous) {
         lintWorker();
@@ -67735,10 +68223,9 @@ function lintInput(options, synchronous, callback) {
     }
     if (done) {
       // Abort for error or nothing left to do
-    } else if (files.length > 0) {
+    } else if ((currentItem = files.shift())) {
       // Lint next file
       concurrency++;
-      currentItem = files.shift();
       lintFile(
         ruleList,
         aliasToRuleNames,
@@ -67749,7 +68236,6 @@ function lintInput(options, synchronous, callback) {
         frontMatter,
         handleRuleFailures,
         noInlineConfig,
-        resultVersion,
         fs,
         synchronous,
         lintWorkerCallback
@@ -67768,14 +68254,22 @@ function lintInput(options, synchronous, callback) {
         frontMatter,
         handleRuleFailures,
         noInlineConfig,
-        resultVersion,
         synchronous,
         lintWorkerCallback
       );
     } else if (concurrency === 0) {
       // Finish
       done = true;
-      return callback(null, results);
+      // Deprecated: Convert results to specified resultVersion
+      let convertedResults = results;
+      if (resultVersion === 0) {
+        convertedResults = helpers_helpers.convertToResultVersion0(results);
+      } else if (resultVersion === 1) {
+        convertedResults = helpers_helpers.convertToResultVersion1(results);
+      } else if (resultVersion === 2) {
+        convertedResults = helpers_helpers.convertToResultVersion2(results);
+      }
+      return callback(null, convertedResults);
     }
     return null;
   }
@@ -67846,14 +68340,23 @@ function lintSync(options) {
 }
 
 /**
+ * Node fs instance (or compatible object).
+ *
+ * @typedef FsLike
+ * @property {(path: string, callback: (err: Error) => void) => void} access access method.
+ * @property {(path: string) => void} accessSync accessSync method.
+ * @property {(path: string, encoding: string, callback: (err: Error, data: string) => void) => void} readFile readFile method.
+ * @property {(path: string, encoding: string) => string} readFileSync readFileSync method.
+ */
+
+/**
  * Resolve referenced "extends" path in a configuration file
  * using path.resolve() with require.resolve() as a fallback.
  *
  * @param {string} configFile Configuration file name.
  * @param {string} referenceId Referenced identifier to resolve.
- * @param {Object} fs File system implementation.
- * @param {ResolveConfigExtendsCallback} callback Callback (err, result)
- * function.
+ * @param {FsLike} fs File system implementation.
+ * @param {ResolveConfigExtendsCallback} callback Callback (err, result) function.
  * @returns {void}
  */
 function resolveConfigExtends(configFile, referenceId, fs, callback) {
@@ -67881,7 +68384,7 @@ function resolveConfigExtends(configFile, referenceId, fs, callback) {
  *
  * @param {string} configFile Configuration file name.
  * @param {string} referenceId Referenced identifier to resolve.
- * @param {Object} fs File system implementation.
+ * @param {FsLike} fs File system implementation.
  * @returns {string} Resolved path to file.
  */
 function resolveConfigExtendsSync(configFile, referenceId, fs) {
@@ -67906,9 +68409,8 @@ function resolveConfigExtendsSync(configFile, referenceId, fs) {
  *
  * @param {Configuration} config Configuration object.
  * @param {string} file Configuration file name.
- * @param {ConfigurationParser[] | undefined} parsers Parsing
- * function(s).
- * @param {Object} fs File system implementation.
+ * @param {ConfigurationParser[] | undefined} parsers Parsing function(s).
+ * @param {FsLike} fs File system implementation.
  * @param {ReadConfigCallback} callback Callback (err, result) function.
  * @returns {void}
  */
@@ -67948,7 +68450,7 @@ function extendConfig(config, file, parsers, fs, callback) {
  * @param {Configuration} config Configuration object.
  * @param {string} file Configuration file name.
  * @param {ConfigurationParser[] | undefined} parsers Parsing function(s).
- * @param {Object} fs File system implementation.
+ * @param {FsLike} fs File system implementation.
  * @returns {Promise<Configuration>} Configuration object.
  */
 function extendConfigPromise(config, file, parsers, fs) {
@@ -67967,16 +68469,17 @@ function extendConfigPromise(config, file, parsers, fs) {
  * Read specified configuration file.
  *
  * @param {string} file Configuration file name.
- * @param {ConfigurationParser[] | ReadConfigCallback} [parsers] Parsing
- * function(s).
- * @param {Object} [fs] File system implementation.
+ * @param {ConfigurationParser[] | ReadConfigCallback} [parsers] Parsing function(s).
+ * @param {FsLike | ReadConfigCallback} [fs] File system implementation.
  * @param {ReadConfigCallback} [callback] Callback (err, result) function.
  * @returns {void}
  */
 function readConfigAsync(file, parsers, fs, callback) {
   if (!callback) {
     if (fs) {
+      // @ts-ignore
       callback = fs;
+      // @ts-ignore
       fs = null;
     } else {
       // @ts-ignore
@@ -67985,12 +68488,12 @@ function readConfigAsync(file, parsers, fs, callback) {
       parsers = null;
     }
   }
-  if (!fs) {
-    fs = node_imports_node_fs;
-  }
+  /** @type {FsLike} */
+  // @ts-ignore
+  const fsLike = fs || node_imports_node_fs;
   // Read file
   file = helpers_helpers.expandTildePath(file, node_imports_node_os);
-  fs.readFile(file, "utf8", (err, content) => {
+  fsLike.readFile(file, "utf8", (err, content) => {
     if (err) {
       // @ts-ignore
       return callback(err);
@@ -68004,7 +68507,7 @@ function readConfigAsync(file, parsers, fs, callback) {
     }
     // Extend configuration
     // @ts-ignore
-    return extendConfig(config, file, parsers, fs, callback);
+    return extendConfig(config, file, parsers, fsLike, callback);
   });
 }
 
@@ -68013,7 +68516,7 @@ function readConfigAsync(file, parsers, fs, callback) {
  *
  * @param {string} file Configuration file name.
  * @param {ConfigurationParser[]} [parsers] Parsing function(s).
- * @param {Object} [fs] File system implementation.
+ * @param {FsLike} [fs] File system implementation.
  * @returns {Promise<Configuration>} Configuration object.
  */
 function readConfigPromise(file, parsers, fs) {
@@ -68033,16 +68536,16 @@ function readConfigPromise(file, parsers, fs) {
  *
  * @param {string} file Configuration file name.
  * @param {ConfigurationParser[]} [parsers] Parsing function(s).
- * @param {Object} [fs] File system implementation.
+ * @param {FsLike} [fs] File system implementation.
  * @returns {Configuration} Configuration object.
  */
 function readConfigSync(file, parsers, fs) {
-  if (!fs) {
-    fs = nodeFs;
-  }
+  /** @type {FsLike} */
+  // @ts-ignore
+  const fsLike = fs || nodeFs;
   // Read file
   file = helpers.expandTildePath(file, os);
-  const content = fs.readFileSync(file, "utf8");
+  const content = fsLike.readFileSync(file, "utf8");
   // Try to parse file
   const { config, message } = parseConfiguration(file, content, parsers);
   if (!config) {
@@ -68056,7 +68559,7 @@ function readConfigSync(file, parsers, fs) {
     const resolvedExtends = resolveConfigExtendsSync(
       file,
       helpers.expandTildePath(configExtends, os),
-      fs
+      fsLike
     );
     return {
       ...readConfigSync(resolvedExtends, parsers, fs),
@@ -68069,9 +68572,9 @@ function readConfigSync(file, parsers, fs) {
 /**
  * Normalizes the fields of a RuleOnErrorFixInfo instance.
  *
- * @param {RuleOnErrorFixInfo} fixInfo RuleOnErrorFixInfo instance.
+ * @param {FixInfo} fixInfo RuleOnErrorFixInfo instance.
  * @param {number} [lineNumber] Line number.
- * @returns {RuleOnErrorFixInfoNormalized} Normalized RuleOnErrorFixInfo instance.
+ * @returns {FixInfoNormalized} Normalized RuleOnErrorFixInfo instance.
  */
 function normalizeFixInfo(fixInfo, lineNumber = 0) {
   return {
@@ -68086,7 +68589,7 @@ function normalizeFixInfo(fixInfo, lineNumber = 0) {
  * Applies the specified fix to a Markdown content line.
  *
  * @param {string} line Line of Markdown content.
- * @param {RuleOnErrorFixInfo} fixInfo RuleOnErrorFixInfo instance.
+ * @param {FixInfo} fixInfo FixInfo instance.
  * @param {string} [lineEnding] Line ending to use.
  * @returns {string | null} Fixed content or null if deleted.
  */
@@ -68102,7 +68605,7 @@ function applyFix(line, fixInfo, lineEnding = "\n") {
  * Applies as many of the specified fixes as possible to Markdown content.
  *
  * @param {string} input Lines of Markdown content.
- * @param {RuleOnErrorInfo[]} errors RuleOnErrorInfo instances.
+ * @param {LintError[]} errors LintError instances.
  * @returns {string} Fixed content.
  */
 function applyFixes(input, errors) {
@@ -68198,8 +68701,6 @@ function getVersion() {
  * @returns {void}
  */
 
-/* eslint-disable jsdoc/valid-types */
-
 /**
  * Rule parameters.
  *
@@ -68211,8 +68712,6 @@ function getVersion() {
  * @property {RuleConfiguration} config Rule configuration.
  * @property {string} version Version of the markdownlint library.
  */
-
-/* eslint-enable jsdoc/valid-types */
 
 /**
  * Markdown parser data.
@@ -68304,16 +68803,6 @@ function getVersion() {
  */
 
 /**
- * RuleOnErrorInfo with all optional properties present.
- *
- * @typedef {Object} RuleOnErrorFixInfoNormalized
- * @property {number} lineNumber Line number (1-based).
- * @property {number} editColumn Column of the fix (1-based).
- * @property {number} deleteCount Count of characters to delete.
- * @property {string} insertText Text to insert (after deleting).
- */
-
-/**
  * Rule definition.
  *
  * @typedef {Object} Rule
@@ -68358,33 +68847,23 @@ function getVersion() {
  * @property {Rule[] | Rule} [customRules] Custom rules.
  * @property {string[] | string} [files] Files to lint.
  * @property {RegExp | null} [frontMatter] Front matter pattern.
- * @property {Object} [fs] File system implementation.
+ * @property {FsLike} [fs] File system implementation.
  * @property {boolean} [handleRuleFailures] True to catch exceptions.
  * @property {MarkdownItFactory} [markdownItFactory] Function to create a markdown-it parser.
  * @property {boolean} [noInlineConfig] True to ignore HTML directives.
- * @property {number} [resultVersion] Results object version.
  * @property {Object.<string, string>} [strings] Strings to lint.
  */
 
 /**
  * A markdown-it plugin.
  *
- * @typedef {Array} Plugin
+ * @typedef {Object[]} Plugin
  */
 
 /**
- * Function to pretty-print lint results.
- *
- * @callback ToStringCallback
- * @param {boolean} [ruleAliases] True to use rule aliases.
- * @returns {string} Pretty-printed results.
- */
-
-/**
- * Lint results (for resultVersion 3).
+ * Lint results.
  *
  * @typedef {Object.<string, LintError[]>} LintResults
- * @property {ToStringCallback} toString String representation.
  */
 
 /**
@@ -68394,11 +68873,12 @@ function getVersion() {
  * @property {number} lineNumber Line number (1-based).
  * @property {string[]} ruleNames Rule name(s).
  * @property {string} ruleDescription Rule description.
- * @property {string} ruleInformation Link to more information.
- * @property {string} errorDetail Detail about the error.
- * @property {string} errorContext Context for the error.
- * @property {number[]} errorRange Column number (1-based) and length.
- * @property {FixInfo} [fixInfo] Fix information.
+ * @property {string | null} ruleInformation Link to more information.
+ * @property {string | null} errorDetail Detail about the error.
+ * @property {string | null} errorContext Context for the error.
+ * @property {number[] | null} errorRange Column number (1-based) and length.
+ * @property {FixInfo | null} fixInfo Fix information.
+ * @property {"error" | "warning"} severity Severity of the error.
  */
 
 /**
@@ -68409,6 +68889,16 @@ function getVersion() {
  * @property {number} [editColumn] Column of the fix (1-based).
  * @property {number} [deleteCount] Count of characters to delete.
  * @property {string} [insertText] Text to insert (after deleting).
+ */
+
+/**
+ * FixInfo with all optional properties present.
+ *
+ * @typedef {Object} FixInfoNormalized
+ * @property {number} lineNumber Line number (1-based).
+ * @property {number} editColumn Column of the fix (1-based).
+ * @property {number} deleteCount Count of characters to delete.
+ * @property {string} insertText Text to insert (after deleting).
  */
 
 /**
@@ -68485,6 +68975,7 @@ function getVersion() {
 /** @typedef {import("./markdownlint.mjs").ConfigurationParser} ConfigurationParser */
 /** @typedef {import("./markdownlint.mjs").ConfigurationStrict} ConfigurationStrict */
 /** @typedef {import("./markdownlint.mjs").FixInfo} FixInfo */
+/** @typedef {import("./markdownlint.mjs").FixInfoNormalized} FixInfoNormalized */
 /** @typedef {import("./markdownlint.mjs").LintCallback} LintCallback */
 /** @typedef {import("./markdownlint.mjs").LintContentCallback} LintContentCallback */
 /** @typedef {import("./markdownlint.mjs").LintError} LintError */
@@ -68505,10 +68996,8 @@ function getVersion() {
 /** @typedef {import("./markdownlint.mjs").RuleFunction} RuleFunction */
 /** @typedef {import("./markdownlint.mjs").RuleOnError} RuleOnError */
 /** @typedef {import("./markdownlint.mjs").RuleOnErrorFixInfo} RuleOnErrorFixInfo */
-/** @typedef {import("./markdownlint.mjs").RuleOnErrorFixInfoNormalized} RuleOnErrorFixInfoNormalized */
 /** @typedef {import("./markdownlint.mjs").RuleOnErrorInfo} RuleOnErrorInfo */
 /** @typedef {import("./markdownlint.mjs").RuleParams} RuleParams */
-/** @typedef {import("./markdownlint.mjs").ToStringCallback} ToStringCallback */
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/exports-promise.mjs
 // @ts-check
@@ -68522,8 +69011,9 @@ const sliceSize = 1000;
 
 /**
  * Efficiently appends the source array to the destination array.
- * @param {object[]} destination Destination Array.
- * @param {object[]} source Source Array.
+ * @template T
+ * @param {T[]} destination Destination Array.
+ * @param {T[]} source Source Array.
  * @returns {void}
  */
 const appendToArray = (destination, source) => {
@@ -68543,11 +69033,13 @@ const appendToArray = (destination, source) => {
 ;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/merge-options.mjs
 // @ts-check
 
+/** @typedef {import("markdownlint-cli2").Options} Options */
+
 /**
  * Merges two options objects by combining config and replacing properties.
- * @param {object} first First options object.
- * @param {object} second Second options object.
- * @returns {object} Merged options object.
+ * @param {Options | null | undefined} first First options object.
+ * @param {Options | null | undefined} second Second options object.
+ * @returns {Options} Merged options object.
  */
 const mergeOptions = (first, second) => {
   const merged = {
@@ -68576,10 +69068,10 @@ var main = __nccwpck_require__(9547);
 
 /**
  * Parses a JSONC string, returning the corresponding object.
- * @param {string} text String to parse as JSONC.
- * @returns {object} Corresponding object.
+ * @type {import("markdownlint").ConfigurationParser}
  */
 const jsoncParse = (text) => {
+  /** @type {import("jsonc-parser").ParseError[]} */
   const errors = [];
   const result = (0,main.parse)(text, errors, { "allowTrailingComma": true });
   if (errors.length > 0) {
@@ -68595,7 +69087,7 @@ const jsoncParse = (text) => {
 
 ;// CONCATENATED MODULE: ./node_modules/js-yaml/dist/js-yaml.mjs
 
-/*! js-yaml 4.1.0 https://github.com/nodeca/js-yaml @license MIT */
+/*! js-yaml 4.1.1 https://github.com/nodeca/js-yaml @license MIT */
 function isNothing(subject) {
   return (typeof subject === 'undefined') || (subject === null);
 }
@@ -69806,6 +70298,22 @@ function charFromCodepoint(c) {
   );
 }
 
+// set a property of a literal object, while protecting against prototype pollution,
+// see https://github.com/nodeca/js-yaml/issues/164 for more details
+function setProperty(object, key, value) {
+  // used for this specific key only because Object.defineProperty is slow
+  if (key === '__proto__') {
+    Object.defineProperty(object, key, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: value
+    });
+  } else {
+    object[key] = value;
+  }
+}
+
 var simpleEscapeCheck = new Array(256); // integer, for fast access
 var simpleEscapeMap = new Array(256);
 for (var i = 0; i < 256; i++) {
@@ -69984,7 +70492,7 @@ function mergeMappings(state, destination, source, overridableKeys) {
     key = sourceKeys[index];
 
     if (!_hasOwnProperty$1.call(destination, key)) {
-      destination[key] = source[key];
+      setProperty(destination, key, source[key]);
       overridableKeys[key] = true;
     }
   }
@@ -70044,17 +70552,7 @@ function storeMappingPair(state, _result, overridableKeys, keyTag, keyNode, valu
       throwError(state, 'duplicated mapping key');
     }
 
-    // used for this specific key only because Object.defineProperty is slow
-    if (keyNode === '__proto__') {
-      Object.defineProperty(_result, keyNode, {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value: valueNode
-      });
-    } else {
-      _result[keyNode] = valueNode;
-    }
+    setProperty(_result, keyNode, valueNode);
     delete overridableKeys[keyNode];
   }
 
@@ -72443,7 +72941,6 @@ var jsYaml = {
 	safeDump: safeDump
 };
 
-/* harmony default export */ const js_yaml = (jsYaml);
 
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/parsers/yaml-parse.mjs
@@ -72451,12 +72948,16 @@ var jsYaml = {
 
 
 
+/* eslint-disable arrow-body-style */
+
 /**
  * Parses a YAML string, returning the corresponding object.
- * @param {string} text String to parse as YAML.
- * @returns {object} Corresponding object.
+ * @type {import("markdownlint").ConfigurationParser}
  */
-const yamlParse = (text) => js_yaml.load(text);
+const yamlParse = (text) => {
+  // @ts-ignore
+  return jsYaml.load(text);
+};
 
 /* harmony default export */ const yaml_parse = (yamlParse);
 
@@ -72468,6 +72969,7 @@ const yamlParse = (text) => js_yaml.load(text);
 
 /**
  * Array of parser objects ordered by priority.
+ * @type {import("markdownlint").ConfigurationParser[]}
  */
 const parsers = [
   jsonc_parse,
@@ -72477,7 +72979,7 @@ const parsers = [
 /* harmony default export */ const parsers_parsers = (parsers);
 
 ;// CONCATENATED MODULE: ./node_modules/markdownlint-cli2/markdownlint-cli2.mjs
-// @ts-ignore
+// @ts-check
 
 // Imports
 
@@ -72496,9 +72998,11 @@ const pathPosix = external_node_path_namespaceObject.posix;
 
 
 
+/* eslint-disable jsdoc/reject-any-type */
+
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.18.1";
+const packageVersion = "0.19.0";
 const libraryName = "markdownlint";
 const libraryVersion = getVersion();
 const bannerMessage = `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`;
@@ -72509,10 +73013,10 @@ const utf8 = "utf8";
 const markdownlint_cli2_noop = () => null;
 
 // Negates a glob
-const negateGlob = (glob) => `!${glob}`;
+const negateGlob = (/** @type {string} */ glob) => `!${glob}`;
 
 // Throws a meaningful exception for an unusable configuration file
-const throwForConfigurationFile = (file, error) => {
+const throwForConfigurationFile = (/** @type {string} */ file, /** @type {Error | any} */ error) => {
   throw new Error(
     `Unable to use configuration file '${file}'; ${error?.message}`,
     { "cause": error }
@@ -72520,15 +73024,15 @@ const throwForConfigurationFile = (file, error) => {
 };
 
 // Return a posix path (even on Windows)
-const posixPath = (p) => p.split(external_node_path_namespaceObject.sep).join(pathPosix.sep);
+const posixPath = (/** @type {string} */ p) => p.split(external_node_path_namespaceObject.sep).join(pathPosix.sep);
 
 // Resolves module paths relative to the specified directory
-const resolveModulePaths = (dir, modulePaths) => (
+const resolveModulePaths = (/** @type {string} */ dir, /** @type {string[]} */ modulePaths) => (
   modulePaths.map((path) => external_node_path_namespaceObject.resolve(dir, (0,helpers_helpers.expandTildePath)(path, external_node_os_namespaceObject)))
 );
 
 // Read a JSON(C) or YAML file and return the object
-const readConfigFile = (fs, dir, name, otherwise) => () => {
+const readConfigFile = (/** @type {FsLike} */ fs, /** @type {string} */ dir, /** @type {string} */ name, /** @type {() => void} */ otherwise) => () => {
   const file = pathPosix.join(dir, name);
   return fs.promises.access(file).
     then(
@@ -72542,7 +73046,7 @@ const readConfigFile = (fs, dir, name, otherwise) => () => {
 };
 
 // Import a module ID with a custom directory in the path
-const importModule = async (dirOrDirs, id, noImport) => {
+const importModule = async (/** @type {string[] | string} */ dirOrDirs, /** @type {string} */ id, /** @type {boolean} */ noImport) => {
   if (typeof id !== "string") {
     return id;
   } else if (noImport) {
@@ -72562,11 +73066,13 @@ const importModule = async (dirOrDirs, id, noImport) => {
           ? new URL(expandId)
           : (0,external_node_url_namespaceObject.pathToFileURL)(external_node_path_namespaceObject.resolve(dirs[0], expandId));
     }
+    // @ts-ignore
     // eslint-disable-next-line no-inline-comments
     const module = await import(/* webpackIgnore: true */ moduleName);
     return module.default;
   } catch (error) {
     errors.push(error);
+    // eslint-disable-next-line preserve-caught-error
     throw new AggregateError(
       errors,
       `Unable to import module '${id}'.`
@@ -72575,7 +73081,7 @@ const importModule = async (dirOrDirs, id, noImport) => {
 };
 
 // Import an array of modules by ID
-const importModuleIds = (dirs, ids, noImport) => (
+const importModuleIds = (/** @type {string[]} */ dirs, /** @type {string[]} */ ids, /** @type {boolean} */ noImport) => (
   Promise.all(
     ids.map(
       (id) => importModule(dirs, id, noImport)
@@ -72584,7 +73090,7 @@ const importModuleIds = (dirs, ids, noImport) => (
 );
 
 // Import an array of modules by ID (preserving parameters)
-const importModuleIdsAndParams = (dirs, idsAndParams, noImport) => (
+const importModuleIdsAndParams = (/** @type {string[]} */ dirs, /** @type {string[][]} */ idsAndParams, /** @type {boolean} */ noImport) => (
   Promise.all(
     idsAndParams.map(
       (idAndParams) => importModule(dirs, idAndParams[0], noImport).
@@ -72594,7 +73100,7 @@ const importModuleIdsAndParams = (dirs, idsAndParams, noImport) => (
 );
 
 // Import a JavaScript file and return the exported object
-const importConfig = (fs, dir, name, noImport, otherwise) => () => {
+const importConfig = (/** @type {FsLike} */ fs, /** @type {string} */ dir, /** @type {string} */ name, /** @type {boolean} */ noImport, /** @type {() => void} */ otherwise) => () => {
   const file = pathPosix.join(dir, name);
   return fs.promises.access(file).
     then(
@@ -72604,7 +73110,7 @@ const importConfig = (fs, dir, name, noImport, otherwise) => () => {
 };
 
 // Extend a config object if it has 'extends' property
-const getExtendedConfig = (config, configPath, fs) => {
+const getExtendedConfig = (/** @type {import("markdownlint").Configuration} */ config, /** @type {string} */ configPath, /** @type {FsLike} */ fs) => {
   if (config.extends) {
     return extendConfigPromise(
       config,
@@ -72618,7 +73124,7 @@ const getExtendedConfig = (config, configPath, fs) => {
 };
 
 // Read an options or config file in any format and return the object
-const readOptionsOrConfig = async (configPath, fs, noImport) => {
+const readOptionsOrConfig = async (/** @type {string} */ configPath, /** @type {FsLike} */ fs, /** @type {boolean} */ noImport) => {
   const basename = pathPosix.basename(configPath);
   const dirname = pathPosix.dirname(configPath);
   let options = null;
@@ -72666,7 +73172,7 @@ const readOptionsOrConfig = async (configPath, fs, noImport) => {
 };
 
 // Filter a list of files to ignore by glob
-const removeIgnoredFiles = (dir, files, ignores) => (
+const removeIgnoredFiles = (/** @type {string} */ dir, /** @type {string[]} */ files, /** @type {string[]} */ ignores) => (
   micromatch(
     files.map((file) => pathPosix.relative(dir, file)),
     ignores
@@ -72674,7 +73180,7 @@ const removeIgnoredFiles = (dir, files, ignores) => (
 );
 
 // Process/normalize command-line arguments and return glob patterns
-const processArgv = (argv) => {
+const processArgv = (/** @type {string[]} */ argv) => {
   const globPatterns = argv.map(
     (glob) => {
       if (glob.startsWith(":")) {
@@ -72698,13 +73204,13 @@ const processArgv = (argv) => {
 };
 
 // Show help if missing arguments
-const showHelp = (logMessage, showBanner) => {
+const showHelp = (/** @type {Logger} */ logMessage, /** @type {boolean} */ showBanner) => {
   if (showBanner) {
     logMessage(bannerMessage);
   }
   logMessage(`https://github.com/DavidAnson/markdownlint-cli2
 
-Syntax: markdownlint-cli2 glob0 [glob1] [...] [globN] [--config file] [--fix] [--help]
+Syntax: markdownlint-cli2 glob0 [glob1] [...] [globN] [--config file] [--fix] [--format] [--help] [--no-globs]
 
 Glob expressions (from the globby library):
 - * matches any number of characters, but not /
@@ -72723,6 +73229,7 @@ Dot-only glob:
 Optional parameters:
 - --config    specifies the path to a configuration file to define the base configuration
 - --fix       updates files to resolve fixable issues (can be overridden in configuration)
+- --format    reads standard input (stdin), applies fixes, writes standard output (stdout)
 - --help      writes this message to the console and exits without doing anything else
 - --no-globs  ignores the "globs" property if present in the top-level options object
 
@@ -72751,13 +73258,13 @@ $ markdownlint-cli2 "**/*.md" "#node_modules"`
 
 // Get (creating if necessary) and process a directory's info object
 const getAndProcessDirInfo = (
-  fs,
-  tasks,
-  dirToDirInfo,
-  dir,
-  relativeDir,
-  noImport,
-  allowPackageJson
+  /** @type {FsLike} */ fs,
+  /** @type {Task[]} */ tasks,
+  /** @type {DirToDirInfo} */ dirToDirInfo,
+  /** @type {string} */ dir,
+  /** @type {string | null} */ relativeDir,
+  /** @type {boolean} */ noImport,
+  /** @type {boolean} */ allowPackageJson
 ) => {
   // Create dirInfo
   let dirInfo = dirToDirInfo[dir];
@@ -72767,8 +73274,8 @@ const getAndProcessDirInfo = (
       relativeDir,
       "parent": null,
       "files": [],
-      "markdownlintConfig": null,
-      "markdownlintOptions": null
+      "markdownlintConfig": {},
+      "markdownlintOptions": {}
     };
     dirToDirInfo[dir] = dirInfo;
 
@@ -72780,7 +73287,7 @@ const getAndProcessDirInfo = (
     const packageJson = pathPosix.join(dir, "package.json");
     let file = "[UNKNOWN]";
     // eslint-disable-next-line no-return-assign
-    const captureFile = (f) => file = f;
+    const captureFile = (/** @type {string} */ f) => file = f;
     tasks.push(
       fs.promises.access(captureFile(markdownlintCli2Jsonc)).
         then(
@@ -72803,14 +73310,14 @@ const getAndProcessDirInfo = (
                           () => fs.promises.
                             readFile(file, utf8).
                             then(jsonc_parse).
-                            then((obj) => obj[packageName]),
+                            then((/** @type {any} */ obj) => obj[packageName]),
                           markdownlint_cli2_noop
                         )
                     )
                 )
             )
         ).
-        then((options) => {
+        then((/** @type {Options} */ options) => {
           dirInfo.markdownlintOptions = options;
           return options &&
             options.config &&
@@ -72824,7 +73331,7 @@ const getAndProcessDirInfo = (
                 options.config = config;
               });
         }).
-        catch((error) => {
+        catch((/** @type {Error} */ error) => {
           throwForConfigurationFile(file, error);
         })
     );
@@ -72866,7 +73373,7 @@ const getAndProcessDirInfo = (
       );
     tasks.push(
       readConfigs().
-        then((config) => {
+        then((/** @type {import("markdownlint").Configuration} */ config) => {
           dirInfo.markdownlintConfig = config;
         })
     );
@@ -72878,16 +73385,18 @@ const getAndProcessDirInfo = (
 
 // Get base markdownlint-cli2 options object
 const getBaseOptions = async (
-  fs,
-  baseDir,
-  relativeDir,
-  globPatterns,
-  options,
-  fixDefault,
-  noGlobs,
-  noImport
+  /** @type {FsLike} */ fs,
+  /** @type {string} */ baseDir,
+  /** @type {string | null} */ relativeDir,
+  /** @type {string[]} */ globPatterns,
+  /** @type {Options} */ options,
+  /** @type {boolean} */ fixDefault,
+  /** @type {boolean} */ noGlobs,
+  /** @type {boolean} */ noImport
 ) => {
+  /** @type {Task[]} */
   const tasks = [];
+  /** @type {DirToDirInfo} */
   const dirToDirInfo = {};
   getAndProcessDirInfo(
     fs,
@@ -72929,15 +73438,16 @@ const getBaseOptions = async (
 
 // Enumerate files from globs and build directory infos
 const enumerateFiles = async (
-  fs,
-  baseDirSystem,
-  baseDir,
-  globPatterns,
-  dirToDirInfo,
-  gitignore,
-  ignoreFiles,
-  noImport
+  /** @type {FsLike} */ fs,
+  /** @type {string} */ baseDirSystem,
+  /** @type {string} */ baseDir,
+  /** @type {string[]} */ globPatterns,
+  /** @type {DirToDirInfo} */ dirToDirInfo,
+  /** @type {boolean} */ gitignore,
+  /** @type {string | undefined} */ ignoreFiles,
+  /** @type {boolean} */ noImport
 ) => {
+  /** @type {Task[]} */
   const tasks = [];
   /** @type {import("globby").Options} */
   const globbyOptions = {
@@ -72951,6 +73461,7 @@ const enumerateFiles = async (
     fs
   };
   // Special-case literal files
+  /** @type {string[]} */
   const literalFiles = [];
   const filteredGlobPatterns = globPatterns.filter(
     (globPattern) => {
@@ -72965,7 +73476,7 @@ const enumerateFiles = async (
   ).map((globPattern) => globPattern.replace(/^\\:/u, ":"));
   const baseMarkdownlintOptions = dirToDirInfo[baseDir].markdownlintOptions;
   const globsForIgnore =
-    (baseMarkdownlintOptions.globs || []).
+    (baseMarkdownlintOptions?.globs || []).
       filter((glob) => glob.startsWith("!"));
   const filteredLiteralFiles =
     ((literalFiles.length > 0) && (globsForIgnore.length > 0))
@@ -72985,7 +73496,7 @@ const enumerateFiles = async (
         ? barePattern
         : pathPosix.join(baseDir, barePattern);
       return fs.promises.stat(globPath).
-        then((stats) => (stats.isDirectory()
+        then((/** @type {import("node:fs").Stats} */ stats) => (stats.isDirectory()
           ? pathPosix.join(globPattern, "**")
           : globPattern)).
         catch(() => globPattern);
@@ -73014,14 +73525,16 @@ const enumerateFiles = async (
 
 // Enumerate (possibly missing) parent directories and update directory infos
 const enumerateParents = async (
-  fs,
-  baseDir,
-  dirToDirInfo,
-  noImport
+  /** @type {FsLike} */ fs,
+  /** @type {string} */ baseDir,
+  /** @type {DirToDirInfo} */ dirToDirInfo,
+  /** @type {boolean} */ noImport
 ) => {
+  /** @type {Task[]} */
   const tasks = [];
 
   // Create a lookup of baseDir and parents
+  /** @type {Record<string, boolean>} */
   const baseDirParents = {};
   let baseDirParent = baseDir;
   do {
@@ -73063,15 +73576,15 @@ const enumerateParents = async (
 
 // Create directory info objects by enumerating file globs
 const createDirInfos = async (
-  fs,
-  baseDirSystem,
-  baseDir,
-  globPatterns,
-  dirToDirInfo,
-  optionsOverride,
-  gitignore,
-  ignoreFiles,
-  noImport
+  /** @type {FsLike} */ fs,
+  /** @type {string} */ baseDirSystem,
+  /** @type {string} */ baseDir,
+  /** @type {string[]} */ globPatterns,
+  /** @type {DirToDirInfo} */ dirToDirInfo,
+  /** @type {Options | undefined} */ optionsOverride,
+  /** @type {boolean} */ gitignore,
+  /** @type {string | undefined} */ ignoreFiles,
+  /** @type {boolean} */ noImport
 ) => {
   await enumerateFiles(
     fs,
@@ -73094,21 +73607,14 @@ const createDirInfos = async (
   const dirs = Object.keys(dirToDirInfo);
   dirs.sort((a, b) => b.length - a.length);
   const dirInfos = [];
-  const noConfigDirInfo =
-    // eslint-disable-next-line unicorn/consistent-function-scoping
-    (dirInfo) => (
-      dirInfo.parent &&
-      !dirInfo.markdownlintConfig &&
-      !dirInfo.markdownlintOptions
-    );
   const tasks = [];
   for (const dir of dirs) {
     const dirInfo = dirToDirInfo[dir];
-    if (noConfigDirInfo(dirInfo)) {
+    if (dirInfo.parent && !dirInfo.markdownlintConfig && !dirInfo.markdownlintOptions) {
       if (dirInfo.parent) {
         append_to_array(dirInfo.parent.files, dirInfo.files);
       }
-      dirToDirInfo[dir] = null;
+      delete dirToDirInfo[dir];
     } else {
       const { markdownlintOptions, relativeDir } = dirInfo;
       const effectiveDir = relativeDir || dir;
@@ -73120,6 +73626,7 @@ const createDirInfos = async (
         tasks.push(
           importModuleIds(
             [ effectiveDir, ...effectiveModulePaths ],
+            // @ts-ignore
             markdownlintOptions.customRules,
             noImport
           ).then((customRules) => {
@@ -73180,6 +73687,7 @@ const createDirInfos = async (
   for (const dirInfo of dirInfos) {
     let markdownlintOptions = dirInfo.markdownlintOptions || {};
     let { markdownlintConfig } = dirInfo;
+    /** @type {DirInfo | null} */
     let parent = dirInfo;
     // eslint-disable-next-line prefer-destructuring
     while ((parent = parent.parent)) {
@@ -73208,7 +73716,7 @@ const createDirInfos = async (
 };
 
 // Lint files in groups by shared configuration
-const lintFiles = (fs, dirInfos, fileContents) => {
+const lintFiles = (/** @type {FsLike} */ fs, /** @type {DirInfo[]} */ dirInfos, /** @type {Record<string, string>} */ fileContents, /** @type {FormattingContext} */ formattingContext) => {
   const tasks = [];
   // For each dirInfo
   for (const dirInfo of dirInfos) {
@@ -73240,6 +73748,7 @@ const lintFiles = (fs, dirInfos, fileContents) => {
       const module = await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 9193));
       const markdownIt = module.default({ "html": true });
       for (const plugin of (markdownlintOptions.markdownItPlugins || [])) {
+        // @ts-ignore
         markdownIt.use(...plugin);
       }
       return markdownIt;
@@ -73251,6 +73760,7 @@ const lintFiles = (fs, dirInfos, fileContents) => {
       "strings": filteredStrings,
       "config": markdownlintConfig || markdownlintOptions.config,
       "configParsers": parsers_parsers,
+      // @ts-ignore
       "customRules": markdownlintOptions.customRules,
       "frontMatter": markdownlintOptions.frontMatter
         ? new RegExp(markdownlintOptions.frontMatter, "u")
@@ -73262,8 +73772,16 @@ const lintFiles = (fs, dirInfos, fileContents) => {
     };
     // Invoke markdownlint
     let task = lintPromise(options);
-    // For any fixable errors, read file, apply fixes, and write it back
-    if (markdownlintOptions.fix) {
+    if (formattingContext.formatting) {
+      // Apply fixes to stdin input
+      task = task.then((results) => {
+        const [ [ id, original ] ] = Object.entries(filteredStrings);
+        const errorInfos = results[id];
+        formattingContext.formatted = applyFixes(original, errorInfos);
+        return {};
+      });
+    } else if (markdownlintOptions.fix) {
+      // For any fixable errors, read file, apply fixes, write it back, and re-lint
       task = task.then((results) => {
         options.files = [];
         const subTasks = [];
@@ -73276,7 +73794,7 @@ const lintFiles = (fs, dirInfos, fileContents) => {
             delete results[fileName];
             options.files.push(fileName);
             subTasks.push(fs.promises.readFile(fileName, utf8).
-              then((original) => {
+              then((/** @type {string} */ original) => {
                 const fixed = applyFixes(original, errorInfos);
                 return fs.promises.writeFile(fileName, fixed, utf8);
               })
@@ -73298,52 +73816,53 @@ const lintFiles = (fs, dirInfos, fileContents) => {
   return Promise.all(tasks);
 };
 
-// Create summary of results
-const createSummary = (baseDir, taskResults) => {
-  const summary = [];
+// Create list of results
+const createResults = (/** @type {string} */ baseDir, /** @type {import("markdownlint").LintResults[]} */ taskResults) => {
+  /** @type {LintResult[]} */
+  const results = [];
+  /** @type {Map<LintResult, number>} */
+  const resultToCounter = new Map();
   let counter = 0;
-  for (const results of taskResults) {
-    for (const fileName in results) {
-      const errorInfos = results[fileName];
+  for (const taskResult of taskResults) {
+    for (const [ fileName, errorInfos ] of Object.entries(taskResult)) {
       for (const errorInfo of errorInfos) {
         const fileNameRelative = pathPosix.relative(baseDir, fileName);
-        summary.push({
+        const result = {
           "fileName": fileNameRelative,
-          ...errorInfo,
-          counter
-        });
+          ...errorInfo
+        };
+        results.push(result);
+        resultToCounter.set(result, counter);
         counter++;
       }
     }
   }
-  summary.sort((a, b) => (
+  results.sort((a, b) => (
     a.fileName.localeCompare(b.fileName) ||
     (a.lineNumber - b.lineNumber) ||
     a.ruleNames[0].localeCompare(b.ruleNames[0]) ||
-    (a.counter - b.counter)
+    // @ts-ignore
+    (resultToCounter.get(a) - resultToCounter.get(b))
   ));
-  for (const result of summary) {
-    delete result.counter;
-  }
-  return summary;
+  return results;
 };
 
 // Output summary via formatters
-const outputSummary = async (
-  baseDir,
-  relativeDir,
-  summary,
-  outputFormatters,
-  modulePaths,
-  logMessage,
-  logError,
-  noImport
+const outputResults = async (
+  /** @type {string} */ baseDir,
+  /** @type {string | null} */ relativeDir,
+  /** @type {LintResult[]} */ results,
+  /** @type {OutputFormatterConfiguration[] | undefined} */ outputFormatters,
+  /** @type {string[]} */ modulePaths,
+  /** @type {Logger} */ logMessage,
+  /** @type {Logger} */ logError,
+  /** @type {boolean} */ noImport
 ) => {
-  const errorsPresent = (summary.length > 0);
-  if (errorsPresent || outputFormatters) {
+  if ((results.length > 0) || outputFormatters) {
+    /** @type {OutputFormatterOptions} */
     const formatterOptions = {
       "directory": baseDir,
-      "results": summary,
+      results,
       logMessage,
       logError
     };
@@ -73358,11 +73877,10 @@ const outputSummary = async (
       return formatter(formatterOptions, ...formatterParams);
     }));
   }
-  return errorsPresent;
 };
 
 // Main function
-const markdownlint_cli2_main = async (params) => {
+const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
   // Capture parameters
   const {
     directory,
@@ -73384,8 +73902,11 @@ const markdownlint_cli2_main = async (params) => {
     (directory && external_node_path_namespaceObject.resolve(directory)) ||
     process.cwd();
   const baseDir = posixPath(baseDirSystem);
+  /** @type {FormattingContext} */
+  const formattingContext = {};
   // Merge and process args/argv
   let fixDefault = false;
+  /** @type {undefined | null | string} */
   // eslint-disable-next-line unicorn/no-useless-undefined
   let configPath = undefined;
   let useStdin = false;
@@ -73405,6 +73926,9 @@ const markdownlint_cli2_main = async (params) => {
       configPath = null;
     } else if (arg === "--fix") {
       fixDefault = true;
+    } else if (arg === "--format") {
+      formattingContext.formatting = true;
+      useStdin = true;
     } else if (arg === "--help") {
       shouldShowHelp = true;
     } else if (arg === "--no-globs") {
@@ -73427,7 +73951,7 @@ const markdownlint_cli2_main = async (params) => {
       const resolvedConfigPath =
         posixPath(external_node_path_namespaceObject.resolve(baseDirSystem, configPath));
       optionsArgv =
-        await readOptionsOrConfig(resolvedConfigPath, fs, noImport);
+        await readOptionsOrConfig(resolvedConfigPath, fs, Boolean(noImport));
       relativeDir = pathPosix.dirname(resolvedConfigPath);
     }
     // Process arguments and get base options
@@ -73439,11 +73963,11 @@ const markdownlint_cli2_main = async (params) => {
       globPatterns,
       optionsArgv || optionsDefault,
       fixDefault,
-      noGlobs,
-      noImport
+      Boolean(noGlobs),
+      Boolean(noImport)
     );
   } finally {
-    if (!baseOptions?.baseMarkdownlintOptions.noBanner) {
+    if (!baseOptions?.baseMarkdownlintOptions.noBanner && !formattingContext.formatting) {
       logMessage(bannerMessage);
     }
   }
@@ -73463,6 +73987,7 @@ const markdownlint_cli2_main = async (params) => {
     };
   }
   // Include any file overrides or non-file content
+  /** @type {Record<string, string>} */
   const resolvedFileContents = {};
   for (const file in fileContents) {
     const resolvedFile = posixPath(external_node_path_namespaceObject.resolve(baseDirSystem, file));
@@ -73477,7 +74002,7 @@ const markdownlint_cli2_main = async (params) => {
     Object.keys(nonFileContents || {})
   );
   // Output finding status
-  const showProgress = !baseMarkdownlintOptions.noProgress;
+  const showProgress = !baseMarkdownlintOptions.noProgress && !formattingContext.formatting;
   if (showProgress) {
     logMessage(`Finding: ${globPatterns.join(" ")}`);
   }
@@ -73499,7 +74024,7 @@ const markdownlint_cli2_main = async (params) => {
       optionsOverride,
       gitignore,
       ignoreFiles,
-      noImport
+      Boolean(noImport)
     );
   // Output linting status
   if (showProgress) {
@@ -73516,32 +74041,124 @@ const markdownlint_cli2_main = async (params) => {
     logMessage(`Linting: ${fileCount} file(s)`);
   }
   // Lint files
-  const lintResults = await lintFiles(fs, dirInfos, resolvedFileContents);
+  const lintResults = await lintFiles(fs, dirInfos, resolvedFileContents, formattingContext);
   // Output summary
-  const summary = createSummary(baseDir, lintResults);
+  const results = createResults(baseDir, lintResults);
   if (showProgress) {
-    logMessage(`Summary: ${summary.length} error(s)`);
+    logMessage(`Summary: ${results.length} error(s)`);
   }
-  const outputFormatters =
-    (optionsOverride && optionsOverride.outputFormatters) ||
-    baseMarkdownlintOptions.outputFormatters;
-  const modulePaths = resolveModulePaths(
-    baseDir,
-    baseMarkdownlintOptions.modulePaths || []
-  );
-  const errorsPresent = await outputSummary(
-    baseDir,
-    relativeDir,
-    summary,
-    outputFormatters,
-    modulePaths,
-    logMessage,
-    logError,
-    noImport
-  );
+  if (formattingContext.formatting) {
+    console.log(formattingContext.formatted);
+  } else {
+    const outputFormatters =
+      (optionsOverride && optionsOverride.outputFormatters) ||
+      baseMarkdownlintOptions.outputFormatters;
+    const modulePaths = resolveModulePaths(
+      baseDir,
+      baseMarkdownlintOptions.modulePaths || []
+    );
+    await outputResults(
+      baseDir,
+      relativeDir,
+      results,
+      outputFormatters,
+      modulePaths,
+      logMessage,
+      logError,
+      Boolean(noImport)
+    );
+  }
   // Return result
+  const errorsPresent = lintResults.flatMap(
+    (lintResult) => Object.values(lintResult).flatMap(
+      (lintErrors) => lintErrors.filter(
+        (lintError) => lintError.severity !== "warning"
+      )
+    )
+  ).length > 0;
   return errorsPresent ? 1 : 0;
 };
+
+/** @typedef {any} FsLike */
+
+/** @typedef {Promise<any>} Task */
+
+/**
+ * @typedef Parameters
+ * @property {boolean} [allowStdin] Allow stdin.
+ * @property {string[]} argv Arguments.
+ * @property {string} [directory] Directory.
+ * @property {Record<string, string>} [fileContents] File contents.
+ * @property {FsLike} [fs] File system object.
+ * @property {Logger} [logError] Log error.
+ * @property {Logger} [logMessage] Log message.
+ * @property {boolean} [noGlobs] No globs.
+ * @property {boolean} [noImport] No import.
+ * @property {Record<string, string>} [nonFileContents] Non-file contents.
+ * @property {Options} [optionsDefault] Options default.
+ * @property {Options} [optionsOverride] Options override.
+ */
+
+/**
+ * @typedef DirInfo
+ * @property {string} dir Directory.
+ * @property {string | null} relativeDir Relative directory.
+ * @property {DirInfo | null} parent Parent.
+ * @property {string[]} files Files.
+ * @property {import("markdownlint").Configuration} markdownlintConfig Configuration.
+ * @property {Options} markdownlintOptions Options.
+ */
+
+/** @typedef {Record<string, DirInfo>} DirToDirInfo */
+
+/** @typedef {[string]} MarkdownItPluginConfiguration */
+
+/** @typedef {[string]} OutputFormatterConfiguration */
+
+/**
+ * @typedef Options
+ * @property {import("markdownlint").Configuration} [config] Config.
+ * @property {import("markdownlint").Rule[] | string[]} [customRules] Custom rules.
+ * @property {boolean} [fix] Fix.
+ * @property {string} [frontMatter] Front matter.
+ * @property {boolean | string} [gitignore] Git ignore.
+ * @property {string[]} [globs] Globs.
+ * @property {string[]} [ignores] Ignores.
+ * @property {MarkdownItPluginConfiguration[]} [markdownItPlugins] Markdown-it plugins.
+ * @property {string[]} [modulePaths] Module paths.
+ * @property {boolean} [noBanner] No banner.
+ * @property {boolean} [noInlineConfig] No inline config.
+ * @property {boolean} [noProgress] No progress.
+ * @property {OutputFormatterConfiguration[]} [outputFormatters] Output formatters.
+ * @property {boolean} [showFound] Show found.
+ */
+
+/**
+ * @typedef LintContext
+ * @property {string} fileName File name.
+ */
+
+/** @typedef {import("markdownlint").LintError & LintContext} LintResult */
+
+/**
+ * @typedef FormattingContext
+ * @property {boolean} [formatting] True iff formatting.
+ * @property {string} [formatted] Formatted content.
+ */
+
+/**
+ * @callback Logger
+ * @param {string} msg Message.
+ * @returns {void}
+ */
+
+/**
+ * @typedef {object} OutputFormatterOptions
+ * @property {string} directory Base directory.
+ * @property {LintResult[]} results Lint results.
+ * @property {Logger} logMessage Message logger.
+ * @property {Logger} logError Error logger.
+ */
 
 ;// CONCATENATED MODULE: ./markdownlint-cli2-action.mjs
 // @ts-check
