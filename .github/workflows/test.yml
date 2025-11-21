@@ -12,7 +12,7 @@ jobs:
     name: Run test script
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: actions/setup-node@v6
     - run: npm install
     - run: npm run test
@@ -20,13 +20,13 @@ jobs:
     name: No globs (README.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: ./
   one-glob-file:
     name: One glob (test/errors.md, 3 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: ./
       with:
         globs: test/errors.md
@@ -38,7 +38,7 @@ jobs:
     name: One glob (README.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: ./
       with:
         globs: '*.md'
@@ -46,7 +46,7 @@ jobs:
     name: Two globs (README.md and test/errors.md, 3 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: ./
       with:
         globs: |
@@ -60,7 +60,7 @@ jobs:
     name: Separator (README.md and test/errors.md, 3 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: ./
       with:
         globs: '*.md,test/*.md'
@@ -73,7 +73,7 @@ jobs:
     name: config (test/errors.md, 2 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - run: rm .markdownlint.json
     - uses: ./
       with:
@@ -87,7 +87,7 @@ jobs:
     name: config (invalid configuration file, fails)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: ./
       with:
         config: 'invalid.markdownlint.jsonc'
@@ -100,7 +100,7 @@ jobs:
     name: fix (test/errors.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: ./
       with:
         fix: true
@@ -109,7 +109,7 @@ jobs:
     name: custom rules (README.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - run: rm .markdownlint.json
     - uses: ./
       with:
@@ -119,7 +119,7 @@ jobs:
     name: custom rules (README.md, 2 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - run: rm .markdownlint.json
     - uses: ./
       with:
