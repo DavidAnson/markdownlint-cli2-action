@@ -16841,7 +16841,7 @@ const {
 /** @type {import('http2')} */
 let http2
 try {
-  http2 = __nccwpck_require__(8056)
+  http2 = __nccwpck_require__(5675)
 } catch {
   // @ts-ignore
   http2 = { constants: {} }
@@ -35994,7 +35994,7 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("http");
 
 /***/ }),
 
-/***/ 8056:
+/***/ 5675:
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("http2");
@@ -36040,6 +36040,13 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream"
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/consumers");
+
+/***/ }),
+
+/***/ 6466:
+/***/ ((module) => {
+
+module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
 
 /***/ }),
 
@@ -47706,8 +47713,8 @@ const external_node_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(i
 var external_node_stream_ = __nccwpck_require__(7075);
 // EXTERNAL MODULE: external "node:events"
 var external_node_events_ = __nccwpck_require__(8474);
-;// CONCATENATED MODULE: external "node:stream/promises"
-const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/promises");
+// EXTERNAL MODULE: external "node:stream/promises"
+var promises_ = __nccwpck_require__(6466);
 ;// CONCATENATED MODULE: ./node_modules/@sindresorhus/merge-streams/index.js
 
 
@@ -47817,7 +47824,7 @@ const onMergedStreamFinished = async (passThroughStream, streams, unpipeEvent) =
 
 const onMergedStreamEnd = async (passThroughStream, {signal}) => {
 	try {
-		await (0,promises_namespaceObject.finished)(passThroughStream, {signal, cleanup: true});
+		await (0,promises_.finished)(passThroughStream, {signal, cleanup: true});
 	} catch (error) {
 		errorOrAbortStream(passThroughStream, error);
 		throw error;
@@ -47891,7 +47898,7 @@ const afterMergedStreamFinished = async (onFinished, stream, {signal}) => {
 
 const onInputStreamEnd = async ({passThroughStream, stream, streams, ended, aborted, controller: {signal}}) => {
 	try {
-		await (0,promises_namespaceObject.finished)(stream, {
+		await (0,promises_.finished)(stream, {
 			signal,
 			cleanup: true,
 			readable: true,
@@ -73002,7 +73009,7 @@ const pathPosix = external_node_path_namespaceObject.posix;
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.19.0";
+const packageVersion = "0.19.1";
 const libraryName = "markdownlint";
 const libraryVersion = getVersion();
 const bannerMessage = `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`;
@@ -74048,7 +74055,11 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
     logMessage(`Summary: ${results.length} error(s)`);
   }
   if (formattingContext.formatting) {
-    console.log(formattingContext.formatted);
+    const { pipeline } = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 6466, 19));
+    await pipeline(
+      String(formattingContext.formatted),
+      process.stdout
+    );
   } else {
     const outputFormatters =
       (optionsOverride && optionsOverride.outputFormatters) ||
