@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@actions/core": "1.11.1",
-    "markdownlint-cli2": "0.19.1"
+    "markdownlint-cli2": "0.20.0"
   },
   "devDependencies": {
     "@eslint/js": "9.39.1",
