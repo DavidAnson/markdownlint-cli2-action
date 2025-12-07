@@ -48668,7 +48668,7 @@ const fixableRuleNames = (/* unused pure expression or super */ null && ([
   "MD054", "MD058"
 ]));
 const homepage = "https://github.com/DavidAnson/markdownlint";
-const version = "0.39.0";
+const version = "0.40.0";
 
 // EXTERNAL MODULE: ./node_modules/markdownlint/lib/defer-require.cjs
 var defer_require = __nccwpck_require__(9489);
@@ -49173,6 +49173,8 @@ const tabRe = /\t+/g;
 
 
 
+/** @typedef {import("micromark-extension-math")} */
+
 const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
 
 /** @type {import("markdownlint").Rule} */
@@ -49182,14 +49184,14 @@ const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
   "tags": [ "links" ],
   "parser": "micromark",
   "function": function MD011(params, onError) {
-    const codeBlockLineNumbers = new Set();
-    for (const codeBlock of filterByTypesCached([ "codeFenced", "codeIndented" ])) {
-      (0,micromark_helpers.addRangeToSet)(codeBlockLineNumbers, codeBlock.startLine, codeBlock.endLine);
+    const ignoreBlockLineNumbers = new Set();
+    for (const ignoreBlock of filterByTypesCached([ "codeFenced", "codeIndented", "mathFlow" ])) {
+      (0,micromark_helpers.addRangeToSet)(ignoreBlockLineNumbers, ignoreBlock.startLine, ignoreBlock.endLine);
     }
-    const codeTexts = filterByTypesCached([ "codeText" ]);
+    const ignoreTexts = filterByTypesCached([ "codeText", "mathText" ]);
     for (const [ lineIndex, line ] of params.lines.entries()) {
       const lineNumber = lineIndex + 1;
-      if (!codeBlockLineNumbers.has(lineNumber)) {
+      if (!ignoreBlockLineNumbers.has(lineNumber)) {
         let match = null;
         while ((match = reversedLinkRe.exec(line)) !== null) {
           const [ reversedLink, preChar, linkText, linkDestination ] = match;
@@ -49201,7 +49203,7 @@ const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
             const length = match[0].length - preChar.length;
             /** @type {import("../helpers/helpers.cjs").FileRange} */
             const range = { "startLine": lineNumber, "startColumn": column, "endLine": lineNumber, "endColumn": column + length - 1 };
-            if (!codeTexts.some((codeText) => (0,helpers_helpers.hasOverlap)(codeText, range))) {
+            if (!ignoreTexts.some((ignoreText) => (0,helpers_helpers.hasOverlap)(ignoreText, range))) {
               (0,helpers_helpers.addError)(
                 onError,
                 lineNumber,
@@ -49271,10 +49273,8 @@ const reversedLinkRe = /(^|[^\\])\(([^()]+)\)\[([^\]^][^\]]*)\](?!\()/g;
 
 
 
-const longLineRePrefix = "^.{";
-const longLineRePostfixRelaxed = "}.*\\s.*$";
-const longLineRePostfixStrict = "}.+$";
-const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
+// Regular expression for a line that is not wrappable
+const notWrappableRe = /^(?:[#>\s]*\s)?\S*$/;
 
 /** @typedef {import("micromark-extension-gfm-autolink-literal")} */
 /** @typedef {import("micromark-extension-gfm-table")} */
@@ -49287,20 +49287,10 @@ const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
   "parser": "micromark",
   "function": function MD013(params, onError) {
     const lineLength = Number(params.config.line_length || 80);
-    const headingLineLength =
-      Number(params.config.heading_line_length || lineLength);
-    const codeLineLength =
-      Number(params.config.code_block_line_length || lineLength);
+    const headingLineLength = Number(params.config.heading_line_length || lineLength);
+    const codeLineLength = Number(params.config.code_block_line_length || lineLength);
     const strict = !!params.config.strict;
     const stern = !!params.config.stern;
-    const longLineRePostfix =
-      (strict || stern) ? longLineRePostfixStrict : longLineRePostfixRelaxed;
-    const longLineRe =
-      new RegExp(longLineRePrefix + lineLength + longLineRePostfix);
-    const longHeadingLineRe =
-      new RegExp(longLineRePrefix + headingLineLength + longLineRePostfix);
-    const longCodeLineRe =
-      new RegExp(longLineRePrefix + codeLineLength + longLineRePostfix);
     const codeBlocks = params.config.code_blocks;
     const includeCodeBlocks = (codeBlocks === undefined) ? true : !!codeBlocks;
     const tables = params.config.tables;
@@ -49342,28 +49332,27 @@ const sternModeRe = /^(?:[#>\s]*\s)?\S*$/;
       const isHeading = headingLineNumbers.has(lineNumber);
       const inCode = codeBlockLineNumbers.has(lineNumber);
       const inTable = tableLineNumbers.has(lineNumber);
-      const length = inCode ?
-        codeLineLength :
-        (isHeading ? headingLineLength : lineLength);
-      const lengthRe = inCode ?
-        longCodeLineRe :
-        (isHeading ? longHeadingLineRe : longLineRe);
-      if ((includeCodeBlocks || !inCode) &&
+      const maxLength = inCode ? codeLineLength : (isHeading ? headingLineLength : lineLength);
+      // If not strict/stern, the last run of non-whitespace is allowed to go
+      // beyond the limit as long as it begins within the limit
+      const text = (strict || stern) ? line : line.replace(/\S*$/u, "#");
+      if ((maxLength > 0) &&
+          (includeCodeBlocks || !inCode) &&
           (includeTables || !inTable) &&
           (includeHeadings || !isHeading) &&
           !definitionLineIndices.has(lineIndex) &&
           (strict ||
-           (!(stern && sternModeRe.test(line)) &&
+           (!(stern && notWrappableRe.test(line)) &&
             !linkOnlyLineNumbers.has(lineNumber))) &&
-          lengthRe.test(line)) {
+          (text.length > maxLength)) {
         (0,helpers_helpers.addErrorDetailIf)(
           onError,
           lineNumber,
-          length,
+          maxLength,
           line.length,
           undefined,
           undefined,
-          [ length + 1, line.length - length ]
+          [ maxLength + 1, line.length - maxLength ]
         );
       }
     }
@@ -65770,11 +65759,10 @@ function getEvents(
           .trim();
         if ((text.length > 0) && !text.includes("]")) {
           /** @type {Event[]} */
-          const artificialEvents = [];
-          artificialEvents.push(
+          const artificialEvents = [
             [ "enter", undefinedReferenceType, tokenizeContext ],
             [ "enter", undefinedReference, tokenizeContext ]
-          );
+          ];
           for (const event of eventsToReplicate) {
             const [ kind, token ] = event;
             // Copy token because the current object will get modified by the parser
@@ -67014,13 +67002,575 @@ function normalize(str) {
   }
 });
 
+;// CONCATENATED MODULE: ./node_modules/ansi-regex/index.js
+function ansiRegex({onlyFirst = false} = {}) {
+	// Valid string terminator sequences are BEL, ESC\, and 0x9c
+	const ST = '(?:\\u0007|\\u001B\\u005C|\\u009C)';
+
+	// OSC sequences only: ESC ] ... ST (non-greedy until the first ST)
+	const osc = `(?:\\u001B\\][\\s\\S]*?${ST})`;
+
+	// CSI and related: ESC/C1, optional intermediates, optional params (supports ; and :) then final byte
+	const csi = '[\\u001B\\u009B][[\\]()#;?]*(?:\\d{1,4}(?:[;:]\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]';
+
+	const pattern = `${osc}|${csi}`;
+
+	return new RegExp(pattern, onlyFirst ? undefined : 'g');
+}
+
+;// CONCATENATED MODULE: ./node_modules/strip-ansi/index.js
+
+
+const regex = ansiRegex();
+
+function stripAnsi(string) {
+	if (typeof string !== 'string') {
+		throw new TypeError(`Expected a \`string\`, got \`${typeof string}\``);
+	}
+
+	// Even though the regex is global, we don't need to reset the `.lastIndex`
+	// because unlike `.exec()` and `.test()`, `.replace()` does it automatically
+	// and doing it manually has a performance penalty.
+	return string.replace(regex, '');
+}
+
+;// CONCATENATED MODULE: ./node_modules/get-east-asian-width/lookup.js
+// Generated code.
+
+function isAmbiguous(x) {
+	return x === 0xA1
+		|| x === 0xA4
+		|| x === 0xA7
+		|| x === 0xA8
+		|| x === 0xAA
+		|| x === 0xAD
+		|| x === 0xAE
+		|| x >= 0xB0 && x <= 0xB4
+		|| x >= 0xB6 && x <= 0xBA
+		|| x >= 0xBC && x <= 0xBF
+		|| x === 0xC6
+		|| x === 0xD0
+		|| x === 0xD7
+		|| x === 0xD8
+		|| x >= 0xDE && x <= 0xE1
+		|| x === 0xE6
+		|| x >= 0xE8 && x <= 0xEA
+		|| x === 0xEC
+		|| x === 0xED
+		|| x === 0xF0
+		|| x === 0xF2
+		|| x === 0xF3
+		|| x >= 0xF7 && x <= 0xFA
+		|| x === 0xFC
+		|| x === 0xFE
+		|| x === 0x101
+		|| x === 0x111
+		|| x === 0x113
+		|| x === 0x11B
+		|| x === 0x126
+		|| x === 0x127
+		|| x === 0x12B
+		|| x >= 0x131 && x <= 0x133
+		|| x === 0x138
+		|| x >= 0x13F && x <= 0x142
+		|| x === 0x144
+		|| x >= 0x148 && x <= 0x14B
+		|| x === 0x14D
+		|| x === 0x152
+		|| x === 0x153
+		|| x === 0x166
+		|| x === 0x167
+		|| x === 0x16B
+		|| x === 0x1CE
+		|| x === 0x1D0
+		|| x === 0x1D2
+		|| x === 0x1D4
+		|| x === 0x1D6
+		|| x === 0x1D8
+		|| x === 0x1DA
+		|| x === 0x1DC
+		|| x === 0x251
+		|| x === 0x261
+		|| x === 0x2C4
+		|| x === 0x2C7
+		|| x >= 0x2C9 && x <= 0x2CB
+		|| x === 0x2CD
+		|| x === 0x2D0
+		|| x >= 0x2D8 && x <= 0x2DB
+		|| x === 0x2DD
+		|| x === 0x2DF
+		|| x >= 0x300 && x <= 0x36F
+		|| x >= 0x391 && x <= 0x3A1
+		|| x >= 0x3A3 && x <= 0x3A9
+		|| x >= 0x3B1 && x <= 0x3C1
+		|| x >= 0x3C3 && x <= 0x3C9
+		|| x === 0x401
+		|| x >= 0x410 && x <= 0x44F
+		|| x === 0x451
+		|| x === 0x2010
+		|| x >= 0x2013 && x <= 0x2016
+		|| x === 0x2018
+		|| x === 0x2019
+		|| x === 0x201C
+		|| x === 0x201D
+		|| x >= 0x2020 && x <= 0x2022
+		|| x >= 0x2024 && x <= 0x2027
+		|| x === 0x2030
+		|| x === 0x2032
+		|| x === 0x2033
+		|| x === 0x2035
+		|| x === 0x203B
+		|| x === 0x203E
+		|| x === 0x2074
+		|| x === 0x207F
+		|| x >= 0x2081 && x <= 0x2084
+		|| x === 0x20AC
+		|| x === 0x2103
+		|| x === 0x2105
+		|| x === 0x2109
+		|| x === 0x2113
+		|| x === 0x2116
+		|| x === 0x2121
+		|| x === 0x2122
+		|| x === 0x2126
+		|| x === 0x212B
+		|| x === 0x2153
+		|| x === 0x2154
+		|| x >= 0x215B && x <= 0x215E
+		|| x >= 0x2160 && x <= 0x216B
+		|| x >= 0x2170 && x <= 0x2179
+		|| x === 0x2189
+		|| x >= 0x2190 && x <= 0x2199
+		|| x === 0x21B8
+		|| x === 0x21B9
+		|| x === 0x21D2
+		|| x === 0x21D4
+		|| x === 0x21E7
+		|| x === 0x2200
+		|| x === 0x2202
+		|| x === 0x2203
+		|| x === 0x2207
+		|| x === 0x2208
+		|| x === 0x220B
+		|| x === 0x220F
+		|| x === 0x2211
+		|| x === 0x2215
+		|| x === 0x221A
+		|| x >= 0x221D && x <= 0x2220
+		|| x === 0x2223
+		|| x === 0x2225
+		|| x >= 0x2227 && x <= 0x222C
+		|| x === 0x222E
+		|| x >= 0x2234 && x <= 0x2237
+		|| x === 0x223C
+		|| x === 0x223D
+		|| x === 0x2248
+		|| x === 0x224C
+		|| x === 0x2252
+		|| x === 0x2260
+		|| x === 0x2261
+		|| x >= 0x2264 && x <= 0x2267
+		|| x === 0x226A
+		|| x === 0x226B
+		|| x === 0x226E
+		|| x === 0x226F
+		|| x === 0x2282
+		|| x === 0x2283
+		|| x === 0x2286
+		|| x === 0x2287
+		|| x === 0x2295
+		|| x === 0x2299
+		|| x === 0x22A5
+		|| x === 0x22BF
+		|| x === 0x2312
+		|| x >= 0x2460 && x <= 0x24E9
+		|| x >= 0x24EB && x <= 0x254B
+		|| x >= 0x2550 && x <= 0x2573
+		|| x >= 0x2580 && x <= 0x258F
+		|| x >= 0x2592 && x <= 0x2595
+		|| x === 0x25A0
+		|| x === 0x25A1
+		|| x >= 0x25A3 && x <= 0x25A9
+		|| x === 0x25B2
+		|| x === 0x25B3
+		|| x === 0x25B6
+		|| x === 0x25B7
+		|| x === 0x25BC
+		|| x === 0x25BD
+		|| x === 0x25C0
+		|| x === 0x25C1
+		|| x >= 0x25C6 && x <= 0x25C8
+		|| x === 0x25CB
+		|| x >= 0x25CE && x <= 0x25D1
+		|| x >= 0x25E2 && x <= 0x25E5
+		|| x === 0x25EF
+		|| x === 0x2605
+		|| x === 0x2606
+		|| x === 0x2609
+		|| x === 0x260E
+		|| x === 0x260F
+		|| x === 0x261C
+		|| x === 0x261E
+		|| x === 0x2640
+		|| x === 0x2642
+		|| x === 0x2660
+		|| x === 0x2661
+		|| x >= 0x2663 && x <= 0x2665
+		|| x >= 0x2667 && x <= 0x266A
+		|| x === 0x266C
+		|| x === 0x266D
+		|| x === 0x266F
+		|| x === 0x269E
+		|| x === 0x269F
+		|| x === 0x26BF
+		|| x >= 0x26C6 && x <= 0x26CD
+		|| x >= 0x26CF && x <= 0x26D3
+		|| x >= 0x26D5 && x <= 0x26E1
+		|| x === 0x26E3
+		|| x === 0x26E8
+		|| x === 0x26E9
+		|| x >= 0x26EB && x <= 0x26F1
+		|| x === 0x26F4
+		|| x >= 0x26F6 && x <= 0x26F9
+		|| x === 0x26FB
+		|| x === 0x26FC
+		|| x === 0x26FE
+		|| x === 0x26FF
+		|| x === 0x273D
+		|| x >= 0x2776 && x <= 0x277F
+		|| x >= 0x2B56 && x <= 0x2B59
+		|| x >= 0x3248 && x <= 0x324F
+		|| x >= 0xE000 && x <= 0xF8FF
+		|| x >= 0xFE00 && x <= 0xFE0F
+		|| x === 0xFFFD
+		|| x >= 0x1F100 && x <= 0x1F10A
+		|| x >= 0x1F110 && x <= 0x1F12D
+		|| x >= 0x1F130 && x <= 0x1F169
+		|| x >= 0x1F170 && x <= 0x1F18D
+		|| x === 0x1F18F
+		|| x === 0x1F190
+		|| x >= 0x1F19B && x <= 0x1F1AC
+		|| x >= 0xE0100 && x <= 0xE01EF
+		|| x >= 0xF0000 && x <= 0xFFFFD
+		|| x >= 0x100000 && x <= 0x10FFFD;
+}
+
+function isFullWidth(x) {
+	return x === 0x3000
+		|| x >= 0xFF01 && x <= 0xFF60
+		|| x >= 0xFFE0 && x <= 0xFFE6;
+}
+
+function isWide(x) {
+	return x >= 0x1100 && x <= 0x115F
+		|| x === 0x231A
+		|| x === 0x231B
+		|| x === 0x2329
+		|| x === 0x232A
+		|| x >= 0x23E9 && x <= 0x23EC
+		|| x === 0x23F0
+		|| x === 0x23F3
+		|| x === 0x25FD
+		|| x === 0x25FE
+		|| x === 0x2614
+		|| x === 0x2615
+		|| x >= 0x2630 && x <= 0x2637
+		|| x >= 0x2648 && x <= 0x2653
+		|| x === 0x267F
+		|| x >= 0x268A && x <= 0x268F
+		|| x === 0x2693
+		|| x === 0x26A1
+		|| x === 0x26AA
+		|| x === 0x26AB
+		|| x === 0x26BD
+		|| x === 0x26BE
+		|| x === 0x26C4
+		|| x === 0x26C5
+		|| x === 0x26CE
+		|| x === 0x26D4
+		|| x === 0x26EA
+		|| x === 0x26F2
+		|| x === 0x26F3
+		|| x === 0x26F5
+		|| x === 0x26FA
+		|| x === 0x26FD
+		|| x === 0x2705
+		|| x === 0x270A
+		|| x === 0x270B
+		|| x === 0x2728
+		|| x === 0x274C
+		|| x === 0x274E
+		|| x >= 0x2753 && x <= 0x2755
+		|| x === 0x2757
+		|| x >= 0x2795 && x <= 0x2797
+		|| x === 0x27B0
+		|| x === 0x27BF
+		|| x === 0x2B1B
+		|| x === 0x2B1C
+		|| x === 0x2B50
+		|| x === 0x2B55
+		|| x >= 0x2E80 && x <= 0x2E99
+		|| x >= 0x2E9B && x <= 0x2EF3
+		|| x >= 0x2F00 && x <= 0x2FD5
+		|| x >= 0x2FF0 && x <= 0x2FFF
+		|| x >= 0x3001 && x <= 0x303E
+		|| x >= 0x3041 && x <= 0x3096
+		|| x >= 0x3099 && x <= 0x30FF
+		|| x >= 0x3105 && x <= 0x312F
+		|| x >= 0x3131 && x <= 0x318E
+		|| x >= 0x3190 && x <= 0x31E5
+		|| x >= 0x31EF && x <= 0x321E
+		|| x >= 0x3220 && x <= 0x3247
+		|| x >= 0x3250 && x <= 0xA48C
+		|| x >= 0xA490 && x <= 0xA4C6
+		|| x >= 0xA960 && x <= 0xA97C
+		|| x >= 0xAC00 && x <= 0xD7A3
+		|| x >= 0xF900 && x <= 0xFAFF
+		|| x >= 0xFE10 && x <= 0xFE19
+		|| x >= 0xFE30 && x <= 0xFE52
+		|| x >= 0xFE54 && x <= 0xFE66
+		|| x >= 0xFE68 && x <= 0xFE6B
+		|| x >= 0x16FE0 && x <= 0x16FE4
+		|| x >= 0x16FF0 && x <= 0x16FF6
+		|| x >= 0x17000 && x <= 0x18CD5
+		|| x >= 0x18CFF && x <= 0x18D1E
+		|| x >= 0x18D80 && x <= 0x18DF2
+		|| x >= 0x1AFF0 && x <= 0x1AFF3
+		|| x >= 0x1AFF5 && x <= 0x1AFFB
+		|| x === 0x1AFFD
+		|| x === 0x1AFFE
+		|| x >= 0x1B000 && x <= 0x1B122
+		|| x === 0x1B132
+		|| x >= 0x1B150 && x <= 0x1B152
+		|| x === 0x1B155
+		|| x >= 0x1B164 && x <= 0x1B167
+		|| x >= 0x1B170 && x <= 0x1B2FB
+		|| x >= 0x1D300 && x <= 0x1D356
+		|| x >= 0x1D360 && x <= 0x1D376
+		|| x === 0x1F004
+		|| x === 0x1F0CF
+		|| x === 0x1F18E
+		|| x >= 0x1F191 && x <= 0x1F19A
+		|| x >= 0x1F200 && x <= 0x1F202
+		|| x >= 0x1F210 && x <= 0x1F23B
+		|| x >= 0x1F240 && x <= 0x1F248
+		|| x === 0x1F250
+		|| x === 0x1F251
+		|| x >= 0x1F260 && x <= 0x1F265
+		|| x >= 0x1F300 && x <= 0x1F320
+		|| x >= 0x1F32D && x <= 0x1F335
+		|| x >= 0x1F337 && x <= 0x1F37C
+		|| x >= 0x1F37E && x <= 0x1F393
+		|| x >= 0x1F3A0 && x <= 0x1F3CA
+		|| x >= 0x1F3CF && x <= 0x1F3D3
+		|| x >= 0x1F3E0 && x <= 0x1F3F0
+		|| x === 0x1F3F4
+		|| x >= 0x1F3F8 && x <= 0x1F43E
+		|| x === 0x1F440
+		|| x >= 0x1F442 && x <= 0x1F4FC
+		|| x >= 0x1F4FF && x <= 0x1F53D
+		|| x >= 0x1F54B && x <= 0x1F54E
+		|| x >= 0x1F550 && x <= 0x1F567
+		|| x === 0x1F57A
+		|| x === 0x1F595
+		|| x === 0x1F596
+		|| x === 0x1F5A4
+		|| x >= 0x1F5FB && x <= 0x1F64F
+		|| x >= 0x1F680 && x <= 0x1F6C5
+		|| x === 0x1F6CC
+		|| x >= 0x1F6D0 && x <= 0x1F6D2
+		|| x >= 0x1F6D5 && x <= 0x1F6D8
+		|| x >= 0x1F6DC && x <= 0x1F6DF
+		|| x === 0x1F6EB
+		|| x === 0x1F6EC
+		|| x >= 0x1F6F4 && x <= 0x1F6FC
+		|| x >= 0x1F7E0 && x <= 0x1F7EB
+		|| x === 0x1F7F0
+		|| x >= 0x1F90C && x <= 0x1F93A
+		|| x >= 0x1F93C && x <= 0x1F945
+		|| x >= 0x1F947 && x <= 0x1F9FF
+		|| x >= 0x1FA70 && x <= 0x1FA7C
+		|| x >= 0x1FA80 && x <= 0x1FA8A
+		|| x >= 0x1FA8E && x <= 0x1FAC6
+		|| x === 0x1FAC8
+		|| x >= 0x1FACD && x <= 0x1FADC
+		|| x >= 0x1FADF && x <= 0x1FAEA
+		|| x >= 0x1FAEF && x <= 0x1FAF8
+		|| x >= 0x20000 && x <= 0x2FFFD
+		|| x >= 0x30000 && x <= 0x3FFFD;
+}
+
+function lookup_getCategory(x) {
+	if (isAmbiguous(x)) return 'ambiguous';
+
+	if (isFullWidth(x)) return 'fullwidth';
+
+	if (
+		x === 0x20A9
+		|| x >= 0xFF61 && x <= 0xFFBE
+		|| x >= 0xFFC2 && x <= 0xFFC7
+		|| x >= 0xFFCA && x <= 0xFFCF
+		|| x >= 0xFFD2 && x <= 0xFFD7
+		|| x >= 0xFFDA && x <= 0xFFDC
+		|| x >= 0xFFE8 && x <= 0xFFEE
+	) {
+		return 'halfwidth';
+	}
+
+	if (
+		x >= 0x20 && x <= 0x7E
+		|| x === 0xA2
+		|| x === 0xA3
+		|| x === 0xA5
+		|| x === 0xA6
+		|| x === 0xAC
+		|| x === 0xAF
+		|| x >= 0x27E6 && x <= 0x27ED
+		|| x === 0x2985
+		|| x === 0x2986
+	) {
+		return 'narrow';
+	}
+
+	if (isWide(x)) return 'wide';
+
+	return 'neutral';
+}
+
+
+
+;// CONCATENATED MODULE: ./node_modules/get-east-asian-width/index.js
+
+
+function validate(codePoint) {
+	if (!Number.isSafeInteger(codePoint)) {
+		throw new TypeError(`Expected a code point, got \`${typeof codePoint}\`.`);
+	}
+}
+
+function eastAsianWidthType(codePoint) {
+	validate(codePoint);
+
+	return getCategory(codePoint);
+}
+
+function eastAsianWidth(codePoint, {ambiguousAsWide = false} = {}) {
+	validate(codePoint);
+
+	if (
+		isFullWidth(codePoint)
+		|| isWide(codePoint)
+		|| (ambiguousAsWide && isAmbiguous(codePoint))
+	) {
+		return 2;
+	}
+
+	return 1;
+}
+
+// Private exports for https://github.com/sindresorhus/is-fullwidth-code-point
+
+
+;// CONCATENATED MODULE: ./node_modules/string-width/index.js
+
+
+
+/**
+Logic:
+- Segment graphemes to match how terminals render clusters.
+- Width rules:
+	1. Skip non-printing clusters (Default_Ignorable, Control, pure Mark, lone Surrogates). Tabs are ignored by design.
+	2. RGI emoji clusters (\p{RGI_Emoji}) are double-width.
+	3. Otherwise use East Asian Width of the cluster’s first visible code point, and add widths for trailing Halfwidth/Fullwidth Forms within the same cluster (e.g., dakuten/handakuten/prolonged sound mark).
+*/
+
+const segmenter = new Intl.Segmenter();
+
+// Whole-cluster zero-width
+const zeroWidthClusterRegex = /^(?:\p{Default_Ignorable_Code_Point}|\p{Control}|\p{Mark}|\p{Surrogate})+$/v;
+
+// Pick the base scalar if the cluster starts with Prepend/Format/Marks
+const leadingNonPrintingRegex = /^[\p{Default_Ignorable_Code_Point}\p{Control}\p{Format}\p{Mark}\p{Surrogate}]+/v;
+
+// RGI emoji sequences
+const rgiEmojiRegex = /^\p{RGI_Emoji}$/v;
+
+function baseVisible(segment) {
+	return segment.replace(leadingNonPrintingRegex, '');
+}
+
+function isZeroWidthCluster(segment) {
+	return zeroWidthClusterRegex.test(segment);
+}
+
+function trailingHalfwidthWidth(segment, eastAsianWidthOptions) {
+	let extra = 0;
+	if (segment.length > 1) {
+		for (const char of segment.slice(1)) {
+			if (char >= '\uFF00' && char <= '\uFFEF') {
+				extra += eastAsianWidth(char.codePointAt(0), eastAsianWidthOptions);
+			}
+		}
+	}
+
+	return extra;
+}
+
+function stringWidth(input, options = {}) {
+	if (typeof input !== 'string' || input.length === 0) {
+		return 0;
+	}
+
+	const {
+		ambiguousIsNarrow = true,
+		countAnsiEscapeCodes = false,
+	} = options;
+
+	let string = input;
+
+	if (!countAnsiEscapeCodes) {
+		string = stripAnsi(string);
+	}
+
+	if (string.length === 0) {
+		return 0;
+	}
+
+	let width = 0;
+	const eastAsianWidthOptions = {ambiguousAsWide: !ambiguousIsNarrow};
+
+	for (const {segment} of segmenter.segment(string)) {
+		// Zero-width / non-printing clusters
+		if (isZeroWidthCluster(segment)) {
+			continue;
+		}
+
+		// Emoji width logic
+		if (rgiEmojiRegex.test(segment)) {
+			width += 2;
+			continue;
+		}
+
+		// Everything else: EAW of the cluster’s first visible scalar
+		const codePoint = baseVisible(segment).codePointAt(0);
+		width += eastAsianWidth(codePoint, eastAsianWidthOptions);
+
+		// Add width for trailing Halfwidth and Fullwidth Forms (e.g., ﾞ, ﾟ, ｰ)
+		width += trailingHalfwidthWidth(segment, eastAsianWidthOptions);
+	}
+
+	return width;
+}
+
 ;// CONCATENATED MODULE: ./node_modules/markdownlint/lib/md060.mjs
 // @ts-check
 
 
 
 
+
 /** @typedef {import("micromark-extension-gfm-table")} */
+/** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
 /** @typedef {import("markdownlint").RuleOnErrorInfo} RuleOnErrorInfo */
 
 /**
@@ -67039,6 +67589,56 @@ function md060_addError(errors, lineNumber, column, detail) {
   });
 }
 
+/**
+ * @typedef Column
+ * @property {number} actual Actual column (1-based).
+ * @property {number} effective Effective column (1-based).
+ */
+
+/**
+ * Gets a list of table cell divider columns.
+ *
+ * @param {readonly string[]} lines File/string lines.
+ * @param {MicromarkToken} row Micromark row token.
+ * @returns {Column[]} Divider columns.
+ */
+function getTableDividerColumns(lines, row) {
+  return (0,micromark_helpers.filterByTypes)(
+    row.children,
+    [ "tableCellDivider" ]
+  ).map(
+    (divider) => ({
+      "actual": divider.startColumn,
+      "effective": stringWidth(lines[row.startLine - 1].slice(0, divider.startColumn - 1))
+    })
+  );
+}
+
+/**
+ * Checks the specified table rows for consistency with the "aligned" style.
+ *
+ * @param {readonly string[]} lines File/string lines.
+ * @param {MicromarkToken[]} rows Micromark row tokens.
+ * @param {string} detail Detail message.
+ * @returns {RuleOnErrorInfo[]} List of errors.
+ */
+function checkStyleAligned(lines, rows, detail) {
+  /** @type {RuleOnErrorInfo[]} */
+  const errorInfos = [];
+  const headerRow = rows[0];
+  const headerDividerColumns = getTableDividerColumns(lines, headerRow);
+  for (const row of rows.slice(1)) {
+    const remainingHeaderDividerColumns = new Set(headerDividerColumns.map((column) => column.effective));
+    const rowDividerColumns = getTableDividerColumns(lines, row);
+    for (const dividerColumn of rowDividerColumns) {
+      if ((remainingHeaderDividerColumns.size > 0) && !remainingHeaderDividerColumns.delete(dividerColumn.effective)) {
+        md060_addError(errorInfos, row.startLine, dividerColumn.actual, detail);
+      }
+    }
+  }
+  return errorInfos;
+}
+
 /** @type {import("markdownlint").Rule} */
 /* harmony default export */ const md060 = ({
   "names": [ "MD060", "table-column-style" ],
@@ -67050,27 +67650,19 @@ function md060_addError(errors, lineNumber, column, detail) {
     const styleAlignedAllowed = (style === "any") || (style === "aligned");
     const styleCompactAllowed = (style === "any") || (style === "compact");
     const styleTightAllowed = (style === "any") || (style === "tight");
+    const alignedDelimiter = !!params.config.aligned_delimiter;
+    const lines = params.lines;
 
     // Scan all tables/rows
     const tables = filterByTypesCached([ "table" ]);
     for (const table of tables) {
       const rows = (0,micromark_helpers.filterByTypes)(table.children, [ "tableDelimiterRow", "tableRow" ]);
-      const headingRow = rows[0];
 
       // Determine errors for style "aligned"
       /** @type {RuleOnErrorInfo[]} */
       const errorsIfAligned = [];
       if (styleAlignedAllowed) {
-        const headingDividerColumns = (0,micromark_helpers.filterByTypes)(headingRow.children, [ "tableCellDivider" ]).map((divider) => divider.startColumn);
-        for (const row of rows.slice(1)) {
-          const remainingHeadingDividerColumns = new Set(headingDividerColumns);
-          const rowDividerColumns = (0,micromark_helpers.filterByTypes)(row.children, [ "tableCellDivider" ]).map((divider) => divider.startColumn);
-          for (const dividerColumn of rowDividerColumns) {
-            if ((remainingHeadingDividerColumns.size > 0) && !remainingHeadingDividerColumns.delete(dividerColumn)) {
-              md060_addError(errorsIfAligned, row.startLine, dividerColumn, "Table pipe does not align with heading for style \"aligned\"");
-            }
-          }
-        }
+        errorsIfAligned.push(...checkStyleAligned(lines, rows, "Table pipe does not align with header for style \"aligned\""));
       }
 
       // Determine errors for styles "compact" and "tight"
@@ -67082,6 +67674,11 @@ function md060_addError(errors, lineNumber, column, detail) {
         (styleCompactAllowed || styleTightAllowed) &&
         !(styleAlignedAllowed && (errorsIfAligned.length === 0))
       ) {
+        if (alignedDelimiter) {
+          const errorInfos = checkStyleAligned(lines, rows.slice(0, 2), "Table pipe does not align with header for option \"aligned_delimiter\"");
+          errorsIfCompact.push(...errorInfos);
+          errorsIfTight.push(...errorInfos);
+        }
         for (const row of rows) {
           const tokensOfInterest = (0,micromark_helpers.filterByTypes)(row.children, [ "tableCellDivider", "tableContent", "whitespace" ]);
           for (let i = 0; i < tokensOfInterest.length; i++) {
@@ -73009,7 +73606,7 @@ const pathPosix = external_node_path_namespaceObject.posix;
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.19.1";
+const packageVersion = "0.20.0";
 const libraryName = "markdownlint";
 const libraryVersion = getVersion();
 const bannerMessage = `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`;
