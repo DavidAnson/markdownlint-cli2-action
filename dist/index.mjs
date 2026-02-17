@@ -45149,7 +45149,14 @@ function linkify_linkify (state, silent) {
   if (url.length <= proto.length) return false
 
   // disallow '*' at the end of the link (conflicts with emphasis)
-  url = url.replace(/\*+$/, '')
+  // do manual backsearch to avoid perf issues with regex /\*+$/ on "****...****a".
+  let urlEnd = url.length
+  while (urlEnd > 0 && url.charCodeAt(urlEnd - 1) === 0x2A/* * */) {
+    urlEnd--
+  }
+  if (urlEnd !== url.length) {
+    url = url.slice(0, urlEnd)
+  }
 
   const fullUrl = state.md.normalizeLink(url)
   if (!state.md.validateLink(fullUrl)) return false
@@ -51394,52 +51401,6 @@ const PASSTHROUGH_LISTENERS_PER_STREAM = 1;
 
 // EXTERNAL MODULE: ./node_modules/fast-glob/out/index.js
 var out = __nccwpck_require__(5648);
-;// CONCATENATED MODULE: external "node:fs/promises"
-const external_node_fs_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
-;// CONCATENATED MODULE: ./node_modules/path-type/index.js
-
-
-
-async function isType(fsStatType, statsMethodName, filePath) {
-	if (typeof filePath !== 'string') {
-		throw new TypeError(`Expected a string, got ${typeof filePath}`);
-	}
-
-	try {
-		const stats = await external_node_fs_promises_namespaceObject[fsStatType](filePath);
-		return stats[statsMethodName]();
-	} catch (error) {
-		if (error.code === 'ENOENT') {
-			return false;
-		}
-
-		throw error;
-	}
-}
-
-function isTypeSync(fsStatType, statsMethodName, filePath) {
-	if (typeof filePath !== 'string') {
-		throw new TypeError(`Expected a string, got ${typeof filePath}`);
-	}
-
-	try {
-		return external_node_fs_namespaceObject[fsStatType](filePath)[statsMethodName]();
-	} catch (error) {
-		if (error.code === 'ENOENT') {
-			return false;
-		}
-
-		throw error;
-	}
-}
-
-const isFile = isType.bind(undefined, 'stat', 'isFile');
-const path_type_isDirectory = isType.bind(undefined, 'stat', 'isDirectory');
-const isSymlink = isType.bind(undefined, 'lstat', 'isSymbolicLink');
-const isFileSync = isTypeSync.bind(undefined, 'statSync', 'isFile');
-const isDirectorySync = isTypeSync.bind(undefined, 'statSync', 'isDirectory');
-const isSymlinkSync = isTypeSync.bind(undefined, 'lstatSync', 'isSymbolicLink');
-
 // EXTERNAL MODULE: external "node:util"
 var external_node_util_ = __nccwpck_require__(7975);
 ;// CONCATENATED MODULE: external "node:child_process"
@@ -51495,8 +51456,24 @@ function execFileSync(file, arguments_ = [], options = {}) {
 
 
 
+;// CONCATENATED MODULE: external "node:fs/promises"
+const external_node_fs_promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
 // EXTERNAL MODULE: ./node_modules/globby/node_modules/ignore/index.js
 var ignore = __nccwpck_require__(3417);
+;// CONCATENATED MODULE: ./node_modules/is-path-inside/index.js
+
+
+function isPathInside(childPath, parentPath) {
+	const relation = external_node_path_namespaceObject.relative(parentPath, childPath);
+
+	return Boolean(
+		relation &&
+		relation !== '..' &&
+		!relation.startsWith(`..${external_node_path_namespaceObject.sep}`) &&
+		relation !== external_node_path_namespaceObject.resolve(childPath)
+	);
+}
+
 ;// CONCATENATED MODULE: ./node_modules/slash/index.js
 function slash(path) {
 	const isExtendedLengthPath = path.startsWith('\\\\?\\');
@@ -51509,9 +51486,308 @@ function slash(path) {
 }
 
 ;// CONCATENATED MODULE: ./node_modules/globby/utilities.js
+
+
+
+
+
 const isNegativePattern = pattern => pattern[0] === '!';
 
+/**
+Normalize an absolute pattern to be relative.
+
+On Unix, patterns starting with `/` are interpreted as absolute paths from the filesystem root. This causes inconsistent behavior across platforms since Windows uses different path roots (like `C:\`).
+
+This function strips leading `/` to make patterns relative to cwd, ensuring consistent cross-platform behavior.
+
+@param {string} pattern - The pattern to normalize.
+*/
+const normalizeAbsolutePatternToRelative = pattern => pattern.startsWith('/') ? pattern.slice(1) : pattern;
+
+const bindFsMethod = (object, methodName) => {
+	const method = object?.[methodName];
+	return typeof method === 'function' ? method.bind(object) : undefined;
+};
+
+// Only used as a fallback for legacy fs implementations
+const promisifyFsMethod = (object, methodName) => {
+	const method = object?.[methodName];
+	if (typeof method !== 'function') {
+		return undefined;
+	}
+
+	return (0,external_node_util_.promisify)(method.bind(object));
+};
+
+const normalizeDirectoryPatternForFastGlob = pattern => {
+	if (!pattern.endsWith('/')) {
+		return pattern;
+	}
+
+	const trimmedPattern = pattern.replace(/\/+$/u, '');
+	if (!trimmedPattern) {
+		return '/**';
+	}
+
+	// Special case for '**/' to avoid producing '**/**/**'
+	if (trimmedPattern === '**') {
+		return '**/**';
+	}
+
+	const hasLeadingSlash = trimmedPattern.startsWith('/');
+	const patternBody = hasLeadingSlash ? trimmedPattern.slice(1) : trimmedPattern;
+	const hasInnerSlash = patternBody.includes('/');
+	const needsRecursivePrefix = !hasLeadingSlash && !hasInnerSlash && !trimmedPattern.startsWith('**/');
+	const recursivePrefix = needsRecursivePrefix ? '**/' : '';
+
+	return `${recursivePrefix}${trimmedPattern}/**`;
+};
+
+/**
+Extract the parent directory prefix from a pattern (e.g., '../' or '../../').
+
+Note: Patterns should have trailing slash after '..' (e.g., '../foo' not '..foo'). The directoryToGlob function ensures this in the normal pipeline.
+
+@param {string} pattern - The pattern to analyze.
+@returns {string} The parent directory prefix, or empty string if none.
+*/
+const getParentDirectoryPrefix = pattern => {
+	const normalizedPattern = isNegativePattern(pattern) ? pattern.slice(1) : pattern;
+	const match = normalizedPattern.match(/^(\.\.\/)+/);
+	return match ? match[0] : '';
+};
+
+/**
+Adjust ignore patterns to match the relative base of the main patterns.
+
+When patterns reference parent directories, ignore patterns starting with globstars need to be adjusted to match from the same base directory. This ensures intuitive behavior where ignore patterns work correctly with parent directory patterns.
+
+This is analogous to how node-glob normalizes path prefixes (see node-glob issue #309) and how Rust ignore crate strips path prefixes before matching.
+
+@param {string[]} patterns - The main glob patterns.
+@param {string[]} ignorePatterns - The ignore patterns to adjust.
+@returns {string[]} Adjusted ignore patterns.
+*/
+const adjustIgnorePatternsForParentDirectories = (patterns, ignorePatterns) => {
+	// Early exit for empty arrays
+	if (patterns.length === 0 || ignorePatterns.length === 0) {
+		return ignorePatterns;
+	}
+
+	// Get parent directory prefixes for all patterns (empty string if no prefix)
+	const parentPrefixes = patterns.map(pattern => getParentDirectoryPrefix(pattern));
+
+	// Check if all patterns have the same parent prefix
+	const firstPrefix = parentPrefixes[0];
+	if (!firstPrefix) {
+		return ignorePatterns; // No parent directories in any pattern
+	}
+
+	const allSamePrefix = parentPrefixes.every(prefix => prefix === firstPrefix);
+	if (!allSamePrefix) {
+		return ignorePatterns; // Mixed bases - don't adjust
+	}
+
+	// Adjust ignore patterns that start with **/
+	return ignorePatterns.map(pattern => {
+		// Only adjust patterns starting with **/ that don't already have a parent reference
+		if (pattern.startsWith('**/') && !pattern.startsWith('../')) {
+			return firstPrefix + pattern;
+		}
+
+		return pattern;
+	});
+};
+
+/**
+Find the git root directory by searching upward for a .git directory.
+
+@param {string} cwd - The directory to start searching from.
+@param {Object} [fsImplementation] - Optional fs implementation.
+@returns {string|undefined} The git root directory path, or undefined if not found.
+*/
+const getAsyncStatMethod = fsImplementation =>
+	bindFsMethod(fsImplementation?.promises, 'stat')
+	?? bindFsMethod(external_node_fs_namespaceObject.promises, 'stat');
+
+const getStatSyncMethod = fsImplementation => {
+	if (fsImplementation) {
+		return bindFsMethod(fsImplementation, 'statSync');
+	}
+
+	return bindFsMethod(external_node_fs_namespaceObject, 'statSync');
+};
+
+const pathHasGitDirectory = stats => Boolean(stats?.isDirectory?.() || stats?.isFile?.());
+
+const buildPathChain = (startPath, rootPath) => {
+	const chain = [];
+	let currentPath = startPath;
+
+	chain.push(currentPath);
+
+	while (currentPath !== rootPath) {
+		const parentPath = external_node_path_namespaceObject.dirname(currentPath);
+		if (parentPath === currentPath) {
+			break;
+		}
+
+		currentPath = parentPath;
+		chain.push(currentPath);
+	}
+
+	return chain;
+};
+
+const findGitRootInChain = async (paths, statMethod) => {
+	for (const directory of paths) {
+		const gitPath = external_node_path_namespaceObject.join(directory, '.git');
+
+		try {
+			const stats = await statMethod(gitPath); // eslint-disable-line no-await-in-loop
+			if (pathHasGitDirectory(stats)) {
+				return directory;
+			}
+		} catch {
+			// Ignore errors and continue searching
+		}
+	}
+
+	return undefined;
+};
+
+const findGitRootSyncUncached = (cwd, fsImplementation) => {
+	const statSyncMethod = getStatSyncMethod(fsImplementation);
+	if (!statSyncMethod) {
+		return undefined;
+	}
+
+	const currentPath = external_node_path_namespaceObject.resolve(cwd);
+	const {root} = external_node_path_namespaceObject.parse(currentPath);
+	const chain = buildPathChain(currentPath, root);
+
+	for (const directory of chain) {
+		const gitPath = external_node_path_namespaceObject.join(directory, '.git');
+		try {
+			const stats = statSyncMethod(gitPath);
+			if (pathHasGitDirectory(stats)) {
+				return directory;
+			}
+		} catch {
+			// Ignore errors and continue searching
+		}
+	}
+
+	return undefined;
+};
+
+const findGitRootSync = (cwd, fsImplementation) => {
+	if (typeof cwd !== 'string') {
+		throw new TypeError('cwd must be a string');
+	}
+
+	return findGitRootSyncUncached(cwd, fsImplementation);
+};
+
+const findGitRootAsyncUncached = async (cwd, fsImplementation) => {
+	const statMethod = getAsyncStatMethod(fsImplementation);
+	if (!statMethod) {
+		return findGitRootSync(cwd, fsImplementation);
+	}
+
+	const currentPath = external_node_path_namespaceObject.resolve(cwd);
+	const {root} = external_node_path_namespaceObject.parse(currentPath);
+	const chain = buildPathChain(currentPath, root);
+
+	return findGitRootInChain(chain, statMethod);
+};
+
+const findGitRoot = async (cwd, fsImplementation) => {
+	if (typeof cwd !== 'string') {
+		throw new TypeError('cwd must be a string');
+	}
+
+	return findGitRootAsyncUncached(cwd, fsImplementation);
+};
+
+/**
+Get paths to all .gitignore files from git root to cwd (inclusive).
+
+@param {string} gitRoot - The git root directory.
+@param {string} cwd - The current working directory.
+@returns {string[]} Array of .gitignore file paths to search for.
+*/
+const isWithinGitRoot = (gitRoot, cwd) => {
+	const resolvedGitRoot = external_node_path_namespaceObject.resolve(gitRoot);
+	const resolvedCwd = external_node_path_namespaceObject.resolve(cwd);
+	return resolvedCwd === resolvedGitRoot || isPathInside(resolvedCwd, resolvedGitRoot);
+};
+
+const getParentGitignorePaths = (gitRoot, cwd) => {
+	if (gitRoot && typeof gitRoot !== 'string') {
+		throw new TypeError('gitRoot must be a string or undefined');
+	}
+
+	if (typeof cwd !== 'string') {
+		throw new TypeError('cwd must be a string');
+	}
+
+	// If no gitRoot provided, return empty array
+	if (!gitRoot) {
+		return [];
+	}
+
+	if (!isWithinGitRoot(gitRoot, cwd)) {
+		return [];
+	}
+
+	const chain = buildPathChain(external_node_path_namespaceObject.resolve(cwd), external_node_path_namespaceObject.resolve(gitRoot));
+
+	return [...chain]
+		.reverse()
+		.map(directory => external_node_path_namespaceObject.join(directory, '.gitignore'));
+};
+
+/**
+Convert ignore patterns to fast-glob compatible format.
+Returns empty array if patterns should be handled by predicate only.
+
+@param {string[]} patterns - Ignore patterns from .gitignore files
+@param {boolean} usingGitRoot - Whether patterns are relative to git root
+@param {Function} normalizeDirectoryPatternForFastGlob - Function to normalize directory patterns
+@returns {string[]} Patterns safe to pass to fast-glob, or empty array
+*/
+const convertPatternsForFastGlob = (patterns, usingGitRoot, normalizeDirectoryPatternForFastGlob) => {
+	// Determine which patterns are safe to pass to fast-glob
+	// If there are negation patterns, we can't pass file patterns to fast-glob
+	// because fast-glob doesn't understand negations and would filter out files
+	// that should be re-included by negation patterns.
+	// If we're using git root, patterns are relative to git root not cwd,
+	// so we can't pass them to fast-glob which expects cwd-relative patterns.
+	// We only pass patterns to fast-glob if there are NO negations AND we're not using git root.
+
+	if (usingGitRoot) {
+		return []; // Patterns are relative to git root, not cwd
+	}
+
+	const result = [];
+	let hasNegations = false;
+
+	// Single pass to check for negations and collect positive patterns
+	for (const pattern of patterns) {
+		if (isNegativePattern(pattern)) {
+			hasNegations = true;
+			break; // Early exit on first negation
+		}
+
+		result.push(normalizeDirectoryPatternForFastGlob(pattern));
+	}
+
+	return hasNegations ? [] : result;
+};
+
 ;// CONCATENATED MODULE: ./node_modules/globby/ignore.js
+
 
 
 
@@ -51534,6 +51810,107 @@ const ignoreFilesGlobOptions = {
 };
 
 const GITIGNORE_FILES_PATTERN = '**/.gitignore';
+
+const getReadFileMethod = fsImplementation =>
+	bindFsMethod(fsImplementation?.promises, 'readFile')
+	?? bindFsMethod(external_node_fs_promises_namespaceObject, 'readFile')
+	?? promisifyFsMethod(fsImplementation, 'readFile');
+
+const getReadFileSyncMethod = fsImplementation =>
+	bindFsMethod(fsImplementation, 'readFileSync')
+	?? bindFsMethod(external_node_fs_namespaceObject, 'readFileSync');
+
+const shouldSkipIgnoreFileError = (error, suppressErrors) => {
+	if (!error) {
+		return Boolean(suppressErrors);
+	}
+
+	if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+		return true;
+	}
+
+	return Boolean(suppressErrors);
+};
+
+const createIgnoreFileReadError = (filePath, error) => {
+	if (error instanceof Error) {
+		error.message = `Failed to read ignore file at ${filePath}: ${error.message}`;
+		return error;
+	}
+
+	return new Error(`Failed to read ignore file at ${filePath}: ${String(error)}`);
+};
+
+const processIgnoreFileCore = (filePath, readMethod, suppressErrors) => {
+	try {
+		const content = readMethod(filePath, 'utf8');
+		return {filePath, content};
+	} catch (error) {
+		if (shouldSkipIgnoreFileError(error, suppressErrors)) {
+			return undefined;
+		}
+
+		throw createIgnoreFileReadError(filePath, error);
+	}
+};
+
+const readIgnoreFilesSafely = async (paths, readFileMethod, suppressErrors) => {
+	const fileResults = await Promise.all(paths.map(async filePath => {
+		try {
+			const content = await readFileMethod(filePath, 'utf8');
+			return {filePath, content};
+		} catch (error) {
+			if (shouldSkipIgnoreFileError(error, suppressErrors)) {
+				return undefined;
+			}
+
+			throw createIgnoreFileReadError(filePath, error);
+		}
+	}));
+
+	return fileResults.filter(Boolean);
+};
+
+const readIgnoreFilesSafelySync = (paths, readFileSyncMethod, suppressErrors) => paths
+	.map(filePath => processIgnoreFileCore(filePath, readFileSyncMethod, suppressErrors))
+	.filter(Boolean);
+
+const dedupePaths = paths => {
+	const seen = new Set();
+	return paths.filter(filePath => {
+		if (seen.has(filePath)) {
+			return false;
+		}
+
+		seen.add(filePath);
+		return true;
+	});
+};
+
+const globIgnoreFiles = (globFunction, patterns, normalizedOptions) => globFunction(patterns, {
+	...normalizedOptions,
+	...ignoreFilesGlobOptions, // Must be last to ensure absolute/dot flags stick
+});
+
+const getParentIgnorePaths = (gitRoot, normalizedOptions) => gitRoot
+	? getParentGitignorePaths(gitRoot, normalizedOptions.cwd)
+	: [];
+
+const combineIgnoreFilePaths = (gitRoot, normalizedOptions, childPaths) => dedupePaths([
+	...getParentIgnorePaths(gitRoot, normalizedOptions),
+	...childPaths,
+]);
+
+const buildIgnoreResult = (files, normalizedOptions, gitRoot) => {
+	const baseDir = gitRoot || normalizedOptions.cwd;
+	const patterns = getPatternsFromIgnoreFiles(files, baseDir);
+
+	return {
+		patterns,
+		predicate: createIgnorePredicate(patterns, normalizedOptions.cwd, baseDir),
+		usingGitRoot: Boolean(gitRoot && gitRoot !== normalizedOptions.cwd),
+	};
+};
 
 // Apply base path to gitignore patterns based on .gitignore spec 2.22.1
 // https://git-scm.com/docs/gitignore#_pattern_format
@@ -51581,13 +51958,17 @@ const parseIgnoreFile = (file, cwd) => {
 };
 
 const toRelativePath = (fileOrDirectory, cwd) => {
-	cwd = slash(cwd);
 	if (external_node_path_namespaceObject.isAbsolute(fileOrDirectory)) {
-		if (slash(fileOrDirectory).startsWith(cwd)) {
-			return external_node_path_namespaceObject.relative(cwd, fileOrDirectory);
+		// When paths are equal, path.relative returns empty string which is valid
+		// isPathInside returns false for equal paths, so check this case first
+		const relativePath = external_node_path_namespaceObject.relative(cwd, fileOrDirectory);
+		if (relativePath && !isPathInside(fileOrDirectory, cwd)) {
+			// Path is outside cwd - it cannot be ignored by patterns in cwd
+			// Return undefined to indicate this path is outside scope
+			return undefined;
 		}
 
-		throw new Error(`Path ${fileOrDirectory} is not in cwd ${cwd}`);
+		return relativePath;
 	}
 
 	// Normalize relative paths:
@@ -51607,65 +51988,131 @@ const toRelativePath = (fileOrDirectory, cwd) => {
 	return fileOrDirectory;
 };
 
-const getIsIgnoredPredicate = (files, cwd) => {
-	const patterns = files.flatMap(file => parseIgnoreFile(file, cwd));
+const createIgnorePredicate = (patterns, cwd, baseDir) => {
 	const ignores = ignore().add(patterns);
+	// Normalize to handle path separator and . / .. components consistently
+	const resolvedCwd = external_node_path_namespaceObject.normalize(external_node_path_namespaceObject.resolve(cwd));
+	const resolvedBaseDir = external_node_path_namespaceObject.normalize(external_node_path_namespaceObject.resolve(baseDir));
 
 	return fileOrDirectory => {
 		fileOrDirectory = toPath(fileOrDirectory);
-		fileOrDirectory = toRelativePath(fileOrDirectory, cwd);
-		// If path is outside cwd (undefined), it can't be ignored by patterns in cwd
-		if (fileOrDirectory === undefined) {
+
+		// Never ignore the cwd itself - use normalized comparison
+		const normalizedPath = external_node_path_namespaceObject.normalize(external_node_path_namespaceObject.resolve(fileOrDirectory));
+		if (normalizedPath === resolvedCwd) {
 			return false;
 		}
 
-		return fileOrDirectory ? ignores.ignores(slash(fileOrDirectory)) : false;
+		// Convert to relative path from baseDir (use normalized baseDir)
+		const relativePath = toRelativePath(fileOrDirectory, resolvedBaseDir);
+
+		// If path is outside baseDir (undefined), it can't be ignored by patterns
+		if (relativePath === undefined) {
+			return false;
+		}
+
+		return relativePath ? ignores.ignores(slash(relativePath)) : false;
 	};
 };
 
-const normalizeOptions = (options = {}) => ({
-	cwd: toPath(options.cwd) ?? external_node_process_namespaceObject.cwd(),
-	suppressErrors: Boolean(options.suppressErrors),
-	deep: typeof options.deep === 'number' ? options.deep : Number.POSITIVE_INFINITY,
-	ignore: [...options.ignore ?? [], ...defaultIgnoredDirectories],
-});
+const normalizeOptions = (options = {}) => {
+	const ignoreOption = options.ignore
+		? (Array.isArray(options.ignore) ? options.ignore : [options.ignore])
+		: [];
+
+	const cwd = toPath(options.cwd) ?? external_node_process_namespaceObject.cwd();
+
+	// Adjust deep option for fast-glob: fast-glob's deep counts differently than expected
+	// User's deep: 0 = root only -> fast-glob needs: 1
+	// User's deep: 1 = root + 1 level -> fast-glob needs: 2
+	const deep = typeof options.deep === 'number' ? Math.max(0, options.deep) + 1 : Number.POSITIVE_INFINITY;
+
+	// Only pass through specific fast-glob options that make sense for finding ignore files
+	return {
+		cwd,
+		suppressErrors: options.suppressErrors ?? false,
+		deep,
+		ignore: [...ignoreOption, ...defaultIgnoredDirectories],
+		followSymbolicLinks: options.followSymbolicLinks ?? true,
+		concurrency: options.concurrency,
+		throwErrorOnBrokenSymbolicLink: options.throwErrorOnBrokenSymbolicLink ?? false,
+		fs: options.fs,
+	};
+};
+
+const collectIgnoreFileArtifactsAsync = async (patterns, options, includeParentIgnoreFiles) => {
+	const normalizedOptions = normalizeOptions(options);
+	const childPaths = await globIgnoreFiles(out, patterns, normalizedOptions);
+	const gitRoot = includeParentIgnoreFiles
+		? await findGitRoot(normalizedOptions.cwd, normalizedOptions.fs)
+		: undefined;
+	const allPaths = combineIgnoreFilePaths(gitRoot, normalizedOptions, childPaths);
+	const readFileMethod = getReadFileMethod(normalizedOptions.fs);
+	const files = await readIgnoreFilesSafely(allPaths, readFileMethod, normalizedOptions.suppressErrors);
+
+	return {files, normalizedOptions, gitRoot};
+};
+
+const collectIgnoreFileArtifactsSync = (patterns, options, includeParentIgnoreFiles) => {
+	const normalizedOptions = normalizeOptions(options);
+	const childPaths = globIgnoreFiles(out.sync, patterns, normalizedOptions);
+	const gitRoot = includeParentIgnoreFiles
+		? findGitRootSync(normalizedOptions.cwd, normalizedOptions.fs)
+		: undefined;
+	const allPaths = combineIgnoreFilePaths(gitRoot, normalizedOptions, childPaths);
+	const readFileSyncMethod = getReadFileSyncMethod(normalizedOptions.fs);
+	const files = readIgnoreFilesSafelySync(allPaths, readFileSyncMethod, normalizedOptions.suppressErrors);
+
+	return {files, normalizedOptions, gitRoot};
+};
 
 const isIgnoredByIgnoreFiles = async (patterns, options) => {
-	const {cwd, suppressErrors, deep, ignore} = normalizeOptions(options);
-
-	const paths = await out(patterns, {
-		cwd,
-		suppressErrors,
-		deep,
-		ignore,
-		...ignoreFilesGlobOptions,
-	});
-
-	const files = await Promise.all(paths.map(async filePath => ({
-		filePath,
-		content: await external_node_fs_promises_namespaceObject.readFile(filePath, 'utf8'),
-	})));
-
-	return getIsIgnoredPredicate(files, cwd);
+	const {files, normalizedOptions, gitRoot} = await collectIgnoreFileArtifactsAsync(patterns, options, false);
+	return buildIgnoreResult(files, normalizedOptions, gitRoot).predicate;
 };
 
 const isIgnoredByIgnoreFilesSync = (patterns, options) => {
-	const {cwd, suppressErrors, deep, ignore} = normalizeOptions(options);
+	const {files, normalizedOptions, gitRoot} = collectIgnoreFileArtifactsSync(patterns, options, false);
+	return buildIgnoreResult(files, normalizedOptions, gitRoot).predicate;
+};
 
-	const paths = out.sync(patterns, {
-		cwd,
-		suppressErrors,
-		deep,
-		ignore,
-		...ignoreFilesGlobOptions,
-	});
+const getPatternsFromIgnoreFiles = (files, baseDir) => files.flatMap(file => parseIgnoreFile(file, baseDir));
 
-	const files = paths.map(filePath => ({
-		filePath,
-		content: external_node_fs_namespaceObject.readFileSync(filePath, 'utf8'),
-	}));
+/**
+Read ignore files and return both patterns and predicate.
+This avoids reading the same files twice (once for patterns, once for filtering).
 
-	return getIsIgnoredPredicate(files, cwd);
+@param {string[]} patterns - Patterns to find ignore files
+@param {Object} options - Options object
+@param {boolean} [includeParentIgnoreFiles=false] - Whether to search for parent .gitignore files
+@returns {Promise<{patterns: string[], predicate: Function, usingGitRoot: boolean}>}
+*/
+const getIgnorePatternsAndPredicate = async (patterns, options, includeParentIgnoreFiles = false) => {
+	const {files, normalizedOptions, gitRoot} = await collectIgnoreFileArtifactsAsync(
+		patterns,
+		options,
+		includeParentIgnoreFiles,
+	);
+
+	return buildIgnoreResult(files, normalizedOptions, gitRoot);
+};
+
+/**
+Read ignore files and return both patterns and predicate (sync version).
+
+@param {string[]} patterns - Patterns to find ignore files
+@param {Object} options - Options object
+@param {boolean} [includeParentIgnoreFiles=false] - Whether to search for parent .gitignore files
+@returns {{patterns: string[], predicate: Function, usingGitRoot: boolean}}
+*/
+const getIgnorePatternsAndPredicateSync = (patterns, options, includeParentIgnoreFiles = false) => {
+	const {files, normalizedOptions, gitRoot} = collectIgnoreFileArtifactsSync(
+		patterns,
+		options,
+		includeParentIgnoreFiles,
+	);
+
+	return buildIgnoreResult(files, normalizedOptions, gitRoot);
 };
 
 const isGitIgnored = options => isIgnoredByIgnoreFiles(GITIGNORE_FILES_PATTERN, options);
@@ -51682,10 +52129,36 @@ const isGitIgnoredSync = options => isIgnoredByIgnoreFilesSync(GITIGNORE_FILES_P
 
 
 
-
 const assertPatternsInput = patterns => {
 	if (patterns.some(pattern => typeof pattern !== 'string')) {
 		throw new TypeError('Patterns must be a string or an array of strings');
+	}
+};
+
+const getStatMethod = fsImplementation =>
+	bindFsMethod(fsImplementation?.promises, 'stat')
+	?? bindFsMethod(external_node_fs_namespaceObject.promises, 'stat')
+	?? promisifyFsMethod(fsImplementation, 'stat');
+
+const globby_getStatSyncMethod = fsImplementation =>
+	bindFsMethod(fsImplementation, 'statSync')
+	?? bindFsMethod(external_node_fs_namespaceObject, 'statSync');
+
+const globby_isDirectory = async (path, fsImplementation) => {
+	try {
+		const stats = await getStatMethod(fsImplementation)(path);
+		return stats.isDirectory();
+	} catch {
+		return false;
+	}
+};
+
+const isDirectorySync = (path, fsImplementation) => {
+	try {
+		const stats = globby_getStatSyncMethod(fsImplementation)(path);
+		return stats.isDirectory();
+	} catch {
+		return false;
 	}
 };
 
@@ -51718,6 +52191,7 @@ const directoryToGlob = async (directoryPaths, {
 	cwd = external_node_process_namespaceObject.cwd(),
 	files,
 	extensions,
+	fs: fsImplementation,
 } = {}) => {
 	const globs = await Promise.all(directoryPaths.map(async directoryPath => {
 		// Check pattern without negative prefix
@@ -51730,7 +52204,7 @@ const directoryToGlob = async (directoryPaths, {
 
 		// Original logic for checking actual directories
 		const pathToCheck = normalizePathForDirectoryGlob(directoryPath, cwd);
-		return (await path_type_isDirectory(pathToCheck)) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath;
+		return (await globby_isDirectory(pathToCheck, fsImplementation)) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath;
 	}));
 
 	return globs.flat();
@@ -51740,6 +52214,7 @@ const directoryToGlobSync = (directoryPaths, {
 	cwd = external_node_process_namespaceObject.cwd(),
 	files,
 	extensions,
+	fs: fsImplementation,
 } = {}) => directoryPaths.flatMap(directoryPath => {
 	// Check pattern without negative prefix
 	const checkPattern = isNegativePattern(directoryPath) ? directoryPath.slice(1) : directoryPath;
@@ -51751,7 +52226,7 @@ const directoryToGlobSync = (directoryPaths, {
 
 	// Original logic for checking actual directories
 	const pathToCheck = normalizePathForDirectoryGlob(directoryPath, cwd);
-	return isDirectorySync(pathToCheck) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath;
+	return isDirectorySync(pathToCheck, fsImplementation) ? getDirectoryGlob({directoryPath, files, extensions}) : directoryPath;
 });
 
 const toPatternsArray = patterns => {
@@ -51760,32 +52235,38 @@ const toPatternsArray = patterns => {
 	return patterns;
 };
 
-const checkCwdOption = cwd => {
-	if (!cwd) {
+const checkCwdOption = (cwd, fsImplementation = external_node_fs_namespaceObject) => {
+	if (!cwd || !fsImplementation.statSync) {
 		return;
 	}
 
-	let stat;
+	let stats;
 	try {
-		stat = external_node_fs_namespaceObject.statSync(cwd);
+		stats = fsImplementation.statSync(cwd);
 	} catch {
+		// If stat fails (e.g., path doesn't exist), let fast-glob handle it
 		return;
 	}
 
-	if (!stat.isDirectory()) {
-		throw new Error('The `cwd` option must be a path to a directory');
+	if (!stats.isDirectory()) {
+		throw new Error(`The \`cwd\` option must be a path to a directory, got: ${cwd}`);
 	}
 };
 
 const globby_normalizeOptions = (options = {}) => {
+	// Normalize ignore to an array (fast-glob accepts string but we need array internally)
+	const ignore = options.ignore
+		? (Array.isArray(options.ignore) ? options.ignore : [options.ignore])
+		: [];
+
 	options = {
 		...options,
-		ignore: options.ignore ?? [],
+		ignore,
 		expandDirectories: options.expandDirectories ?? true,
 		cwd: toPath(options.cwd),
 	};
 
-	checkCwdOption(options.cwd);
+	checkCwdOption(options.cwd, options.fs);
 
 	return options;
 };
@@ -51804,28 +52285,113 @@ const getIgnoreFilesPatterns = options => {
 	return patterns;
 };
 
-const getFilter = async options => {
+/**
+Apply gitignore patterns to options and return filter predicate.
+
+When negation patterns are present (e.g., '!important.log'), we cannot pass positive patterns to fast-glob because it would filter out files before our predicate can re-include them. In this case, we rely entirely on the predicate for filtering, which handles negations correctly.
+
+When there are no negations, we optimize by passing patterns to fast-glob's ignore option to skip directories during traversal (performance optimization).
+
+All patterns (including negated) are always used in the filter predicate to ensure correct Git-compatible behavior.
+
+@returns {Promise<{options: Object, filter: Function}>}
+*/
+const applyIgnoreFilesAndGetFilter = async options => {
 	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
-	return createFilterFunction(ignoreFilesPatterns.length > 0 && await isIgnoredByIgnoreFiles(ignoreFilesPatterns, options));
+
+	if (ignoreFilesPatterns.length === 0) {
+		return {
+			options,
+			filter: createFilterFunction(false, options.cwd),
+		};
+	}
+
+	// Read ignore files once and get both patterns and predicate
+	// Enable parent .gitignore search when using gitignore option
+	const includeParentIgnoreFiles = options.gitignore === true;
+	const {patterns, predicate, usingGitRoot} = await getIgnorePatternsAndPredicate(ignoreFilesPatterns, options, includeParentIgnoreFiles);
+
+	// Convert patterns to fast-glob format (may return empty array if predicate should handle everything)
+	const patternsForFastGlob = convertPatternsForFastGlob(patterns, usingGitRoot, normalizeDirectoryPatternForFastGlob);
+
+	const modifiedOptions = {
+		...options,
+		ignore: [...options.ignore, ...patternsForFastGlob],
+	};
+
+	return {
+		options: modifiedOptions,
+		filter: createFilterFunction(predicate, options.cwd),
+	};
 };
 
-const getFilterSync = options => {
+/**
+Apply gitignore patterns to options and return filter predicate (sync version).
+
+@returns {{options: Object, filter: Function}}
+*/
+const applyIgnoreFilesAndGetFilterSync = options => {
 	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
-	return createFilterFunction(ignoreFilesPatterns.length > 0 && isIgnoredByIgnoreFilesSync(ignoreFilesPatterns, options));
+
+	if (ignoreFilesPatterns.length === 0) {
+		return {
+			options,
+			filter: createFilterFunction(false, options.cwd),
+		};
+	}
+
+	// Read ignore files once and get both patterns and predicate
+	// Enable parent .gitignore search when using gitignore option
+	const includeParentIgnoreFiles = options.gitignore === true;
+	const {patterns, predicate, usingGitRoot} = getIgnorePatternsAndPredicateSync(ignoreFilesPatterns, options, includeParentIgnoreFiles);
+
+	// Convert patterns to fast-glob format (may return empty array if predicate should handle everything)
+	const patternsForFastGlob = convertPatternsForFastGlob(patterns, usingGitRoot, normalizeDirectoryPatternForFastGlob);
+
+	const modifiedOptions = {
+		...options,
+		ignore: [...options.ignore, ...patternsForFastGlob],
+	};
+
+	return {
+		options: modifiedOptions,
+		filter: createFilterFunction(predicate, options.cwd),
+	};
 };
 
-const createFilterFunction = isIgnored => {
+const createFilterFunction = (isIgnored, cwd) => {
 	const seen = new Set();
+	const basePath = cwd || external_node_process_namespaceObject.cwd();
+	const pathCache = new Map(); // Cache for resolved paths
 
 	return fastGlobResult => {
 		const pathKey = external_node_path_namespaceObject.normalize(fastGlobResult.path ?? fastGlobResult);
 
-		if (seen.has(pathKey) || (isIgnored && isIgnored(pathKey))) {
+		// Check seen set first (fast path)
+		if (seen.has(pathKey)) {
 			return false;
 		}
 
-		seen.add(pathKey);
+		// Only compute absolute path and check predicate if needed
+		if (isIgnored) {
+			let absolutePath = pathCache.get(pathKey);
+			if (absolutePath === undefined) {
+				absolutePath = external_node_path_namespaceObject.isAbsolute(pathKey) ? pathKey : external_node_path_namespaceObject.resolve(basePath, pathKey);
+				pathCache.set(pathKey, absolutePath);
 
+				// Only clear path cache if it gets too large
+				// Never clear 'seen' as it's needed for deduplication
+				if (pathCache.size > 10_000) {
+					pathCache.clear();
+				}
+			}
+
+			if (isIgnored(absolutePath)) {
+				return false;
+			}
+		}
+
+		seen.add(pathKey);
 		return true;
 	};
 };
@@ -51833,6 +52399,21 @@ const createFilterFunction = isIgnored => {
 const unionFastGlobResults = (results, filter) => results.flat().filter(fastGlobResult => filter(fastGlobResult));
 
 const convertNegativePatterns = (patterns, options) => {
+	// If all patterns are negative and expandNegationOnlyPatterns is enabled (default),
+	// prepend a positive catch-all pattern to make negation-only patterns work intuitively
+	// (e.g., '!*.json' matches all files except JSON)
+	if (patterns.length > 0 && patterns.every(pattern => isNegativePattern(pattern))) {
+		if (options.expandNegationOnlyPatterns === false) {
+			return [];
+		}
+
+		patterns = ['**/*', ...patterns];
+	}
+
+	patterns = patterns.map(pattern => isNegativePattern(pattern)
+		? `!${normalizeAbsolutePatternToRelative(pattern.slice(1))}`
+		: pattern);
+
 	const tasks = [];
 
 	while (patterns.length > 0) {
@@ -51868,6 +52449,14 @@ const convertNegativePatterns = (patterns, options) => {
 	return tasks;
 };
 
+const applyParentDirectoryIgnoreAdjustments = tasks => tasks.map(task => ({
+	patterns: task.patterns,
+	options: {
+		...task.options,
+		ignore: adjustIgnorePatternsForParentDirectories(task.patterns, task.options.ignore),
+	},
+}));
+
 const normalizeExpandDirectoriesOption = (options, cwd) => ({
 	...(cwd ? {cwd} : {}),
 	...(Array.isArray(options) ? {files: options} : options),
@@ -51876,13 +52465,16 @@ const normalizeExpandDirectoriesOption = (options, cwd) => ({
 const generateTasks = async (patterns, options) => {
 	const globTasks = convertNegativePatterns(patterns, options);
 
-	const {cwd, expandDirectories} = options;
+	const {cwd, expandDirectories, fs: fsImplementation} = options;
 
 	if (!expandDirectories) {
-		return globTasks;
+		return applyParentDirectoryIgnoreAdjustments(globTasks);
 	}
 
-	const directoryToGlobOptions = normalizeExpandDirectoriesOption(expandDirectories, cwd);
+	const directoryToGlobOptions = {
+		...normalizeExpandDirectoriesOption(expandDirectories, cwd),
+		fs: fsImplementation,
+	};
 
 	return Promise.all(globTasks.map(async task => {
 		let {patterns, options} = task;
@@ -51892,8 +52484,11 @@ const generateTasks = async (patterns, options) => {
 			options.ignore,
 		] = await Promise.all([
 			directoryToGlob(patterns, directoryToGlobOptions),
-			directoryToGlob(options.ignore, {cwd}),
+			directoryToGlob(options.ignore, {cwd, fs: fsImplementation}),
 		]);
+
+		// Adjust ignore patterns for parent directory references
+		options.ignore = adjustIgnorePatternsForParentDirectories(patterns, options.ignore);
 
 		return {patterns, options};
 	}));
@@ -51901,45 +52496,58 @@ const generateTasks = async (patterns, options) => {
 
 const generateTasksSync = (patterns, options) => {
 	const globTasks = convertNegativePatterns(patterns, options);
-	const {cwd, expandDirectories} = options;
+	const {cwd, expandDirectories, fs: fsImplementation} = options;
 
 	if (!expandDirectories) {
-		return globTasks;
+		return applyParentDirectoryIgnoreAdjustments(globTasks);
 	}
 
-	const directoryToGlobSyncOptions = normalizeExpandDirectoriesOption(expandDirectories, cwd);
+	const directoryToGlobSyncOptions = {
+		...normalizeExpandDirectoriesOption(expandDirectories, cwd),
+		fs: fsImplementation,
+	};
 
 	return globTasks.map(task => {
 		let {patterns, options} = task;
 		patterns = directoryToGlobSync(patterns, directoryToGlobSyncOptions);
-		options.ignore = directoryToGlobSync(options.ignore, {cwd});
+		options.ignore = directoryToGlobSync(options.ignore, {cwd, fs: fsImplementation});
+
+		// Adjust ignore patterns for parent directory references
+		options.ignore = adjustIgnorePatternsForParentDirectories(patterns, options.ignore);
+
 		return {patterns, options};
 	});
 };
 
 const globby = normalizeArguments(async (patterns, options) => {
-	const [
-		tasks,
-		filter,
-	] = await Promise.all([
-		generateTasks(patterns, options),
-		getFilter(options),
-	]);
+	// Apply ignore files and get filter (reads .gitignore files once)
+	const {options: modifiedOptions, filter} = await applyIgnoreFilesAndGetFilter(options);
+
+	// Generate tasks with modified options (includes gitignore patterns in ignore option)
+	const tasks = await generateTasks(patterns, modifiedOptions);
 
 	const results = await Promise.all(tasks.map(task => out(task.patterns, task.options)));
 	return unionFastGlobResults(results, filter);
 });
 
 const globbySync = normalizeArgumentsSync((patterns, options) => {
-	const tasks = generateTasksSync(patterns, options);
-	const filter = getFilterSync(options);
+	// Apply ignore files and get filter (reads .gitignore files once)
+	const {options: modifiedOptions, filter} = applyIgnoreFilesAndGetFilterSync(options);
+
+	// Generate tasks with modified options (includes gitignore patterns in ignore option)
+	const tasks = generateTasksSync(patterns, modifiedOptions);
+
 	const results = tasks.map(task => out.sync(task.patterns, task.options));
 	return unionFastGlobResults(results, filter);
 });
 
 const globbyStream = normalizeArgumentsSync((patterns, options) => {
-	const tasks = generateTasksSync(patterns, options);
-	const filter = getFilterSync(options);
+	// Apply ignore files and get filter (reads .gitignore files once)
+	const {options: modifiedOptions, filter} = applyIgnoreFilesAndGetFilterSync(options);
+
+	// Generate tasks with modified options (includes gitignore patterns in ignore option)
+	const tasks = generateTasksSync(patterns, modifiedOptions);
+
 	const streams = tasks.map(task => out.stream(task.patterns, task.options));
 
 	if (streams.length === 0) {
@@ -77016,7 +77624,7 @@ const pathPosix = external_node_path_namespaceObject.posix;
 
 // Variables
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.20.0";
+const packageVersion = "0.21.0";
 const libraryName = "markdownlint";
 const libraryVersion = getVersion();
 const bannerMessage = `${packageName} v${packageVersion} (${libraryName} v${libraryVersion})`;
@@ -77044,20 +77652,6 @@ const posixPath = (/** @type {string} */ p) => p.split(external_node_path_namesp
 const resolveModulePaths = (/** @type {string} */ dir, /** @type {string[]} */ modulePaths) => (
   modulePaths.map((path) => external_node_path_namespaceObject.resolve(dir, (0,helpers_helpers.expandTildePath)(path, external_node_os_namespaceObject)))
 );
-
-// Read a JSON(C) or YAML file and return the object
-const readConfigFile = (/** @type {FsLike} */ fs, /** @type {string} */ dir, /** @type {string} */ name, /** @type {() => void} */ otherwise) => () => {
-  const file = pathPosix.join(dir, name);
-  return fs.promises.access(file).
-    then(
-      () => readConfigPromise(
-        file,
-        parsers_parsers,
-        fs
-      ),
-      otherwise
-    );
-};
 
 // Import a module ID with a custom directory in the path
 const importModule = async (/** @type {string[] | string} */ dirOrDirs, /** @type {string} */ id, /** @type {boolean} */ noImport) => {
@@ -77113,18 +77707,8 @@ const importModuleIdsAndParams = (/** @type {string[]} */ dirs, /** @type {strin
   ).then((results) => results.filter(Boolean))
 );
 
-// Import a JavaScript file and return the exported object
-const importConfig = (/** @type {FsLike} */ fs, /** @type {string} */ dir, /** @type {string} */ name, /** @type {boolean} */ noImport, /** @type {() => void} */ otherwise) => () => {
-  const file = pathPosix.join(dir, name);
-  return fs.promises.access(file).
-    then(
-      () => importModule(dir, name, noImport),
-      otherwise
-    );
-};
-
 // Extend a config object if it has 'extends' property
-const getExtendedConfig = (/** @type {import("markdownlint").Configuration} */ config, /** @type {string} */ configPath, /** @type {FsLike} */ fs) => {
+const getExtendedConfig = (/** @type {Configuration} */ config, /** @type {string} */ configPath, /** @type {FsLike} */ fs) => {
   if (config.extends) {
     return extendConfigPromise(
       config,
@@ -77270,6 +77854,54 @@ $ markdownlint-cli2 "**/*.md" "#node_modules"`
   return 2;
 };
 
+// Helpers for getAndProcessDirInfo/handleFirstMatchingConfigurationFile
+const readFileParseJson = (/** @type {ConfigurationHandlerParams} */ { file, fs }) => fs.promises.readFile(file, utf8).then(jsonc_parse);
+const readFileParseYaml = (/** @type {ConfigurationHandlerParams} */ { file, fs }) => fs.promises.readFile(file, utf8).then(yaml_parse);
+const readConfigWrapper = (/** @type {ConfigurationHandlerParams} */ { file, fs }) => readConfigPromise(file, parsers_parsers, fs);
+const importModuleWrapper = (/** @type {ConfigurationHandlerParams} */ { dir, file, noImport }) => importModule(dir, file, noImport);
+
+/** @type {ConfigurationFileAndHandler[] } */
+const optionsFiles = [
+  [ ".markdownlint-cli2.jsonc", readFileParseJson ],
+  [ ".markdownlint-cli2.yaml", readFileParseYaml ],
+  [ ".markdownlint-cli2.cjs", importModuleWrapper ],
+  [ ".markdownlint-cli2.mjs", importModuleWrapper ],
+  [ "package.json", (params) => readFileParseJson(params).then((/** @type {any} */ obj) => (obj || {})[packageName]) ]
+];
+
+/** @type {ConfigurationFileAndHandler[] } */
+const configurationFiles = [
+  [ ".markdownlint.jsonc", readConfigWrapper ],
+  [ ".markdownlint.json", readConfigWrapper ],
+  [ ".markdownlint.yaml", readConfigWrapper ],
+  [ ".markdownlint.yml", readConfigWrapper ],
+  [ ".markdownlint.cjs", importModuleWrapper ],
+  [ ".markdownlint.mjs", importModuleWrapper ]
+];
+
+/**
+ * Processes the first matching configuration file.
+ * @param {ConfigurationFileAndHandler[]} fileAndHandlers List of configuration files and handlers.
+ * @param {string} dir Configuration file directory.
+ * @param {FsLike} fs File system object.
+ * @param {boolean} noImport No import.
+ * @param {(file: string) => void} memoizeFile Function to memoize file name.
+ * @returns {Promise<any>} Configuration file content.
+ */
+const processFirstMatchingConfigurationFile = (fileAndHandlers, dir, fs, noImport, memoizeFile) =>
+  Promise.allSettled(
+    fileAndHandlers.map(([ name, handler ]) => {
+      const file = pathPosix.join(dir, name);
+      return fs.promises.access(file).then(() => [ file, handler ]);
+    })
+  ).
+    then((values) => {
+      /** @type {ConfigurationFileAndHandler} */
+      const [ file, handler ] = values.find((result) => (result.status === "fulfilled"))?.value || [ "[UNUSED]", markdownlint_cli2_noop ];
+      memoizeFile(file);
+      return handler({ dir, file, fs, noImport });
+    });
+
 // Get (creating if necessary) and process a directory's info object
 const getAndProcessDirInfo = (
   /** @type {FsLike} */ fs,
@@ -77288,57 +77920,30 @@ const getAndProcessDirInfo = (
       relativeDir,
       "parent": null,
       "files": [],
-      "markdownlintConfig": {},
-      "markdownlintOptions": {}
+      "markdownlintConfig": null,
+      "markdownlintOptions": null
     };
     dirToDirInfo[dir] = dirInfo;
 
-    // Load markdownlint-cli2 object(s)
-    const markdownlintCli2Jsonc = pathPosix.join(dir, ".markdownlint-cli2.jsonc");
-    const markdownlintCli2Yaml = pathPosix.join(dir, ".markdownlint-cli2.yaml");
-    const markdownlintCli2Cjs = pathPosix.join(dir, ".markdownlint-cli2.cjs");
-    const markdownlintCli2Mjs = pathPosix.join(dir, ".markdownlint-cli2.mjs");
-    const packageJson = pathPosix.join(dir, "package.json");
-    let file = "[UNKNOWN]";
-    // eslint-disable-next-line no-return-assign
-    const captureFile = (/** @type {string} */ f) => file = f;
+    let cli2File = "[UNKNOWN]";
     tasks.push(
-      fs.promises.access(captureFile(markdownlintCli2Jsonc)).
-        then(
-          () => fs.promises.readFile(file, utf8).then(jsonc_parse),
-          () => fs.promises.access(captureFile(markdownlintCli2Yaml)).
-            then(
-              () => fs.promises.readFile(file, utf8).then(yaml_parse),
-              () => fs.promises.access(captureFile(markdownlintCli2Cjs)).
-                then(
-                  () => importModule(dir, file, noImport),
-                  () => fs.promises.access(captureFile(markdownlintCli2Mjs)).
-                    then(
-                      () => importModule(dir, file, noImport),
-                      () => (allowPackageJson
-                        ? fs.promises.access(captureFile(packageJson))
-                        // eslint-disable-next-line prefer-promise-reject-errors
-                        : Promise.reject()
-                      ).
-                        then(
-                          () => fs.promises.
-                            readFile(file, utf8).
-                            then(jsonc_parse).
-                            then((/** @type {any} */ obj) => obj[packageName]),
-                          markdownlint_cli2_noop
-                        )
-                    )
-                )
-            )
-        ).
-        then((/** @type {Options} */ options) => {
+
+      // Load markdownlint-cli2 object(s)
+      processFirstMatchingConfigurationFile(
+        allowPackageJson ? optionsFiles : optionsFiles.slice(0, -1),
+        dir,
+        fs,
+        noImport,
+        (file) => { cli2File = file; }
+      ).
+        then((/** @type {Options | null} */ options) => {
           dirInfo.markdownlintOptions = options;
           return options &&
             options.config &&
             getExtendedConfig(
               options.config,
-              // Just need to identify a file in the right directory
-              markdownlintCli2Jsonc,
+              // Just need to identify the right directory
+              pathPosix.join(dir, utf8),
               fs
             ).
               then((config) => {
@@ -77346,48 +77951,12 @@ const getAndProcessDirInfo = (
               });
         }).
         catch((/** @type {Error} */ error) => {
-          throwForConfigurationFile(file, error);
-        })
-    );
+          throwForConfigurationFile(cli2File, error);
+        }),
 
-    // Load markdownlint object(s)
-    const readConfigs =
-      readConfigFile(
-        fs,
-        dir,
-        ".markdownlint.jsonc",
-        readConfigFile(
-          fs,
-          dir,
-          ".markdownlint.json",
-          readConfigFile(
-            fs,
-            dir,
-            ".markdownlint.yaml",
-            readConfigFile(
-              fs,
-              dir,
-              ".markdownlint.yml",
-              importConfig(
-                fs,
-                dir,
-                ".markdownlint.cjs",
-                noImport,
-                importConfig(
-                  fs,
-                  dir,
-                  ".markdownlint.mjs",
-                  noImport,
-                  markdownlint_cli2_noop
-                )
-              )
-            )
-          )
-        )
-      );
-    tasks.push(
-      readConfigs().
-        then((/** @type {import("markdownlint").Configuration} */ config) => {
+      // Load markdownlint object(s)
+      processFirstMatchingConfigurationFile(configurationFiles, dir, fs, noImport, markdownlint_cli2_noop).
+        then((/** @type {Configuration | null} */ config) => {
           dirInfo.markdownlintConfig = config;
         })
     );
@@ -77468,7 +78037,7 @@ const enumerateFiles = async (
     "absolute": true,
     "cwd": baseDir,
     "dot": true,
-    "expandDirectories": false,
+    "expandNegationOnlyPatterns": false,
     gitignore,
     ignoreFiles,
     "suppressErrors": true,
@@ -77496,29 +78065,9 @@ const enumerateFiles = async (
     ((literalFiles.length > 0) && (globsForIgnore.length > 0))
       ? removeIgnoredFiles(baseDir, literalFiles, globsForIgnore)
       : literalFiles;
-  // Manually expand directories to avoid globby call to dir-glob.sync
-  const expandedDirectories = await Promise.all(
-    filteredGlobPatterns.map((globPattern) => {
-      const barePattern =
-        globPattern.startsWith("!")
-          ? globPattern.slice(1)
-          : globPattern;
-      const globPath = (
-        pathPosix.isAbsolute(barePattern) ||
-        external_node_path_namespaceObject.isAbsolute(barePattern)
-      )
-        ? barePattern
-        : pathPosix.join(baseDir, barePattern);
-      return fs.promises.stat(globPath).
-        then((/** @type {import("node:fs").Stats} */ stats) => (stats.isDirectory()
-          ? pathPosix.join(globPattern, "**")
-          : globPattern)).
-        catch(() => globPattern);
-    })
-  );
   // Process glob patterns
   const files = [
-    ...await globby(expandedDirectories, globbyOptions),
+    ...await globby(filteredGlobPatterns, globbyOptions),
     ...filteredLiteralFiles
   ];
   for (const file of files) {
@@ -77699,8 +78248,7 @@ const createDirInfos = async (
 
   // Merge configuration by inheritance
   for (const dirInfo of dirInfos) {
-    let markdownlintOptions = dirInfo.markdownlintOptions || {};
-    let { markdownlintConfig } = dirInfo;
+    let { markdownlintConfig, markdownlintOptions } = dirInfo;
     /** @type {DirInfo | null} */
     let parent = dirInfo;
     // eslint-disable-next-line prefer-destructuring
@@ -77714,7 +78262,7 @@ const createDirInfos = async (
       if (
         !markdownlintConfig &&
         parent.markdownlintConfig &&
-        !markdownlintOptions.config
+        !markdownlintOptions?.config
       ) {
         // eslint-disable-next-line prefer-destructuring
         markdownlintConfig = parent.markdownlintConfig;
@@ -77738,6 +78286,7 @@ const lintFiles = (/** @type {FsLike} */ fs, /** @type {DirInfo[]} */ dirInfos, 
     // Filter file/string inputs to only those in the dirInfo
     let filesAfterIgnores = files;
     if (
+      markdownlintOptions &&
       markdownlintOptions.ignores &&
       (markdownlintOptions.ignores.length > 0)
     ) {
@@ -77761,7 +78310,7 @@ const lintFiles = (/** @type {FsLike} */ fs, /** @type {DirInfo[]} */ dirInfos, 
       // eslint-disable-next-line no-inline-comments
       const module = await Promise.resolve(/* import() eager */).then(__nccwpck_require__.bind(__nccwpck_require__, 9193));
       const markdownIt = module.default({ "html": true });
-      for (const plugin of (markdownlintOptions.markdownItPlugins || [])) {
+      for (const plugin of (markdownlintOptions?.markdownItPlugins || [])) {
         // @ts-ignore
         markdownIt.use(...plugin);
       }
@@ -77772,16 +78321,16 @@ const lintFiles = (/** @type {FsLike} */ fs, /** @type {DirInfo[]} */ dirInfos, 
     const options = {
       "files": filteredFiles,
       "strings": filteredStrings,
-      "config": markdownlintConfig || markdownlintOptions.config,
+      "config": markdownlintConfig || markdownlintOptions?.config,
       "configParsers": parsers_parsers,
       // @ts-ignore
       "customRules": markdownlintOptions.customRules,
-      "frontMatter": markdownlintOptions.frontMatter
-        ? new RegExp(markdownlintOptions.frontMatter, "u")
+      "frontMatter": markdownlintOptions?.frontMatter
+        ? new RegExp(markdownlintOptions?.frontMatter, "u")
         : undefined,
       "handleRuleFailures": true,
       markdownItFactory,
-      "noInlineConfig": Boolean(markdownlintOptions.noInlineConfig),
+      "noInlineConfig": Boolean(markdownlintOptions?.noInlineConfig),
       fs
     };
     // Invoke markdownlint
@@ -77794,7 +78343,7 @@ const lintFiles = (/** @type {FsLike} */ fs, /** @type {DirInfo[]} */ dirInfos, 
         formattingContext.formatted = applyFixes(original, errorInfos);
         return {};
       });
-    } else if (markdownlintOptions.fix) {
+    } else if (markdownlintOptions?.fix) {
       // For any fixable errors, read file, apply fixes, write it back, and re-lint
       task = task.then((results) => {
         options.files = [];
@@ -77831,7 +78380,7 @@ const lintFiles = (/** @type {FsLike} */ fs, /** @type {DirInfo[]} */ dirInfos, 
 };
 
 // Create list of results
-const createResults = (/** @type {string} */ baseDir, /** @type {import("markdownlint").LintResults[]} */ taskResults) => {
+const createResults = (/** @type {string} */ baseDir, /** @type {LintResults[]} */ taskResults) => {
   /** @type {LintResult[]} */
   const results = [];
   /** @type {Map<LintResult, number>} */
@@ -78021,13 +78570,10 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
     logMessage(`Finding: ${globPatterns.join(" ")}`);
   }
   // Create linting tasks
-  const gitignore =
-    // https://github.com/sindresorhus/globby/issues/265
-    (!params.fs && (baseMarkdownlintOptions.gitignore === true));
-  const ignoreFiles =
-    (!params.fs && (typeof baseMarkdownlintOptions.gitignore === "string"))
-      ? baseMarkdownlintOptions.gitignore
-      : undefined;
+  const gitignore = (baseMarkdownlintOptions.gitignore === true);
+  const ignoreFiles = (typeof baseMarkdownlintOptions.gitignore === "string")
+    ? baseMarkdownlintOptions.gitignore
+    : undefined;
   const dirInfos =
     await createDirInfos(
       fs,
@@ -78117,14 +78663,26 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
  * @property {Options} [optionsOverride] Options override.
  */
 
+/** @typedef {import("markdownlint").Configuration} Configuration */
+
+/**
+ * @typedef ConfigurationHandlerParams
+ * @property {string} dir Configuration file directory.
+ * @property {string} file Configuration file.
+ * @property {FsLike} fs File system object.
+ * @property {boolean} noImport No import.
+ */
+
+/** @typedef {[ string, (params: ConfigurationHandlerParams) => Promise<any> ] } ConfigurationFileAndHandler */
+
 /**
  * @typedef DirInfo
  * @property {string} dir Directory.
  * @property {string | null} relativeDir Relative directory.
  * @property {DirInfo | null} parent Parent.
  * @property {string[]} files Files.
- * @property {import("markdownlint").Configuration} markdownlintConfig Configuration.
- * @property {Options} markdownlintOptions Options.
+ * @property {Configuration | null} markdownlintConfig Configuration.
+ * @property {Options | null} markdownlintOptions Options.
  */
 
 /** @typedef {Record<string, DirInfo>} DirToDirInfo */
@@ -78133,10 +78691,12 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
 
 /** @typedef {[string]} OutputFormatterConfiguration */
 
+/** @typedef {import("markdownlint").Rule} Rule */
+
 /**
  * @typedef Options
- * @property {import("markdownlint").Configuration} [config] Config.
- * @property {import("markdownlint").Rule[] | string[]} [customRules] Custom rules.
+ * @property {Configuration} [config] Config.
+ * @property {Rule[] | string[]} [customRules] Custom rules.
  * @property {boolean} [fix] Fix.
  * @property {string} [frontMatter] Front matter.
  * @property {boolean | string} [gitignore] Git ignore.
@@ -78157,6 +78717,8 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
  */
 
 /** @typedef {import("markdownlint").LintError & LintContext} LintResult */
+
+/** @typedef {import("markdownlint").LintResults} LintResults */
 
 /**
  * @typedef FormattingContext
