@@ -1,0 +1,9 @@
+{
+  "private": true,
+
+  "markdownlint-cli2": {
+    "config": {
+      "single-trailing-newline": false
+    }
+  }
+}

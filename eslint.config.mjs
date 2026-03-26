@@ -16,13 +16,14 @@ export default [
     "quotes": "double",
     "semi": true
   }),
-  eslintPluginUnicorn.configs["flat/all"],
+  eslintPluginUnicorn.configs.all,
   {
     "linterOptions": {
       "reportUnusedDisableDirectives": true
     },
     "rules": {
       "max-statements": "off",
+      "no-inline-comments": "off",
       "no-magic-numbers": "off",
       "no-ternary": "off",
       "one-var": "off",

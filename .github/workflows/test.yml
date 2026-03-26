@@ -96,6 +96,36 @@ jobs:
       id: test
     - run: exit 1
       if: steps.test.outcome != 'failure'
+  package-json:
+    name: package.json (test/errors.md, 2 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - run: rm .markdownlint.json
+    - uses: ./
+      with:
+        config: 'config/package.json'
+        configPointer: '/markdownlint-cli2'
+        globs: 'test/*.md'
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
+  pyproject-toml:
+    name: pyproject.toml (test/errors.md, 2 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - run: rm .markdownlint.json
+    - uses: ./
+      with:
+        config: 'config/pyproject.toml'
+        configPointer: '/tool/markdownlint-cli2'
+        globs: 'test/*.md'
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
   fix:
     name: fix (test/errors.md, 0 errors)
     runs-on: ubuntu-latest

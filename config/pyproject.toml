@@ -1,0 +1,5 @@
+[project]
+name = "my-project"
+
+[tool.markdownlint-cli2.config]
+single-trailing-newline = false

@@ -20,6 +20,14 @@ Path of a file to use for the base configuration object (defaults to none)
 Equivalent to using the `--config` [command-line option][command-line] and
 passing the specified configuration file.
 
+### configPointer (optional)
+
+[JSON Pointer][json-pointer] to a configuration object within the `--config`
+file (defaults to none)
+
+Equivalent to using the `--configPointer` [command-line option][command-line]
+and passing the specified JSON Pointer.
+
 ### fix (optional)
 
 Whether to fix supported issues automatically (any truthy value enables)
@@ -100,6 +108,26 @@ To specify a custom configuration file:
     globs: '**/*.md'
 ```
 
+To specify an embedded object in `package.json`:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v22
+  with:
+    config: 'package.json'
+    configPointer: '/markdownlint-cli2'
+    globs: '**/*.md'
+```
+
+To specify an embedded object in `pyproject.toml`:
+
+```yaml
+- uses: DavidAnson/markdownlint-cli2-action@v22
+  with:
+    config: 'pyproject.toml'
+    configPointer: '/tool/markdownlint-cli2'
+    globs: '**/*.md'
+```
+
 To prevent linting issues from failing the workflow run:
 
 ```yaml
@@ -119,6 +147,7 @@ and/or gradually introducing linting rules to a new repository).
 [commonmark]: https://commonmark.org/
 [example-yml]: .github/workflows/example.yml
 [glob-syntax]: https://github.com/DavidAnson/markdownlint-cli2#use
+[json-pointer]: https://datatracker.ietf.org/doc/html/rfc6901
 [markdown]: https://wikipedia.org/wiki/Markdown
 [markdownlint]: https://github.com/DavidAnson/markdownlint
 [markdownlint-cli2]: https://github.com/DavidAnson/markdownlint-cli2

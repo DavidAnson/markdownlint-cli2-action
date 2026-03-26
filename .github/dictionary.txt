@@ -1,5 +1,7 @@
 CommonMark
 config
+configPointer
+JSON
 LLMs
 markdownlint-cli2-action
 npm
