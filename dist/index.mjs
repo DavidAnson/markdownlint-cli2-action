@@ -80315,7 +80315,7 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
 
 
 const logMessage = info;
-const outputFormatter = (/** @type {any} */ options) => {
+const outputFormatter = (/** @type {import("markdownlint-cli2").OutputFormatterOptions} */ options) => {
   const { results } = options;
   for (const lintError of results) {
     const {
@@ -80374,14 +80374,17 @@ if (fix) {
   argv.push("--fix");
 }
 
+/** @type {import("markdownlint-cli2").Parameters} */
 const parameters = {
   argv,
   logMessage,
   "optionsOverride": {
-    "outputFormatters": [ [ outputFormatter ] ]
+    "outputFormatters": [
+      // @ts-ignore
+      [ outputFormatter ]
+    ]
   }
 };
-// @ts-ignore
 markdownlint_cli2_main(parameters).then(
   (code) => code && setFailed(`Failed with exit code: ${code}`),
   (error) => setFailed(`Failed due to error: ${error}`)

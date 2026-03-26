@@ -4,7 +4,7 @@ import * as core from "@actions/core";
 import { main as markdownlintCli2 } from "markdownlint-cli2";
 
 const logMessage = core.info;
-const outputFormatter = (/** @type {any} */ options) => {
+const outputFormatter = (/** @type {import("markdownlint-cli2").OutputFormatterOptions} */ options) => {
   const { results } = options;
   for (const lintError of results) {
     const {
@@ -63,14 +63,17 @@ if (fix) {
   argv.push("--fix");
 }
 
+/** @type {import("markdownlint-cli2").Parameters} */
 const parameters = {
   argv,
   logMessage,
   "optionsOverride": {
-    "outputFormatters": [ [ outputFormatter ] ]
+    "outputFormatters": [
+      // @ts-ignore
+      [ outputFormatter ]
+    ]
   }
 };
-// @ts-ignore
 markdownlintCli2(parameters).then(
   (code) => code && core.setFailed(`Failed with exit code: ${code}`),
   (error) => core.setFailed(`Failed due to error: ${error}`)
