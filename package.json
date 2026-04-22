@@ -21,7 +21,7 @@
     "test": "npm run lint && npm run build && git diff --exit-code"
   },
   "dependencies": {
-    "@actions/core": "3.0.0",
+    "@actions/core": "3.0.1",
     "markdownlint-cli2": "0.22.0"
   },
   "devDependencies": {
