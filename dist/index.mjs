@@ -52441,6 +52441,7 @@ const convertPatternsForFastGlob = (patterns, usingGitRoot, normalizeDirectoryPa
 
 
 
+
 const defaultIgnoredDirectories = [
 	'**/node_modules',
 	'**/flow-typed',
@@ -52453,6 +52454,9 @@ const ignoreFilesGlobOptions = {
 };
 
 const GITIGNORE_FILES_PATTERN = '**/.gitignore';
+
+// Maximum depth for [include] chains to prevent stack overflow (git uses 10)
+const MAX_INCLUDE_DEPTH = 10;
 
 const getReadFileMethod = fsImplementation =>
 	bindFsMethod(fsImplementation?.promises, 'readFile')
@@ -52475,14 +52479,17 @@ const shouldSkipIgnoreFileError = (error, suppressErrors) => {
 	return Boolean(suppressErrors);
 };
 
-const createIgnoreFileReadError = (filePath, error) => {
+const createReadError = (kind, filePath, error) => {
+	const prefix = `Failed to read ${kind} at ${filePath}`;
 	if (error instanceof Error) {
-		error.message = `Failed to read ignore file at ${filePath}: ${error.message}`;
-		return error;
+		return new Error(`${prefix}: ${error.message}`, {cause: error});
 	}
 
-	return new Error(`Failed to read ignore file at ${filePath}: ${String(error)}`);
+	return new Error(`${prefix}: ${String(error)}`);
 };
+
+const createIgnoreFileReadError = (filePath, error) => createReadError('ignore file', filePath, error);
+const createGitConfigReadError = (filePath, error) => createReadError('git config', filePath, error);
 
 const processIgnoreFileCore = (filePath, readMethod, suppressErrors) => {
 	try {
@@ -52547,10 +52554,12 @@ const combineIgnoreFilePaths = (gitRoot, normalizedOptions, childPaths) => dedup
 const buildIgnoreResult = (files, normalizedOptions, gitRoot) => {
 	const baseDir = gitRoot || normalizedOptions.cwd;
 	const patterns = getPatternsFromIgnoreFiles(files, baseDir);
+	const matcher = createIgnoreMatcher(patterns, normalizedOptions.cwd, baseDir);
 
 	return {
 		patterns,
-		predicate: createIgnorePredicate(patterns, normalizedOptions.cwd, baseDir),
+		matcher,
+		predicate: fileOrDirectory => matcher(fileOrDirectory).ignored,
 		usingGitRoot: Boolean(gitRoot && gitRoot !== normalizedOptions.cwd),
 	};
 };
@@ -52631,7 +52640,9 @@ const toRelativePath = (fileOrDirectory, cwd) => {
 	return fileOrDirectory;
 };
 
-const createIgnorePredicate = (patterns, cwd, baseDir) => {
+const notIgnored = {ignored: false, unignored: false};
+
+const createIgnoreMatcher = (patterns, cwd, baseDir) => {
 	const ignores = ignore().add(patterns);
 	// Normalize to handle path separator and . / .. components consistently
 	const resolvedCwd = external_node_path_namespaceObject.normalize(external_node_path_namespaceObject.resolve(cwd));
@@ -52639,22 +52650,31 @@ const createIgnorePredicate = (patterns, cwd, baseDir) => {
 
 	return fileOrDirectory => {
 		fileOrDirectory = toPath(fileOrDirectory);
+		const hasTrailingSeparator = /[/\\]$/.test(fileOrDirectory);
 
 		// Never ignore the cwd itself - use normalized comparison
 		const normalizedPath = external_node_path_namespaceObject.normalize(external_node_path_namespaceObject.resolve(fileOrDirectory));
 		if (normalizedPath === resolvedCwd) {
-			return false;
+			return notIgnored;
 		}
 
 		// Convert to relative path from baseDir (use normalized baseDir)
-		const relativePath = toRelativePath(fileOrDirectory, resolvedBaseDir);
+		let relativePath = toRelativePath(fileOrDirectory, resolvedBaseDir);
 
 		// If path is outside baseDir (undefined), it can't be ignored by patterns
 		if (relativePath === undefined) {
-			return false;
+			return notIgnored;
 		}
 
-		return relativePath ? ignores.ignores(slash(relativePath)) : false;
+		if (!relativePath) {
+			return notIgnored;
+		}
+
+		if (hasTrailingSeparator && !relativePath.endsWith(external_node_path_namespaceObject.sep)) {
+			relativePath += external_node_path_namespaceObject.sep;
+		}
+
+		return ignores.test(slash(relativePath));
 	};
 };
 
@@ -52681,6 +52701,517 @@ const normalizeOptions = (options = {}) => {
 		throwErrorOnBrokenSymbolicLink: options.throwErrorOnBrokenSymbolicLink ?? false,
 		fs: options.fs,
 	};
+};
+
+const unescapeGitQuotedValue = value => value.replaceAll(/\\(["\\abfnrtv])/g, (_match, escapedCharacter) => {
+	switch (escapedCharacter) {
+		case 'a': {
+			return '\u0007';
+		}
+
+		case 'b': {
+			return '\b';
+		}
+
+		case 'f': {
+			return '\f';
+		}
+
+		case 'n': {
+			return '\n';
+		}
+
+		case 'r': {
+			return '\r';
+		}
+
+		case 't': {
+			return '\t';
+		}
+
+		case 'v': {
+			return '\v';
+		}
+
+		default: {
+			return escapedCharacter;
+		}
+	}
+});
+
+const parseGitConfigValue = value => {
+	const trimmedValue = value.trim();
+	const quotedMatch = trimmedValue.match(/^"((?:[^"\\]|\\.)*)"\s*(?:[#;].*)?$/);
+
+	if (quotedMatch) {
+		return unescapeGitQuotedValue(quotedMatch[1]);
+	}
+
+	return trimmedValue.replace(/\s[#;].*$/, '').trim();
+};
+
+const resolveConfigPath = (filePath, configPath) => {
+	if (configPath.startsWith('~/')) {
+		const homeDirectory = external_node_os_namespaceObject.homedir();
+		const resolved = external_node_path_namespaceObject.join(homeDirectory, configPath.slice(2));
+		// Ensure the resolved path is within the home directory to prevent traversal via ~/..
+		if (!isPathInside(resolved, homeDirectory)) {
+			// Invalid path, return a path that won't exist
+			return external_node_path_namespaceObject.join(homeDirectory, '.globby-invalid-path-traversal');
+		}
+
+		return resolved;
+	}
+
+	if (external_node_path_namespaceObject.isAbsolute(configPath)) {
+		return configPath;
+	}
+
+	return external_node_path_namespaceObject.resolve(external_node_path_namespaceObject.dirname(filePath), configPath);
+};
+
+const parseGitConfigSection = line => {
+	if (!line.startsWith('[')) {
+		return undefined;
+	}
+
+	let inQuotes = false;
+	let isEscaped = false;
+
+	for (let index = 1; index < line.length; index++) {
+		const character = line[index];
+
+		if (isEscaped) {
+			isEscaped = false;
+			continue;
+		}
+
+		if (character === '\\') {
+			isEscaped = true;
+			continue;
+		}
+
+		if (character === '"') {
+			inQuotes = !inQuotes;
+			continue;
+		}
+
+		if (character === ']' && !inQuotes) {
+			const remainder = line.slice(index + 1).trimStart();
+			if (remainder && !remainder.startsWith('#') && !remainder.startsWith(';')) {
+				return undefined;
+			}
+
+			return line.slice(1, index).trim();
+		}
+	}
+
+	return undefined;
+};
+
+const parseGitConfigEntry = line => {
+	const match = line.match(/^([A-Za-z\d-.]+)\s*=\s*(.*)$/);
+
+	if (!match) {
+		return undefined;
+	}
+
+	return {
+		key: match[1].toLowerCase(),
+		value: parseGitConfigValue(match[2]),
+	};
+};
+
+const parseIncludeIfCondition = section => {
+	if (!section) {
+		return undefined;
+	}
+
+	const match = section.match(/^includeif\s+"([^"]+)"$/i);
+	return match ? match[1] : undefined;
+};
+
+const normalizeGitConfigConditionPattern = (pattern, configFilePath) => {
+	if (pattern.startsWith('~/')) {
+		pattern = external_node_path_namespaceObject.join(external_node_os_namespaceObject.homedir(), pattern.slice(2));
+	} else if (pattern.startsWith('./')) {
+		pattern = external_node_path_namespaceObject.resolve(external_node_path_namespaceObject.dirname(configFilePath), pattern.slice(2));
+	} else if (!external_node_path_namespaceObject.isAbsolute(pattern)) {
+		pattern = `**/${pattern}`;
+	}
+
+	if (pattern.endsWith('/')) {
+		pattern += '**';
+	}
+
+	return slash(pattern);
+};
+
+const gitConfigGlobToRegex = (pattern, flags) => {
+	let regex = '';
+
+	for (let index = 0; index < pattern.length; index++) {
+		const character = pattern[index];
+		const nextCharacter = pattern[index + 1];
+		const nextNextCharacter = pattern[index + 2];
+
+		if (character === '*' && nextCharacter === '*' && nextNextCharacter === '/') {
+			regex += '(?:.*/)?';
+			index += 2;
+			continue;
+		}
+
+		if (character === '*' && nextCharacter === '*') {
+			regex += '.*';
+			index += 1;
+			continue;
+		}
+
+		if (character === '*') {
+			regex += '[^/]*';
+			continue;
+		}
+
+		if (character === '?') {
+			regex += '[^/]';
+			continue;
+		}
+
+		if (character === '[') {
+			const closingBracketIndex = pattern.indexOf(']', index + 1);
+			if (closingBracketIndex !== -1) {
+				const bracketContent = pattern.slice(index + 1, closingBracketIndex);
+				if (bracketContent) {
+					const negatedBracketContent = bracketContent[0] === '!' ? `^${bracketContent.slice(1)}` : bracketContent;
+					regex += `[${negatedBracketContent}]`;
+					index = closingBracketIndex;
+					continue;
+				}
+			}
+		}
+
+		regex += /[|\\{}()[\]^$+?.]/.test(character) ? `\\${character}` : character;
+	}
+
+	try {
+		return new RegExp(`^${regex}$`, flags);
+	} catch {
+		// If regex construction fails (e.g., invalid bracket expression), return a non-matching pattern
+		return /(?!)/;
+	}
+};
+
+const matchesIncludeIfCondition = (condition, gitDirectory, configFilePath) => {
+	if (!gitDirectory) {
+		return false;
+	}
+
+	const match = condition.match(/^(gitdir|gitdir\/i):(.*)$/i);
+	if (!match) {
+		return false;
+	}
+
+	const [, keyword, rawPattern] = match;
+	const pattern = normalizeGitConfigConditionPattern(rawPattern.trim(), configFilePath);
+	const isCaseInsensitive = keyword.toLowerCase() === 'gitdir/i';
+	const regularExpression = gitConfigGlobToRegex(pattern, isCaseInsensitive ? 'i' : undefined);
+	const normalizedGitDirectory = slash(external_node_path_namespaceObject.resolve(gitDirectory));
+
+	return regularExpression.test(normalizedGitDirectory);
+};
+
+const shouldIncludeConfigSection = (section, gitDirectory, configFilePath) => {
+	if (section?.toLowerCase() === 'include') {
+		return true;
+	}
+
+	// `globalGitignore` intentionally keeps `includeIf` support narrow.
+	// Only `gitdir:` and `gitdir/i:` conditions are treated as active here.
+	// Other Git predicates such as `onbranch:` are outside this feature's
+	// supported boundary and are documented as unsupported.
+	const condition = parseIncludeIfCondition(section);
+	return condition ? matchesIncludeIfCondition(condition, gitDirectory, configFilePath) : false;
+};
+
+const createExcludesFileValue = (value, declaringFilePath) => ({
+	value,
+	declaringFilePath,
+});
+
+/**
+Parse git config content and return the excludesFile value and any include paths to recurse into.
+The caller is responsible for reading files and recursing (sync or async).
+*/
+const parseGitConfigForExcludesFile = (content, normalizedPath, gitDirectory) => {
+	let currentSection;
+	let excludesFile;
+	const includePaths = [];
+
+	for (const line of content.split(/\r?\n/)) {
+		const trimmed = line.trim();
+
+		if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) {
+			continue;
+		}
+
+		if (trimmed.startsWith('[')) {
+			currentSection = parseGitConfigSection(trimmed);
+			continue;
+		}
+
+		const entry = parseGitConfigEntry(trimmed);
+		if (!entry) {
+			continue;
+		}
+
+		if (currentSection?.toLowerCase() === 'core' && entry.key === 'excludesfile') {
+			excludesFile = createExcludesFileValue(entry.value, normalizedPath);
+			continue;
+		}
+
+		if (shouldIncludeConfigSection(currentSection, gitDirectory, normalizedPath) && entry.key === 'path' && entry.value) {
+			includePaths.push(resolveConfigPath(normalizedPath, entry.value));
+		}
+	}
+
+	return {excludesFile, includePaths};
+};
+
+const readGitConfigFile = (normalizedPath, readMethod, suppressErrors) => {
+	try {
+		return readMethod(normalizedPath, 'utf8');
+	} catch (error) {
+		if (shouldSkipIgnoreFileError(error, suppressErrors)) {
+			return undefined;
+		}
+
+		throw createGitConfigReadError(normalizedPath, error);
+	}
+};
+
+const getExcludesFileFromGitConfigSync = (filePath, readFileSync, gitDirectory, options = {}) => {
+	const {suppressErrors, includeStack = new Set(), depth = 0} = options;
+	const normalizedPath = external_node_path_namespaceObject.resolve(filePath);
+
+	if (includeStack.has(normalizedPath)) {
+		return undefined;
+	}
+
+	if (depth >= MAX_INCLUDE_DEPTH) {
+		return undefined;
+	}
+
+	includeStack.add(normalizedPath);
+
+	const content = readGitConfigFile(normalizedPath, readFileSync, suppressErrors);
+	if (content === undefined) {
+		includeStack.delete(normalizedPath);
+		return undefined;
+	}
+
+	let {excludesFile, includePaths} = parseGitConfigForExcludesFile(content, normalizedPath, gitDirectory);
+
+	for (const includePath of includePaths) {
+		const includedExcludesFile = getExcludesFileFromGitConfigSync(includePath, readFileSync, gitDirectory, {suppressErrors, includeStack, depth: depth + 1});
+		if (includedExcludesFile !== undefined) {
+			excludesFile = includedExcludesFile;
+		}
+	}
+
+	includeStack.delete(normalizedPath);
+	return excludesFile;
+};
+
+const getExcludesFileFromGitConfigAsync = async (filePath, readFile, gitDirectory, options = {}) => {
+	const {suppressErrors, includeStack = new Set(), depth = 0} = options;
+	const normalizedPath = external_node_path_namespaceObject.resolve(filePath);
+
+	if (includeStack.has(normalizedPath)) {
+		return undefined;
+	}
+
+	if (depth >= MAX_INCLUDE_DEPTH) {
+		return undefined;
+	}
+
+	includeStack.add(normalizedPath);
+
+	let content;
+	try {
+		content = await readFile(normalizedPath, 'utf8');
+	} catch (error) {
+		includeStack.delete(normalizedPath);
+		if (shouldSkipIgnoreFileError(error, suppressErrors)) {
+			return undefined;
+		}
+
+		throw createGitConfigReadError(normalizedPath, error);
+	}
+
+	let {excludesFile, includePaths} = parseGitConfigForExcludesFile(content, normalizedPath, gitDirectory);
+
+	for (const includePath of includePaths) {
+		// eslint-disable-next-line no-await-in-loop
+		const includedExcludesFile = await getExcludesFileFromGitConfigAsync(includePath, readFile, gitDirectory, {suppressErrors, includeStack, depth: depth + 1});
+		if (includedExcludesFile !== undefined) {
+			excludesFile = includedExcludesFile;
+		}
+	}
+
+	includeStack.delete(normalizedPath);
+	return excludesFile;
+};
+
+const resolveGitDirectoryFromFile = (gitFilePath, content) => {
+	const match = content.match(/^gitdir:\s*(.+?)\s*$/i);
+	if (!match) {
+		return gitFilePath;
+	}
+
+	return external_node_path_namespaceObject.resolve(external_node_path_namespaceObject.dirname(gitFilePath), match[1]);
+};
+
+const getGitDirectorySync = (gitRoot, readFileSync) => {
+	if (!gitRoot) {
+		return undefined;
+	}
+
+	const gitFilePath = external_node_path_namespaceObject.join(gitRoot, '.git');
+
+	try {
+		return resolveGitDirectoryFromFile(gitFilePath, readFileSync(gitFilePath, 'utf8'));
+	} catch {
+		return gitFilePath;
+	}
+};
+
+const getGitDirectoryAsync = async (gitRoot, readFile) => {
+	if (!gitRoot) {
+		return undefined;
+	}
+
+	const gitFilePath = external_node_path_namespaceObject.join(gitRoot, '.git');
+
+	try {
+		return resolveGitDirectoryFromFile(gitFilePath, await readFile(gitFilePath, 'utf8'));
+	} catch {
+		return gitFilePath;
+	}
+};
+
+const getXdgConfigHome = () => external_node_process_namespaceObject.env.XDG_CONFIG_HOME || external_node_path_namespaceObject.join(external_node_os_namespaceObject.homedir(), '.config');
+
+const getGitConfigPaths = () => {
+	// `globalGitignore` intentionally reads only user-level Git config.
+	// It does not try to emulate every Git config scope such as repository
+	// `.git/config` or system config. This keeps the feature boundary small
+	// and predictable while still covering the common user-level excludes file.
+	//
+	// `GIT_CONFIG_GLOBAL` replaces the user-level config entirely.
+	if ("GIT_CONFIG_GLOBAL" in external_node_process_namespaceObject.env) {
+		const value = external_node_process_namespaceObject.env.GIT_CONFIG_GLOBAL;
+		return value ? [value] : [];
+	}
+
+	return [
+		external_node_path_namespaceObject.join(getXdgConfigHome(), 'git', 'config'),
+		external_node_path_namespaceObject.join(external_node_os_namespaceObject.homedir(), '.gitconfig'),
+	];
+};
+
+const getDefaultGlobalGitignorePath = () => external_node_path_namespaceObject.join(getXdgConfigHome(), 'git', 'ignore');
+
+const resolveExcludesFilePath = excludesFileConfig => {
+	// An explicit empty value disables the global gitignore entirely.
+	if (excludesFileConfig?.value === '') {
+		return undefined;
+	}
+
+	// When no core.excludesFile was configured, fall back to Git's default
+	// user-level ignore file. This matches Git's behavior: the default path
+	// applies even when GIT_CONFIG_GLOBAL="" suppresses config file reading.
+	if (excludesFileConfig === undefined) {
+		return getDefaultGlobalGitignorePath();
+	}
+
+	// Relative core.excludesfile values are resolved from the config file that
+	// declared them. Do not resolve them from the repository root.
+	return resolveConfigPath(excludesFileConfig.declaringFilePath, excludesFileConfig.value);
+};
+
+const readGlobalGitignoreContent = (filePath, readMethod, suppressErrors) => {
+	try {
+		const content = readMethod(filePath, 'utf8');
+		return {filePath, content};
+	} catch (error) {
+		if (shouldSkipIgnoreFileError(error, suppressErrors)) {
+			return undefined;
+		}
+
+		throw createIgnoreFileReadError(filePath, error);
+	}
+};
+
+const getGlobalGitignoreFile = (options = {}) => {
+	const cwd = toPath(options.cwd) ?? external_node_process_namespaceObject.cwd();
+	const readFileSync = getReadFileSyncMethod(options.fs);
+	const gitRoot = findGitRootSync(cwd, options.fs);
+	const gitDirectory = getGitDirectorySync(gitRoot, readFileSync);
+	let excludesFileConfig;
+
+	for (const gitConfigPath of getGitConfigPaths()) {
+		const value = getExcludesFileFromGitConfigSync(gitConfigPath, readFileSync, gitDirectory, {suppressErrors: options.suppressErrors});
+		if (value !== undefined) {
+			excludesFileConfig = value;
+		}
+	}
+
+	const filePath = resolveExcludesFilePath(excludesFileConfig);
+	return filePath === undefined ? undefined : readGlobalGitignoreContent(filePath, readFileSync, options.suppressErrors);
+};
+
+const getGlobalGitignoreFileAsync = async (options = {}) => {
+	const cwd = toPath(options.cwd) ?? external_node_process_namespaceObject.cwd();
+	const readFile = getReadFileMethod(options.fs);
+	const gitRoot = await findGitRoot(cwd, options.fs);
+	const gitDirectory = await getGitDirectoryAsync(gitRoot, readFile);
+	const excludesFileValues = await Promise.all(getGitConfigPaths().map(gitConfigPath => getExcludesFileFromGitConfigAsync(
+		gitConfigPath,
+		readFile,
+		gitDirectory,
+		{suppressErrors: options.suppressErrors},
+	)));
+	const excludesFileConfig = excludesFileValues.findLast(value => value !== undefined);
+
+	const filePath = resolveExcludesFilePath(excludesFileConfig);
+	if (filePath === undefined) {
+		return undefined;
+	}
+
+	try {
+		const content = await readFile(filePath, 'utf8');
+		return {filePath, content};
+	} catch (error) {
+		if (shouldSkipIgnoreFileError(error, options.suppressErrors)) {
+			return undefined;
+		}
+
+		throw createIgnoreFileReadError(filePath, error);
+	}
+};
+
+const buildGlobalMatcher = (globalIgnoreFile, cwd, rootDirectory = cwd) => {
+	// Passing the file's own directory as cwd gives base='', so patterns stay
+	// unchanged and are interpreted relative to the project root (cwd). This
+	// matches Git's behavior: patterns without slashes match at any depth,
+	// patterns starting with / are anchored to the project root.
+	const patterns = parseIgnoreFile(globalIgnoreFile, external_node_path_namespaceObject.dirname(globalIgnoreFile.filePath));
+	return createIgnoreMatcher(patterns, cwd, rootDirectory);
+};
+
+const buildGlobalPredicate = (globalIgnoreFile, cwd, rootDirectory = cwd) => {
+	const matcher = buildGlobalMatcher(globalIgnoreFile, cwd, rootDirectory);
+	return fileOrDirectory => matcher(fileOrDirectory).ignored;
 };
 
 const collectIgnoreFileArtifactsAsync = async (patterns, options, includeParentIgnoreFiles) => {
@@ -52728,7 +53259,7 @@ This avoids reading the same files twice (once for patterns, once for filtering)
 @param {string[]} patterns - Patterns to find ignore files
 @param {Object} options - Options object
 @param {boolean} [includeParentIgnoreFiles=false] - Whether to search for parent .gitignore files
-@returns {Promise<{patterns: string[], predicate: Function, usingGitRoot: boolean}>}
+@returns {Promise<{patterns: string[], matcher: Function, predicate: Function, usingGitRoot: boolean}>}
 */
 const getIgnorePatternsAndPredicate = async (patterns, options, includeParentIgnoreFiles = false) => {
 	const {files, normalizedOptions, gitRoot} = await collectIgnoreFileArtifactsAsync(
@@ -52746,7 +53277,7 @@ Read ignore files and return both patterns and predicate (sync version).
 @param {string[]} patterns - Patterns to find ignore files
 @param {Object} options - Options object
 @param {boolean} [includeParentIgnoreFiles=false] - Whether to search for parent .gitignore files
-@returns {{patterns: string[], predicate: Function, usingGitRoot: boolean}}
+@returns {{patterns: string[], matcher: Function, predicate: Function, usingGitRoot: boolean}}
 */
 const getIgnorePatternsAndPredicateSync = (patterns, options, includeParentIgnoreFiles = false) => {
 	const {files, normalizedOptions, gitRoot} = collectIgnoreFileArtifactsSync(
@@ -52778,10 +53309,14 @@ const assertPatternsInput = patterns => {
 	}
 };
 
-const getStatMethod = fsImplementation =>
-	bindFsMethod(fsImplementation?.promises, 'stat')
-	?? bindFsMethod(external_node_fs_namespaceObject.promises, 'stat')
-	?? promisifyFsMethod(fsImplementation, 'stat');
+const getStatMethod = fsImplementation => {
+	if (fsImplementation) {
+		return bindFsMethod(fsImplementation.promises, 'stat')
+			?? promisifyFsMethod(fsImplementation, 'stat');
+	}
+
+	return bindFsMethod(external_node_fs_namespaceObject.promises, 'stat');
+};
 
 const globby_getStatSyncMethod = fsImplementation =>
 	bindFsMethod(fsImplementation, 'statSync')
@@ -52928,6 +53463,68 @@ const getIgnoreFilesPatterns = options => {
 	return patterns;
 };
 
+const isPathIgnored = (matcher, globalMatcher, path) => {
+	const globalResult = globalMatcher ? globalMatcher(path) : undefined;
+	const result = matcher ? matcher(path) : undefined;
+
+	if (result?.unignored) {
+		return false;
+	}
+
+	return Boolean(result?.ignored || globalResult?.ignored);
+};
+
+const hasIgnoredAncestorDirectory = (matcher, globalMatcher, file) => {
+	let currentPath = file;
+
+	while (true) {
+		const parentDirectory = external_node_path_namespaceObject.dirname(currentPath);
+		if (parentDirectory === currentPath) {
+			return false;
+		}
+
+		if (isPathIgnored(matcher, globalMatcher, `${parentDirectory}${external_node_path_namespaceObject.sep}`)) {
+			return true;
+		}
+
+		currentPath = parentDirectory;
+	}
+};
+
+const combinePredicate = (matcher, globalMatcher) => {
+	if (!matcher && !globalMatcher) {
+		return false;
+	}
+
+	return file => {
+		const result = matcher ? matcher(file) : undefined;
+
+		// A local negation (e.g. `!file`) re-includes the file, unless
+		// a parent directory is ignored by either matcher.
+		if (result?.unignored) {
+			const globalResult = globalMatcher ? globalMatcher(file) : undefined;
+			return globalResult?.ignored && hasIgnoredAncestorDirectory(matcher, globalMatcher, file);
+		}
+
+		return isPathIgnored(matcher, globalMatcher, file);
+	};
+};
+
+const buildIgnoreFilterResult = (options, cwd, {patterns, matcher, usingGitRoot}, globalMatcher, createFilter) => {
+	const finalPredicate = combinePredicate(matcher, globalMatcher);
+
+	// Convert patterns to fast-glob format (may return empty array if predicate should handle everything)
+	const patternsForFastGlob = convertPatternsForFastGlob(patterns, usingGitRoot, normalizeDirectoryPatternForFastGlob);
+
+	return {
+		options: {
+			...options,
+			ignore: [...options.ignore, ...patternsForFastGlob],
+		},
+		filter: createFilter(finalPredicate, cwd, options.fs),
+	};
+};
+
 /**
 Apply gitignore patterns to options and return filter predicate.
 
@@ -52940,32 +53537,28 @@ All patterns (including negated) are always used in the filter predicate to ensu
 @returns {Promise<{options: Object, filter: Function}>}
 */
 const applyIgnoreFilesAndGetFilter = async options => {
+	const cwd = options.cwd ?? external_node_process_namespaceObject.cwd();
 	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
+	const globalIgnoreFile = options.globalGitignore ? await getGlobalGitignoreFileAsync(options) : undefined;
 
-	if (ignoreFilesPatterns.length === 0) {
+	if (ignoreFilesPatterns.length === 0 && !globalIgnoreFile) {
 		return {
 			options,
-			filter: createFilterFunction(false, options.cwd),
+			filter: createFilterFunctionAsync(false, cwd, options.fs),
 		};
 	}
 
 	// Read ignore files once and get both patterns and predicate
 	// Enable parent .gitignore search when using gitignore option
 	const includeParentIgnoreFiles = options.gitignore === true;
-	const {patterns, predicate, usingGitRoot} = await getIgnorePatternsAndPredicate(ignoreFilesPatterns, options, includeParentIgnoreFiles);
+	const ignoreResult = ignoreFilesPatterns.length > 0
+		? await getIgnorePatternsAndPredicate(ignoreFilesPatterns, options, includeParentIgnoreFiles)
+		: {patterns: [], matcher: false, usingGitRoot: false};
 
-	// Convert patterns to fast-glob format (may return empty array if predicate should handle everything)
-	const patternsForFastGlob = convertPatternsForFastGlob(patterns, usingGitRoot, normalizeDirectoryPatternForFastGlob);
+	const globalGitRoot = globalIgnoreFile ? await findGitRoot(cwd, options.fs) : undefined;
+	const globalMatcher = globalIgnoreFile ? buildGlobalMatcher(globalIgnoreFile, cwd, globalGitRoot ?? cwd) : undefined;
 
-	const modifiedOptions = {
-		...options,
-		ignore: [...options.ignore, ...patternsForFastGlob],
-	};
-
-	return {
-		options: modifiedOptions,
-		filter: createFilterFunction(predicate, options.cwd),
-	};
+	return buildIgnoreFilterResult(options, cwd, ignoreResult, globalMatcher, createFilterFunctionAsync);
 };
 
 /**
@@ -52974,62 +53567,153 @@ Apply gitignore patterns to options and return filter predicate (sync version).
 @returns {{options: Object, filter: Function}}
 */
 const applyIgnoreFilesAndGetFilterSync = options => {
+	const cwd = options.cwd ?? external_node_process_namespaceObject.cwd();
 	const ignoreFilesPatterns = getIgnoreFilesPatterns(options);
+	const globalIgnoreFile = options.globalGitignore ? getGlobalGitignoreFile(options) : undefined;
 
-	if (ignoreFilesPatterns.length === 0) {
+	if (ignoreFilesPatterns.length === 0 && !globalIgnoreFile) {
 		return {
 			options,
-			filter: createFilterFunction(false, options.cwd),
+			filter: createFilterFunction(false, cwd, options.fs),
 		};
 	}
 
 	// Read ignore files once and get both patterns and predicate
 	// Enable parent .gitignore search when using gitignore option
 	const includeParentIgnoreFiles = options.gitignore === true;
-	const {patterns, predicate, usingGitRoot} = getIgnorePatternsAndPredicateSync(ignoreFilesPatterns, options, includeParentIgnoreFiles);
+	const ignoreResult = ignoreFilesPatterns.length > 0
+		? getIgnorePatternsAndPredicateSync(ignoreFilesPatterns, options, includeParentIgnoreFiles)
+		: {patterns: [], matcher: false, usingGitRoot: false};
 
-	// Convert patterns to fast-glob format (may return empty array if predicate should handle everything)
-	const patternsForFastGlob = convertPatternsForFastGlob(patterns, usingGitRoot, normalizeDirectoryPatternForFastGlob);
+	const globalGitRoot = globalIgnoreFile ? findGitRootSync(cwd, options.fs) : undefined;
+	const globalMatcher = globalIgnoreFile ? buildGlobalMatcher(globalIgnoreFile, cwd, globalGitRoot ?? cwd) : undefined;
 
-	const modifiedOptions = {
-		...options,
-		ignore: [...options.ignore, ...patternsForFastGlob],
-	};
+	return buildIgnoreFilterResult(options, cwd, ignoreResult, globalMatcher, createFilterFunction);
+};
 
-	return {
-		options: modifiedOptions,
-		filter: createFilterFunction(predicate, options.cwd),
+const assertGlobalGitignoreSyncSupport = options => {
+	if (options.globalGitignore && options.fs && !options.fs.statSync) {
+		throw new Error('The `globalGitignore` option in `globbySync()` requires `fs.statSync` when a custom `fs` is provided.');
+	}
+};
+
+const globalGitignoreAsyncStatErrorMessage = 'The `globalGitignore` option in `globby()` and `globbyStream()` requires `fs.promises.stat` or `fs.stat` when a custom `fs` is provided.';
+
+const assertGlobalGitignoreAsyncSupport = options => {
+	if (!options.globalGitignore || !options.fs) {
+		return;
+	}
+
+	if (!options.fs.promises?.stat && !options.fs.stat) {
+		throw new Error(globalGitignoreAsyncStatErrorMessage);
+	}
+};
+
+const createPathResolver = cwd => {
+	const basePath = cwd || external_node_process_namespaceObject.cwd();
+	const pathCache = new Map();
+
+	return pathKey => {
+		let absolutePath = pathCache.get(pathKey);
+		if (absolutePath === undefined) {
+			if (pathCache.size > 10_000) {
+				pathCache.clear();
+			}
+
+			absolutePath = external_node_path_namespaceObject.isAbsolute(pathKey) ? pathKey : external_node_path_namespaceObject.resolve(basePath, pathKey);
+			pathCache.set(pathKey, absolutePath);
+		}
+
+		return absolutePath;
 	};
 };
 
-const createFilterFunction = (isIgnored, cwd) => {
+const createAsyncDirectoryCheck = fsMethod => {
+	const directoryCache = new Map();
+
+	return async absolutePath => {
+		let isDirectory = directoryCache.get(absolutePath);
+		if (isDirectory !== undefined) {
+			return isDirectory;
+		}
+
+		try {
+			const stats = await fsMethod?.(absolutePath);
+			isDirectory = Boolean(stats?.isDirectory());
+		} catch {
+			isDirectory = false;
+		}
+
+		if (directoryCache.size > 10_000) {
+			directoryCache.clear();
+		}
+
+		directoryCache.set(absolutePath, isDirectory);
+		return isDirectory;
+	};
+};
+
+const createDirectoryCheck = fsMethod => {
+	const directoryCache = new Map();
+
+	return absolutePath => {
+		let isDirectory = directoryCache.get(absolutePath);
+		if (isDirectory !== undefined) {
+			return isDirectory;
+		}
+
+		try {
+			isDirectory = Boolean(fsMethod?.(absolutePath)?.isDirectory());
+		} catch {
+			isDirectory = false;
+		}
+
+		if (directoryCache.size > 10_000) {
+			directoryCache.clear();
+		}
+
+		directoryCache.set(absolutePath, isDirectory);
+		return isDirectory;
+	};
+};
+
+const createFilterFunctionAsync = (isIgnored, cwd, fsImplementation) => {
+	const resolveAbsolutePath = createPathResolver(cwd);
+	const isDirectoryEntry = createAsyncDirectoryCheck(getStatMethod(fsImplementation));
+
+	return async fastGlobResult => {
+		if (!isIgnored) {
+			return true;
+		}
+
+		const absolutePath = resolveAbsolutePath(external_node_path_namespaceObject.normalize(fastGlobResult.path ?? fastGlobResult));
+		if (isIgnored(absolutePath)) {
+			return false;
+		}
+
+		return !(await isDirectoryEntry(absolutePath) && isIgnored(`${absolutePath}${external_node_path_namespaceObject.sep}`));
+	};
+};
+
+const createFilterFunction = (isIgnored, cwd, fsImplementation) => {
 	const seen = new Set();
-	const basePath = cwd || external_node_process_namespaceObject.cwd();
-	const pathCache = new Map(); // Cache for resolved paths
+	const resolveAbsolutePath = createPathResolver(cwd);
+	const isDirectoryEntry = createDirectoryCheck(globby_getStatSyncMethod(fsImplementation));
 
 	return fastGlobResult => {
 		const pathKey = external_node_path_namespaceObject.normalize(fastGlobResult.path ?? fastGlobResult);
 
-		// Check seen set first (fast path)
 		if (seen.has(pathKey)) {
 			return false;
 		}
 
-		// Only compute absolute path and check predicate if needed
 		if (isIgnored) {
-			let absolutePath = pathCache.get(pathKey);
-			if (absolutePath === undefined) {
-				absolutePath = external_node_path_namespaceObject.isAbsolute(pathKey) ? pathKey : external_node_path_namespaceObject.resolve(basePath, pathKey);
-				pathCache.set(pathKey, absolutePath);
-
-				// Only clear path cache if it gets too large
-				// Never clear 'seen' as it's needed for deduplication
-				if (pathCache.size > 10_000) {
-					pathCache.clear();
-				}
+			const absolutePath = resolveAbsolutePath(pathKey);
+			if (isIgnored(absolutePath)) {
+				return false;
 			}
 
-			if (isIgnored(absolutePath)) {
+			if (isDirectoryEntry(absolutePath) && isIgnored(`${absolutePath}${external_node_path_namespaceObject.sep}`)) {
 				return false;
 			}
 		}
@@ -53040,6 +53724,25 @@ const createFilterFunction = (isIgnored, cwd) => {
 };
 
 const unionFastGlobResults = (results, filter) => results.flat().filter(fastGlobResult => filter(fastGlobResult));
+const unionFastGlobResultsAsync = async (results, filter) => {
+	results = results.flat();
+	const matches = await Promise.all(results.map(fastGlobResult => filter(fastGlobResult)));
+	const seen = new Set();
+
+	return results.filter((fastGlobResult, index) => {
+		if (!matches[index]) {
+			return false;
+		}
+
+		const pathKey = external_node_path_namespaceObject.normalize(fastGlobResult.path ?? fastGlobResult);
+		if (seen.has(pathKey)) {
+			return false;
+		}
+
+		seen.add(pathKey);
+		return true;
+	});
+};
 
 const convertNegativePatterns = (patterns, options) => {
 	// If all patterns are negative and expandNegationOnlyPatterns is enabled (default),
@@ -53182,6 +53885,8 @@ const generateTasksSync = (patterns, options) => {
 };
 
 const globby = normalizeArguments(async (patterns, options) => {
+	assertGlobalGitignoreAsyncSupport(options);
+
 	// Apply ignore files and get filter (reads .gitignore files once)
 	const {options: modifiedOptions, filter} = await applyIgnoreFilesAndGetFilter(options);
 
@@ -53189,10 +53894,12 @@ const globby = normalizeArguments(async (patterns, options) => {
 	const tasks = await generateTasks(patterns, modifiedOptions);
 
 	const results = await Promise.all(tasks.map(task => out(task.patterns, task.options)));
-	return unionFastGlobResults(results, filter);
+	return unionFastGlobResultsAsync(results, filter);
 });
 
 const globbySync = normalizeArgumentsSync((patterns, options) => {
+	assertGlobalGitignoreSyncSupport(options);
+
 	// Apply ignore files and get filter (reads .gitignore files once)
 	const {options: modifiedOptions, filter} = applyIgnoreFilesAndGetFilterSync(options);
 
@@ -53204,19 +53911,30 @@ const globbySync = normalizeArgumentsSync((patterns, options) => {
 });
 
 const globbyStream = normalizeArgumentsSync((patterns, options) => {
-	// Apply ignore files and get filter (reads .gitignore files once)
-	const {options: modifiedOptions, filter} = applyIgnoreFilesAndGetFilterSync(options);
+	assertGlobalGitignoreAsyncSupport(options);
 
-	// Generate tasks with modified options (includes gitignore patterns in ignore option)
-	const tasks = generateTasksSync(patterns, modifiedOptions);
+	const seen = new Set();
+	const stream = external_node_stream_.Readable.from((async function * () {
+		// Apply ignore files and get filter (reads .gitignore files once)
+		const {options: modifiedOptions, filter} = await applyIgnoreFilesAndGetFilter(options);
 
-	const streams = tasks.map(task => out.stream(task.patterns, task.options));
+		// Generate tasks with modified options (includes gitignore patterns in ignore option)
+		const tasks = await generateTasks(patterns, modifiedOptions);
 
-	if (streams.length === 0) {
-		return external_node_stream_.Readable.from([]);
-	}
+		if (tasks.length === 0) {
+			return;
+		}
 
-	const stream = mergeStreams(streams).filter(fastGlobResult => filter(fastGlobResult));
+		const streams = tasks.map(task => out.stream(task.patterns, task.options));
+
+		for await (const fastGlobResult of mergeStreams(streams)) {
+			const pathKey = external_node_path_namespaceObject.normalize(fastGlobResult.path ?? fastGlobResult);
+			if (!seen.has(pathKey) && await filter(fastGlobResult)) {
+				seen.add(pathKey);
+				yield fastGlobResult;
+			}
+		}
+	})());
 
 	// Returning a web stream will require revisiting once Readable.toWeb integration is viable.
 	// return Readable.toWeb(stream);
@@ -74097,7 +74815,7 @@ const appendToArray = (destination, source) => {
 // @ts-check
 
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.22.0";
+const packageVersion = "0.22.1";
 
 const libraryName = "markdownlint";
 
@@ -74299,11 +75017,16 @@ function skipComment(str, ptr) {
 }
 function skipVoid(str, ptr, banNewLines, banComments) {
     let c;
-    while ((c = str[ptr]) === ' ' || c === '\t' || (!banNewLines && (c === '\n' || c === '\r' && str[ptr + 1] === '\n')))
-        ptr++;
-    return banComments || c !== '#'
-        ? ptr
-        : skipVoid(str, skipComment(str, ptr), banNewLines);
+    while (1) {
+        while ((c = str[ptr]) === ' ' || c === '\t' || (!banNewLines && (c === '\n' || c === '\r' && str[ptr + 1] === '\n')))
+            ptr++;
+        // Tucking the return statement here would save 5 characters >:)
+        // But TypeScript fails to detect there is no way to exit the loop so it complains about the lack of final return
+        if (banComments || c !== '#')
+            break;
+        ptr = skipComment(str, ptr);
+    }
+    return ptr;
 }
 function skipUntil(str, ptr, sep, end, banNewLines = false) {
     if (!end) {
@@ -79271,7 +79994,7 @@ const resolveModulePaths = (/** @type {string} */ dir, /** @type {string[]} */ m
 );
 
 // Import a module ID with a custom directory in the path
-const importModule = async (/** @type {string[] | string} */ dirOrDirs, /** @type {string} */ id, /** @type {boolean} */ noImport) => {
+const importModule = async (/** @type {string[] | string} */ dirOrDirs, /** @type {any} */ id, /** @type {boolean} */ noImport) => {
   if (typeof id !== "string") {
     return id;
   } else if (noImport) {
@@ -79306,7 +80029,7 @@ const importModule = async (/** @type {string[] | string} */ dirOrDirs, /** @typ
 };
 
 // Import an array of modules by ID
-const importModuleIds = (/** @type {string[]} */ dirs, /** @type {string[]} */ ids, /** @type {boolean} */ noImport) => (
+const importModuleIds = (/** @type {string[]} */ dirs, /** @type {any[]} */ ids, /** @type {boolean} */ noImport) => (
   Promise.all(
     ids.map(
       (id) => importModule(dirs, id, noImport)
@@ -79315,7 +80038,7 @@ const importModuleIds = (/** @type {string[]} */ dirs, /** @type {string[]} */ i
 );
 
 // Import an array of modules by ID (preserving parameters)
-const importModuleIdsAndParams = (/** @type {string[]} */ dirs, /** @type {string[][]} */ idsAndParams, /** @type {boolean} */ noImport) => (
+const importModuleIdsAndParams = (/** @type {string[]} */ dirs, /** @type {any[][]} */ idsAndParams, /** @type {boolean} */ noImport) => (
   Promise.all(
     idsAndParams.map(
       (idAndParams) => importModule(dirs, idAndParams[0], noImport).
@@ -79405,7 +80128,8 @@ const readOptionsOrConfig = async (/** @type {ExecutionContext} */ context, /** 
 const removeIgnoredFiles = (/** @type {string} */ dir, /** @type {string[]} */ files, /** @type {string[]} */ ignores) => (
   micromatch(
     files.map((file) => pathPosix.relative(dir, file)),
-    ignores
+    ignores,
+    { "dot": true }
   ).map((file) => pathPosix.join(dir, file))
 );
 
@@ -80274,7 +80998,7 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
 /**
  * @typedef Parameters
  * @property {boolean} [allowStdin] Allow stdin.
- * @property {string[]} argv Arguments.
+ * @property {string[]} [argv] Arguments.
  * @property {string} [directory] Directory.
  * @property {Record<string, string>} [fileContents] File contents.
  * @property {FsLike} [fs] File system object.
@@ -80316,7 +81040,7 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
 
 /** @typedef {[string]} MarkdownItPluginConfiguration */
 
-/** @typedef {[string]} OutputFormatterConfiguration */
+/** @typedef {[OutputFormatter, ...any]} OutputFormatterConfiguration */
 
 /** @typedef {import("markdownlint").Rule} Rule */
 
@@ -80357,6 +81081,13 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
  * @callback Logger
  * @param {string} msg Message.
  * @returns {void}
+ */
+
+/**
+ * @callback OutputFormatter
+ * @param {OutputFormatterOptions} options
+ * @param {...any} parameters
+ * @returns {Promise<void> | void}
  */
 
 /**
