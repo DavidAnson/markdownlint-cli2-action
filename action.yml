@@ -14,11 +14,11 @@ inputs:
     default: ''
     required: false
   fix:
-    description: Whether to fix supported issues automatically (any truthy value enables)
-    default: ''
+    description: Whether to fix supported issues automatically ("true"/"false", defaults to "false")
+    default: 'false'
     required: false
   globs:
-    description: Glob expression(s) of files to lint (newline-delimited)
+    description: Glob expression(s) of files to lint (newline-delimited, defaults to "*.{md,markdown}")
     default: '*.{md,markdown}'
     required: false
   separator:

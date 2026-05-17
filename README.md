@@ -30,16 +30,17 @@ and passing the specified JSON Pointer.
 
 ### fix (optional)
 
-Whether to fix supported issues automatically (any truthy value enables)
+Whether to fix supported issues automatically (`true`/`false`, defaults to
+`false`)
 
 Equivalent to specifying the `--fix` [command-line option][command-line].
 
 ### globs (optional)
 
-Glob expression(s) of files to lint (newline-delimited by default)
+Glob expression(s) of files to lint (newline-delimited, defaults to
+`*.{md,markdown}`)
 
-The default `*.{md,markdown}` lints all Markdown files in the base directory of
-a project.
+The default lints all Markdown files in the base directory of a project.
 
 For more detail: [glob syntax in `markdownlint-cli2`][glob-syntax].
 

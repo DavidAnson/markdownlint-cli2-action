@@ -126,8 +126,8 @@ jobs:
       id: test
     - run: exit 1
       if: steps.test.outcome != 'failure'
-  fix:
-    name: fix (test/errors.md, 0 errors)
+  fix-true:
+    name: fix-true (test/errors.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -135,6 +135,19 @@ jobs:
       with:
         fix: true
         globs: 'test/*.md'
+  fix-false:
+    name: fix-false (test/errors.md, 3 errors)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: ./
+      with:
+        fix: false
+        globs: 'test/*.md'
+      continue-on-error: true
+      id: test
+    - run: exit 1
+      if: steps.test.outcome != 'failure'
   rules-pass:
     name: custom rules (README.md, 0 errors)
     runs-on: ubuntu-latest

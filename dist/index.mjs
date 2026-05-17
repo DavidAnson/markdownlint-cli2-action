@@ -81159,7 +81159,7 @@ const configPointer = getInput("configPointer");
 if (configPointer) {
   argv.push("--configPointer", configPointer);
 }
-const fix = Boolean(getInput("fix"));
+const fix = Boolean(getBooleanInput("fix"));
 if (fix) {
   argv.push("--fix");
 }

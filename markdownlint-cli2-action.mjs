@@ -58,7 +58,7 @@ const configPointer = core.getInput("configPointer");
 if (configPointer) {
   argv.push("--configPointer", configPointer);
 }
-const fix = Boolean(core.getInput("fix"));
+const fix = Boolean(core.getBooleanInput("fix"));
 if (fix) {
   argv.push("--fix");
 }
