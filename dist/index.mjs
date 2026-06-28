@@ -81167,6 +81167,7 @@ const parameters = {
     ]
   }
 };
+// eslint-disable-next-line unicorn/prefer-await
 markdownlint_cli2_main(parameters).then(
   (code) => code && setFailed(`Failed with exit code: ${code}`),
   (error) => setFailed(`Failed due to error: ${error}`)
