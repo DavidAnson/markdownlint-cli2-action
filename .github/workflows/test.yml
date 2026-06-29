@@ -12,7 +12,7 @@ jobs:
     name: Run test script
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: actions/setup-node@v6
     - run: npm clean-install
     - run: npm run test
@@ -20,13 +20,13 @@ jobs:
     name: No globs (README.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./
   one-glob-file:
     name: One glob (test/errors.md, 3 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./
       with:
         globs: test/errors.md
@@ -38,7 +38,7 @@ jobs:
     name: One glob (README.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./
       with:
         globs: '*.md'
@@ -46,7 +46,7 @@ jobs:
     name: Two globs (README.md and test/errors.md, 3 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./
       with:
         globs: |
@@ -60,7 +60,7 @@ jobs:
     name: Separator (README.md and test/errors.md, 3 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./
       with:
         globs: '*.md,test/*.md'
@@ -73,7 +73,7 @@ jobs:
     name: config (test/errors.md, 2 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: rm .markdownlint.json
     - uses: ./
       with:
@@ -87,7 +87,7 @@ jobs:
     name: config (invalid configuration file, fails)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./
       with:
         config: 'invalid.markdownlint.jsonc'
@@ -100,7 +100,7 @@ jobs:
     name: package.json (test/errors.md, 2 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: rm .markdownlint.json
     - uses: ./
       with:
@@ -115,7 +115,7 @@ jobs:
     name: pyproject.toml (test/errors.md, 2 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: rm .markdownlint.json
     - uses: ./
       with:
@@ -130,7 +130,7 @@ jobs:
     name: fix-true (test/errors.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./
       with:
         fix: true
@@ -139,7 +139,7 @@ jobs:
     name: fix-false (test/errors.md, 3 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: ./
       with:
         fix: false
@@ -152,7 +152,7 @@ jobs:
     name: custom rules (README.md, 0 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: rm .markdownlint.json
     - uses: ./
       with:
@@ -162,7 +162,7 @@ jobs:
     name: custom rules (README.md, 2 errors)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - run: rm .markdownlint.json
     - uses: ./
       with:
