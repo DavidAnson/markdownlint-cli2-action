@@ -58,6 +58,7 @@ const configPointer = core.getInput("configPointer");
 if (configPointer) {
   argv.push("--configPointer", configPointer);
 }
+// eslint-disable-next-line unicorn/consistent-boolean-name
 const fix = Boolean(core.getBooleanInput("fix"));
 if (fix) {
   argv.push("--fix");
