@@ -47252,7 +47252,7 @@ ParserInline.prototype.State = state_inline
   // All possible word characters (everything without punctuation, spaces & controls)
   // Defined via punctuation & spaces to save space
   // Should be something like \p{\L\N\S\M} (\w but without `_`)
-  re.src_pseudo_letter = '(?:(?!' + text_separators + '|' + re.src_ZPCc + ')' + re.src_Any + ')'
+  re.src_pseudo_letter = `(?:(?!${text_separators}|${re.src_ZPCc})${re.src_Any})`
   // The same as abothe but without [0-9]
   // var src_pseudo_letter_non_d = '(?:(?![0-9]|' + src_ZPCc + ')' + src_Any + ')';
 
@@ -47261,7 +47261,9 @@ ParserInline.prototype.State = state_inline
     '(?:(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'
 
   // Prohibit any of "@/[]()" in user/pass to avoid wrong domain fetch.
-  re.src_auth = '(?:(?:(?!' + re.src_ZCc + '|[@/\\[\\]()]).)+@)?'
+  // Length is capped to exclude possible rescans till the end and avoid O(n^2)
+  // DoS. No standard limit, just take something reasonable.
+  re.src_auth = `(?:(?:(?!${re.src_ZCc}|[@/\\[\\]()]).){1,50}@)?`
 
   re.src_port =
 
@@ -47269,23 +47271,23 @@ ParserInline.prototype.State = state_inline
 
   re.src_host_terminator =
 
-    '(?=$|' + text_separators + '|' + re.src_ZPCc + ')' +
-    '(?!' + (opts['---'] ? '-(?!--)|' : '-|') + '_|:\\d|\\.-|\\.(?!$|' + re.src_ZPCc + '))'
+    `(?=$|${text_separators}|${re.src_ZPCc})` +
+    `(?!${opts['---'] ? '-(?!--)|' : '-|'}_|:\\d|\\.-|\\.(?!$|${re.src_ZPCc}))`
 
   re.src_path =
 
     '(?:' +
       '[/?#]' +
         '(?:' +
-          '(?!' + re.src_ZCc + '|' + text_separators + '|[()[\\]{}.,"\'?!\\-;]).|' +
-          '\\[(?:(?!' + re.src_ZCc + '|\\]).)*\\]|' +
-          '\\((?:(?!' + re.src_ZCc + '|[)]).)*\\)|' +
-          '\\{(?:(?!' + re.src_ZCc + '|[}]).)*\\}|' +
-          '\\"(?:(?!' + re.src_ZCc + '|["]).)+\\"|' +
-          "\\'(?:(?!" + re.src_ZCc + "|[']).)+\\'|" +
+          `(?!${re.src_ZCc}|${text_separators}|[()[\\]{}.,"'?!\\-;]).|` +
+          `\\[(?:(?!${re.src_ZCc}|\\]).)*\\]|` +
+          `\\((?:(?!${re.src_ZCc}|[)]).)*\\)|` +
+          `\\{(?:(?!${re.src_ZCc}|[}]).)*\\}|` +
+          `\\"(?:(?!${re.src_ZCc}|["]).)+\\"|` +
+          `\\'(?:(?!${re.src_ZCc}|[']).)+\\'|` +
 
           // allow `I'm_king` if no pair found
-          "\\'(?=" + re.src_pseudo_letter + '|[-])|' +
+          `\\'(?=${re.src_pseudo_letter}|[-])|` +
 
           // google has many dots in "google search" links (#66, #81).
           // github has ... in commit range links,
@@ -47297,30 +47299,32 @@ ParserInline.prototype.State = state_inline
           // until more examples found.
           '\\.{2,}[a-zA-Z0-9%/&]|' +
 
-          '\\.(?!' + re.src_ZCc + '|[.]|$)|' +
+          `\\.(?!${re.src_ZCc}|[.]|$)|` +
           (opts['---']
             ? '\\-(?!--(?:[^-]|$))(?:-*)|' // `---` => long dash, terminate
             : '\\-+|'
           ) +
           // allow `,,,` in paths
-          ',(?!' + re.src_ZCc + '|$)|' +
+          `,(?!${re.src_ZCc}|$)|` +
 
           // allow `;` if not followed by space-like char
-          ';(?!' + re.src_ZCc + '|$)|' +
+          `;(?!${re.src_ZCc}|$)|` +
 
           // allow `!!!` in paths, but not at the end
-          '\\!+(?!' + re.src_ZCc + '|[!]|$)|' +
+          `\\!+(?!${re.src_ZCc}|[!]|$)|` +
 
-          '\\?(?!' + re.src_ZCc + '|[?]|$)' +
+          `\\?(?!${re.src_ZCc}|[?]|$)` +
         ')+' +
       '|\\/' +
     ')?'
 
   // Allow anything in markdown spec, forbid quote (") at the first position
   // because emails enclosed in quotes are far more common
+  // Max name length capped to 64 chars (RFC 5321). This also prevents O(n^2)
+  // rescans to the end on inputs like `mailto:mailto:...`
   re.src_email_name =
 
-    '[\\-;:&=\\+\\$,\\.a-zA-Z0-9_][\\-;:&=\\+\\$,\\"\\.a-zA-Z0-9_]*'
+    '[\\-;:&=\\+\\$,\\.a-zA-Z0-9_][\\-;:&=\\+\\$,\\"\\.a-zA-Z0-9_]{0,63}'
 
   re.src_xn =
 
@@ -47335,7 +47339,7 @@ ParserInline.prototype.State = state_inline
     '(?:' +
       re.src_xn +
       '|' +
-      re.src_pseudo_letter + '{1,63}' +
+      `${re.src_pseudo_letter}{1,63}` +
     ')'
 
   re.src_domain =
@@ -47343,9 +47347,9 @@ ParserInline.prototype.State = state_inline
     '(?:' +
       re.src_xn +
       '|' +
-      '(?:' + re.src_pseudo_letter + ')' +
+      `(?:${re.src_pseudo_letter})` +
       '|' +
-      '(?:' + re.src_pseudo_letter + '(?:-|' + re.src_pseudo_letter + '){0,61}' + re.src_pseudo_letter + ')' +
+      `(?:${re.src_pseudo_letter}(?:-|${re.src_pseudo_letter}){0,61}${re.src_pseudo_letter})` +
     ')'
 
   re.src_host =
@@ -47354,7 +47358,7 @@ ParserInline.prototype.State = state_inline
     // Don't need IP check, because digits are already allowed in normal domain names
     //   src_ip4 +
     // '|' +
-      '(?:(?:(?:' + re.src_domain + ')\\.)*' + re.src_domain/* _root */ + ')' +
+      `(?:(?:(?:${re.src_domain})\\.)*${re.src_domain})`/* _root */ +
     ')'
 
   re.tpl_host_fuzzy =
@@ -47362,12 +47366,12 @@ ParserInline.prototype.State = state_inline
     '(?:' +
       re.src_ip4 +
     '|' +
-      '(?:(?:(?:' + re.src_domain + ')\\.)+(?:%TLDS%))' +
+      `(?:(?:(?:${re.src_domain})\\.)+(?:%TLDS%))` +
     ')'
 
   re.tpl_host_no_ip_fuzzy =
 
-    '(?:(?:(?:' + re.src_domain + ')\\.)+(?:%TLDS%))'
+    `(?:(?:(?:${re.src_domain})\\.)+(?:%TLDS%))`
 
   re.src_host_strict =
 
@@ -47396,24 +47400,24 @@ ParserInline.prototype.State = state_inline
   // Rude test fuzzy links by host, for quick deny
   re.tpl_host_fuzzy_test =
 
-    'localhost|www\\.|\\.\\d{1,3}\\.|(?:\\.(?:%TLDS%)(?:' + re.src_ZPCc + '|>|$))'
+    `localhost|www\\.|\\.\\d{1,3}\\.|(?:\\.(?:%TLDS%)(?:${re.src_ZPCc}|>|$))`
 
   re.tpl_email_fuzzy =
 
-      '(^|' + text_separators + '|"|\\(|' + re.src_ZCc + ')' +
-      '(' + re.src_email_name + '@' + re.tpl_host_fuzzy_strict + ')'
+      `(^|${text_separators}|"|\\(|${re.src_ZCc})` +
+      `(${re.src_email_name}@${re.tpl_host_fuzzy_strict})`
 
   re.tpl_link_fuzzy =
       // Fuzzy link can't be prepended with .:/\- and non punctuation.
       // but can start with > (markdown blockquote)
-      '(^|(?![.:/\\-_@])(?:[$+<=>^`|\uff5c]|' + re.src_ZPCc + '))' +
-      '((?![$+<=>^`|\uff5c])' + re.tpl_host_port_fuzzy_strict + re.src_path + ')'
+      `(^|(?![.:/\\-_@])(?:[$+<=>^\`|\uff5c]|${re.src_ZPCc}))` +
+      `((?![$+<=>^\`|\uff5c])${re.tpl_host_port_fuzzy_strict}${re.src_path})`
 
   re.tpl_link_no_ip_fuzzy =
       // Fuzzy link can't be prepended with .:/\- and non punctuation.
       // but can start with > (markdown blockquote)
-      '(^|(?![.:/\\-_@])(?:[$+<=>^`|\uff5c]|' + re.src_ZPCc + '))' +
-      '((?![$+<=>^`|\uff5c])' + re.tpl_host_port_no_ip_fuzzy_strict + re.src_path + ')'
+      `(^|(?![.:/\\-_@])(?:[$+<=>^\`|\uff5c]|${re.src_ZPCc}))` +
+      `((?![$+<=>^\`|\uff5c])${re.tpl_host_port_no_ip_fuzzy_strict}${re.src_path})`
 
   return re
 }
@@ -47472,7 +47476,7 @@ const defaultSchemas = {
       if (!self.re.http) {
         // compile lazily, because "host"-containing variables can change on tlds update.
         self.re.http = new RegExp(
-          '^\\/\\/' + self.re.src_auth + self.re.src_host_port_strict + self.re.src_path, 'i'
+          `^\\/\\/${self.re.src_auth}${self.re.src_host_port_strict}${self.re.src_path}`, 'i'
         )
       }
       if (self.re.http.test(tail)) {
@@ -47494,7 +47498,7 @@ const defaultSchemas = {
           self.re.src_auth +
           // Don't allow single-level domains, because of false positives like '//test'
           // with code comments
-          '(?:localhost|(?:(?:' + self.re.src_domain + ')\\.)+' + self.re.src_domain_root + ')' +
+          `(?:localhost|(?:(?:${self.re.src_domain})\\.)+${self.re.src_domain_root})` +
           self.re.src_port +
           self.re.src_host_terminator +
           self.re.src_path,
@@ -47518,7 +47522,7 @@ const defaultSchemas = {
 
       if (!self.re.mailto) {
         self.re.mailto = new RegExp(
-          '^' + self.re.src_email_name + '@' + self.re.src_host_strict, 'i'
+          `^${self.re.src_email_name}@${self.re.src_host_strict}`, 'i'
         )
       }
       if (self.re.mailto.test(tail)) {
@@ -47530,7 +47534,6 @@ const defaultSchemas = {
 }
 
 // RE pattern for 2-character tlds (autogenerated by ./support/tlds_2char_gen.js)
-/* eslint-disable-next-line max-len */
 const tlds_2ch_src_re = 'a[cdefgilmnoqrstuwxz]|b[abdefghijmnorstvwyz]|c[acdfghiklmnoruvwxyz]|d[ejkmoz]|e[cegrstu]|f[ijkmor]|g[abdefghilmnpqrstuwy]|h[kmnrtu]|i[delmnoqrst]|j[emop]|k[eghimnprwyz]|l[abcikrstuvy]|m[acdeghklmnopqrstuvwxyz]|n[acefgilopruz]|om|p[aefghklmnrstwy]|qa|r[eosuw]|s[abcdeghijklmnortuvxyz]|t[cdfghjklmnortvwz]|u[agksyz]|v[aceginu]|w[fs]|y[et]|z[amw]'
 
 // DON'T try to make PRs with changes. Extend TLDs with LinkifyIt.tlds() instead
@@ -47590,7 +47593,7 @@ function compile (self) {
   self.__compiled__ = {} // Reset compiled data
 
   function schemaError (name, val) {
-    throw new Error('(LinkifyIt) Invalid schema "' + name + '": ' + val)
+    throw new Error(`(LinkifyIt) Invalid schema "${name}": ${val}`)
   }
 
   Object.keys(self.__schemas__).forEach(function (name) {
@@ -47664,12 +47667,12 @@ function compile (self) {
     .map(linkify_it_escapeRE)
     .join('|')
   // (?!_) cause 1.5x slowdown
-  self.re.schema_test = RegExp('(^|(?!_)(?:[><\uff5c]|' + re.src_ZPCc + '))(' + slist + ')', 'i')
-  self.re.schema_search = RegExp('(^|(?!_)(?:[><\uff5c]|' + re.src_ZPCc + '))(' + slist + ')', 'ig')
-  self.re.schema_at_start = RegExp('^' + self.re.schema_search.source, 'i')
+  self.re.schema_test = RegExp(`(^|(?!_)(?:[><\uff5c]|${re.src_ZPCc}))(${slist})`, 'i')
+  self.re.schema_search = RegExp(`(^|(?!_)(?:[><\uff5c]|${re.src_ZPCc}))(${slist})`, 'ig')
+  self.re.schema_at_start = RegExp(`^${self.re.schema_search.source}`, 'i')
 
   self.re.pretest = RegExp(
-    '(' + self.re.schema_test.source + ')|(' + self.re.host_fuzzy_test.source + ')|@',
+    `(${self.re.schema_test.source})|(${self.re.host_fuzzy_test.source})|@`,
     'i'
   )
 }
@@ -48050,10 +48053,10 @@ LinkifyIt.prototype.normalize = function normalize (match) {
   // Do minimal possible changes by default. Need to collect feedback prior
   // to move forward https://github.com/markdown-it/linkify-it/issues/1
 
-  if (!match.schema) { match.url = 'http://' + match.url }
+  if (!match.schema) { match.url = `http://${match.url}` }
 
   if (match.schema === 'mailto:' && !/^mailto:/i.test(match.url)) {
-    match.url = 'mailto:' + match.url
+    match.url = `mailto:${match.url}`
   }
 }
 
