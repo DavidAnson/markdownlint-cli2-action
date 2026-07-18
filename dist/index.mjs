@@ -3572,6 +3572,15 @@ const sanitizeRange = range => range.replace(
     : EMPTY
 )
 
+// > An optional `!` or `^` at the start of a class negates it, so that it
+// >   matches any character not in the set. (gitignore(5), fnmatch(3))
+// The leading `^` has already been escaped to `\^` by the metacharacter
+//   escaper, so we strip the literal `!` or escaped `^` and emit a single
+//   regex `^` which is the JavaScript negation token.
+const negateRange = range => range.startsWith('!') || range.startsWith('\\^')
+  ? `^${range.slice(range[0] === '!' ? 1 : 2)}`
+  : range
+
 // See fixtures #59
 const cleanRangeBackSlash = slashes => {
   const {length} = slashes
@@ -3676,7 +3685,7 @@ const REPLACERS = [
     // > "**/foo/bar" matches file or directory "bar" anywhere that is directly
     // >   under directory "foo".
     // Notice that the '*'s have been replaced as '\\*'
-    /^\^*\\\*\\\*\\\//,
+    /^\^*(?:\\\*\\\*\\\/)+/,
 
     // '**/foo' <-> 'foo'
     () => '^(?:.*\\/)?'
@@ -3787,7 +3796,7 @@ const REPLACERS = [
           // A normal case, and it is a range notation
           // '[bar]'
           // '[bar\\\\]'
-          ? `[${sanitizeRange(range)}${endEscape}]`
+          ? `[${negateRange(sanitizeRange(range))}${endEscape}]`
           // Invalid range notaton
           // '[bar\\]' -> '[bar\\\\]'
           : '[]'
@@ -38939,8 +38948,9 @@ var __webpack_unused_export__;
 
 
 
-const micromark = __nccwpck_require__(1670);
+/* eslint-disable unicorn/comment-content */
 
+const micromark = __nccwpck_require__(1670);
 const { newlineRe, nextLinesRe } = __nccwpck_require__(3408);
 
 module.exports.Or = newlineRe;
@@ -38957,6 +38967,7 @@ module.exports.gi = nextLinesRe;
 // Regular expression for matching common front matter (YAML and TOML)
 // @ts-ignore
 module.exports.Q9 =
+  // eslint-disable-next-line unicorn/prefer-unicode-code-point-escapes
   /((^---[^\S\r\n\u2028\u2029]*$[\s\S]+?^---\s*)|(^\+\+\+[^\S\r\n\u2028\u2029]*$[\s\S]+?^(\+\+\+|\.\.\.)\s*)|(^\{[^\S\r\n\u2028\u2029]*$[\s\S]+?^\}\s*))(\r\n|\r|\n|$)/m;
 
 // Regular expression for matching the start of inline disable/enable comments
@@ -39115,6 +39126,7 @@ const startsWithPipeRe = /^ *\|/;
 const notCrLfRe = /[^\r\n]/g;
 const notSpaceCrLfRe = /[^ \r\n]/g;
 const trailingSpaceRe = / +[\r\n]/g;
+// eslint-disable-next-line unicorn/no-unsafe-string-replacement
 const replaceTrailingSpace = (/** @type {string} */ s) => s.replace(notCrLfRe, safeCommentCharacter);
 module.exports.X6 = function clearHtmlCommentText(/** @type {string} */ text) {
   let i = 0;
@@ -39144,7 +39156,9 @@ module.exports.X6 = function clearHtmlCommentText(/** @type {string} */ text) {
       // If a valid block/inline comment...
       if (isValid) {
         const clearedContent = content
+          // eslint-disable-next-line unicorn/no-unsafe-string-replacement
           .replace(notSpaceCrLfRe, safeCommentCharacter)
+          // eslint-disable-next-line unicorn/no-unsafe-string-replacement
           .replace(trailingSpaceRe, replaceTrailingSpace);
         text =
           text.slice(0, i + htmlCommentBegin.length) +
@@ -39159,6 +39173,7 @@ module.exports.X6 = function clearHtmlCommentText(/** @type {string} */ text) {
 
 // Escapes a string for use in a RegExp
 module.exports.If = function escapeForRegExp(/** @type {string} */ str) {
+  // eslint-disable-next-line unicorn/prefer-regexp-escape
   return str.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 };
 
@@ -39489,6 +39504,7 @@ module.exports.Z_ = getPreferredLineEnding;
  */
 function expandTildePath(file, os) {
   const homedir = os && os.homedir && os.homedir();
+  // eslint-disable-next-line unicorn/no-unsafe-string-replacement
   return homedir ? file.replace(/^~($|\/|\\)/, `${homedir}$1`) : file;
 }
 module.exports.ww = expandTildePath;
@@ -39567,8 +39583,8 @@ function convertLintErrorsVersion2To0(errors) {
 function copyAndTransformResults(results, transform) {
   /** @type {Object.<string, LintErrors>} */
   const newResults = {};
-  for (const key of Object.keys(results)) {
-    const arr = results[key].map((r) => ({ ...r }));
+  for (const [ key, value ] of Object.entries(results)) {
+    const arr = value.map((r) => ({ ...r }));
     newResults[key] = transform(arr);
   }
   // @ts-ignore
@@ -39656,8 +39672,7 @@ const { flatTokensSymbol, htmlFlowSymbol, newlineRe } = __nccwpck_require__(3408
  * @returns {boolean} True iff the token is within an htmlFlow type.
  */
 function inHtmlFlow(token) {
-  // @ts-ignore
-  return Boolean(token[htmlFlowSymbol]);
+  return Object.hasOwn(token, htmlFlowSymbol);
 }
 
 /**
@@ -39980,7 +39995,7 @@ module.exports = {
 
 
 
-// Symbol for identifing the flat tokens array from micromark parse
+// Symbol for identifying the flat tokens array from micromark parse
 module.exports.flatTokensSymbol = Symbol("flat-tokens");
 
 // Symbol for identifying the htmlFlow token from micromark parse
@@ -40207,9 +40222,10 @@ module.exports = {
 
 
 // Captures the native require implementation (even under webpack).
+/* node:coverage ignore next 3 */
 // @ts-ignore
-// eslint-disable-next-line no-underscore-dangle
-const nativeRequire = globalThis.__non_webpack_require__ ?? __nccwpck_require__(1484);
+// eslint-disable-next-line camelcase, no-undef
+const nativeRequire = (typeof __WEBPACK_EXTERNAL_createRequire(import.meta.url) === "undefined") ? __nccwpck_require__(1484) : __WEBPACK_EXTERNAL_createRequire(import.meta.url);
 
 /**
  * @typedef RequireResolveOptions
@@ -41816,7 +41832,6 @@ function arrayReplaceAt (src, pos, newElements) {
 }
 
 function isValidEntityCode (c) {
-  /* eslint no-bitwise:0 */
   // broken sequence
   if (c >= 0xD800 && c <= 0xDFFF) { return false }
   // never used
@@ -41844,8 +41859,8 @@ function utils_fromCodePoint (c) {
   return String.fromCharCode(c)
 }
 
-const UNESCAPE_MD_RE  = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g
-const ENTITY_RE       = /&([a-z#][a-z0-9]{1,31});/gi
+const UNESCAPE_MD_RE = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g
+const ENTITY_RE = /&([a-z#][a-z0-9]{1,31});/gi
 const UNESCAPE_ALL_RE = new RegExp(UNESCAPE_MD_RE.source + '|' + ENTITY_RE.source, 'gi')
 
 const DIGITAL_ENTITY_TEST_RE = /^#((?:x[a-f0-9]{1,8}|[0-9]{1,8}))$/i
@@ -41870,12 +41885,6 @@ function replaceEntityPattern (match, name) {
 
   return match
 }
-
-/* function replaceEntities(str) {
-  if (str.indexOf('&') < 0) { return str; }
-
-  return str.replace(ENTITY_RE, replaceEntityPattern);
-} */
 
 function unescapeMd (str) {
   if (str.indexOf('\\') < 0) { return str }
@@ -41945,8 +41954,6 @@ function isWhiteSpace (code) {
   }
   return false
 }
-
-/* eslint-disable max-len */
 
 // Currently without astral characters support.
 function isPunctChar (ch) {
@@ -42310,7 +42317,7 @@ const default_rules = {}
 default_rules.code_inline = function (tokens, idx, options, env, slf) {
   const token = tokens[idx]
 
-  return  '<code' + slf.renderAttrs(token) + '>' +
+  return '<code' + slf.renderAttrs(token) + '>' +
           escapeHtml(token.content) +
           '</code>'
 }
@@ -42318,7 +42325,7 @@ default_rules.code_inline = function (tokens, idx, options, env, slf) {
 default_rules.code_block = function (tokens, idx, options, env, slf) {
   const token = tokens[idx]
 
-  return  '<pre' + slf.renderAttrs(token) + '><code>' +
+  return '<pre' + slf.renderAttrs(token) + '><code>' +
           escapeHtml(tokens[idx].content) +
           '</code></pre>\n'
 }
@@ -42978,28 +42985,28 @@ function Token (type, tag, nesting) {
    *
    * Type of the token (string, e.g. "paragraph_open")
    **/
-  this.type     = type
+  this.type = type
 
   /**
    * Token#tag -> String
    *
    * html tag name, e.g. "p"
    **/
-  this.tag      = tag
+  this.tag = tag
 
   /**
    * Token#attrs -> Array
    *
    * Html attributes. Format: `[ [ name1, value1 ], [ name2, value2 ] ]`
    **/
-  this.attrs    = null
+  this.attrs = null
 
   /**
    * Token#map -> Array
    *
    * Source map info. Format: `[ line_begin, line_end ]`
    **/
-  this.map      = null
+  this.map = null
 
   /**
    * Token#nesting -> Number
@@ -43010,14 +43017,14 @@ function Token (type, tag, nesting) {
    * -  `0` means the tag is self-closing
    * - `-1` means the tag is closing
    **/
-  this.nesting  = nesting
+  this.nesting = nesting
 
   /**
    * Token#level -> Number
    *
    * nesting level, the same as `state.level`
    **/
-  this.level    = 0
+  this.level = 0
 
   /**
    * Token#children -> Array
@@ -43032,14 +43039,14 @@ function Token (type, tag, nesting) {
    * In a case of self-closing tag (code, html, fence, etc.),
    * it has contents of this tag.
    **/
-  this.content  = ''
+  this.content = ''
 
   /**
    * Token#markup -> String
    *
    * '*' or '_' for emphasis, fence string for fence, etc.
    **/
-  this.markup   = ''
+  this.markup = ''
 
   /**
    * Token#info -> String
@@ -43050,14 +43057,14 @@ function Token (type, tag, nesting) {
    * - The value "auto" for autolink "link_open" and "link_close" tokens
    * - The string value of the item marker for ordered-list "list_item_open" tokens
    **/
-  this.info     = ''
+  this.info = ''
 
   /**
    * Token#meta -> Object
    *
    * A place for plugins to store an arbitrary data
    **/
-  this.meta     = null
+  this.meta = null
 
   /**
    * Token#block -> Boolean
@@ -43065,7 +43072,7 @@ function Token (type, tag, nesting) {
    * True for block-level tokens, false for inline tokens.
    * Used in renderer to calculate line breaks
    **/
-  this.block    = false
+  this.block = false
 
   /**
    * Token#hidden -> Boolean
@@ -43073,7 +43080,7 @@ function Token (type, tag, nesting) {
    * If it's true, ignore this element when rendering. Used for tight lists
    * to hide paragraphs.
    **/
-  this.hidden   = false
+  this.hidden = false
 }
 
 /**
@@ -43176,8 +43183,8 @@ StateCore.prototype.Token = lib_token
 // Normalize input string
 
 // https://spec.commonmark.org/0.29/#line-ending
-const NEWLINES_RE  = /\r\n?|\n/g
-const NULL_RE      = /\0/g
+const NEWLINES_RE = /\r\n?|\n/g
+const NULL_RE = /\0/g
 
 function normalize (state) {
   let str
@@ -43196,9 +43203,9 @@ function block (state) {
   let token
 
   if (state.inlineMode) {
-    token          = new state.Token('inline', '', 0)
-    token.content  = state.src
-    token.map      = [0, 1]
+    token = new state.Token('inline', '', 0)
+    token.content = state.src
+    token.map = [0, 1]
     token.children = []
     state.tokens.push(token)
   } else {
@@ -43315,36 +43322,36 @@ function linkify (state) {
           const pos = links[ln].index
 
           if (pos > lastPos) {
-            const token   = new state.Token('text', '', 0)
+            const token = new state.Token('text', '', 0)
             token.content = text.slice(lastPos, pos)
-            token.level   = level
+            token.level = level
             nodes.push(token)
           }
 
-          const token_o   = new state.Token('link_open', 'a', 1)
-          token_o.attrs   = [['href', fullUrl]]
-          token_o.level   = level++
-          token_o.markup  = 'linkify'
-          token_o.info    = 'auto'
+          const token_o = new state.Token('link_open', 'a', 1)
+          token_o.attrs = [['href', fullUrl]]
+          token_o.level = level++
+          token_o.markup = 'linkify'
+          token_o.info = 'auto'
           nodes.push(token_o)
 
-          const token_t   = new state.Token('text', '', 0)
+          const token_t = new state.Token('text', '', 0)
           token_t.content = urlText
-          token_t.level   = level
+          token_t.level = level
           nodes.push(token_t)
 
-          const token_c   = new state.Token('link_close', 'a', -1)
-          token_c.level   = --level
-          token_c.markup  = 'linkify'
-          token_c.info    = 'auto'
+          const token_c = new state.Token('link_close', 'a', -1)
+          token_c.level = --level
+          token_c.markup = 'linkify'
+          token_c.info = 'auto'
           nodes.push(token_c)
 
           lastPos = links[ln].lastIndex
         }
         if (lastPos < text.length) {
-          const token   = new state.Token('text', '', 0)
+          const token = new state.Token('text', '', 0)
           token.content = text.slice(lastPos)
-          token.level   = level
+          token.level = level
           nodes.push(token)
         }
 
@@ -43734,15 +43741,15 @@ function text_join (state) {
 
 
 const _rules = [
-  ['normalize',      normalize],
-  ['block',          block],
-  ['inline',         inline],
-  ['linkify',        linkify],
-  ['replacements',   replace],
-  ['smartquotes',    smartquotes],
+  ['normalize', normalize],
+  ['block', block],
+  ['inline', inline],
+  ['linkify', linkify],
+  ['replacements', replace],
+  ['smartquotes', smartquotes],
   // `text_join` finds `text_special` tokens (for escape sequences)
   // and joins them with the rest of the text
-  ['text_join',      text_join]
+  ['text_join', text_join]
 ]
 
 /**
@@ -43788,7 +43795,7 @@ function StateBlock (src, md, env, tokens) {
   this.src = src
 
   // link to parser instance
-  this.md     = md
+  this.md = md
 
   this.env = env
 
@@ -43819,11 +43826,11 @@ function StateBlock (src, md, env, tokens) {
 
   // required block content indent (for example, if we are
   // inside a list, it would be positioned after list marker)
-  this.blkIndent  = 0
-  this.line       = 0 // line index in src
-  this.lineMax    = 0 // lines count
-  this.tight      = false  // loose/tight mode for lists
-  this.ddIndent   = -1 // indent of the current dd block (-1 if there isn't any)
+  this.blkIndent = 0
+  this.line = 0 // line index in src
+  this.lineMax = 0 // lines count
+  this.tight = false  // loose/tight mode for lists
+  this.ddIndent = -1 // indent of the current dd block (-1 if there isn't any)
   this.listIndent = -1 // indent of the current list block (-1 if there isn't any)
 
   // can be 'blockquote', 'list', 'root', 'paragraph' or 'reference'
@@ -44154,11 +44161,11 @@ function table (state, startLine, endLine, silent) {
   for (let i = 0; i < columns.length; i++) {
     const token_ho = state.push('th_open', 'th', 1)
     if (aligns[i]) {
-      token_ho.attrs  = [['style', 'text-align:' + aligns[i]]]
+      token_ho.attrs = [['style', 'text-align:' + aligns[i]]]
     }
 
     const token_il = state.push('inline', '', 0)
-    token_il.content  = columns[i].trim()
+    token_il.content = columns[i].trim()
     token_il.children = []
 
     state.push('th_close', 'th', -1)
@@ -44205,11 +44212,11 @@ function table (state, startLine, endLine, silent) {
     for (let i = 0; i < columnCount; i++) {
       const token_tdo = state.push('td_open', 'td', 1)
       if (aligns[i]) {
-        token_tdo.attrs  = [['style', 'text-align:' + aligns[i]]]
+        token_tdo.attrs = [['style', 'text-align:' + aligns[i]]]
       }
 
       const token_il = state.push('inline', '', 0)
-      token_il.content  = columns[i] ? columns[i].trim() : ''
+      token_il.content = columns[i] ? columns[i].trim() : ''
       token_il.children = []
 
       state.push('td_close', 'td', -1)
@@ -44255,9 +44262,9 @@ function code (state, startLine, endLine/*, silent */) {
 
   state.line = last
 
-  const token   = state.push('code_block', 'code', 0)
+  const token = state.push('code_block', 'code', 0)
   token.content = state.getLines(startLine, last, 4 + state.blkIndent, false) + '\n'
-  token.map     = [startLine, state.line]
+  token.map = [startLine, state.line]
 
   return true
 }
@@ -44349,11 +44356,11 @@ function fence (state, startLine, endLine, silent) {
 
   state.line = nextLine + (haveEndMarker ? 1 : 0)
 
-  const token   = state.push('fence', 'code', 0)
-  token.info    = params
+  const token = state.push('fence', 'code', 0)
+  token.info = params
   token.content = state.getLines(startLine + 1, nextLine, len, true)
-  token.markup  = markup
-  token.map     = [startLine, state.line]
+  token.markup = markup
+  token.map = [startLine, state.line]
 
   return true
 }
@@ -44379,10 +44386,10 @@ function blockquote (state, startLine, endLine, silent) {
   // so no point trying to find the end of it in silent mode
   if (silent) { return true }
 
-  const oldBMarks  = []
+  const oldBMarks = []
   const oldBSCount = []
-  const oldSCount  = []
-  const oldTShift  = []
+  const oldSCount = []
+  const oldTShift = []
 
   const terminatorRules = state.md.block.ruler.getRules('blockquote')
 
@@ -44542,14 +44549,14 @@ function blockquote (state, startLine, endLine, silent) {
   const oldIndent = state.blkIndent
   state.blkIndent = 0
 
-  const token_o  = state.push('blockquote_open', 'blockquote', 1)
+  const token_o = state.push('blockquote_open', 'blockquote', 1)
   token_o.markup = '>'
   const lines = [startLine, 0]
-  token_o.map    = lines
+  token_o.map = lines
 
   state.md.block.tokenize(state, startLine, nextLine)
 
-  const token_c  = state.push('blockquote_close', 'blockquote', -1)
+  const token_c = state.push('blockquote_close', 'blockquote', -1)
   token_c.markup = '>'
 
   state.lineMax = oldLineMax
@@ -44604,8 +44611,8 @@ function hr (state, startLine, endLine, silent) {
 
   state.line = startLine + 1
 
-  const token  = state.push('hr', 'hr', 0)
-  token.map    = [startLine, state.line]
+  const token = state.push('hr', 'hr', 0)
+  token.map = [startLine, state.line]
   token.markup = Array(cnt + 1).join(String.fromCharCode(marker))
 
   return true
@@ -44770,16 +44777,16 @@ function list (state, startLine, endLine, silent) {
   const listTokIdx = state.tokens.length
 
   if (isOrdered) {
-    token       = state.push('ordered_list_open', 'ol', 1)
+    token = state.push('ordered_list_open', 'ol', 1)
     if (markerValue !== 1) {
       token.attrs = [['start', markerValue]]
     }
   } else {
-    token       = state.push('bullet_list_open', 'ul', 1)
+    token = state.push('bullet_list_open', 'ul', 1)
   }
 
   const listLines = [nextLine, 0]
-  token.map    = listLines
+  token.map = listLines
   token.markup = String.fromCharCode(markerCharCode)
 
   //
@@ -44832,10 +44839,10 @@ function list (state, startLine, endLine, silent) {
     const indent = initial + indentAfterMarker
 
     // Run subparser & write tokens
-    token        = state.push('list_item_open', 'li', 1)
+    token = state.push('list_item_open', 'li', 1)
     token.markup = String.fromCharCode(markerCharCode)
     const itemLines = [nextLine, 0]
-    token.map    = itemLines
+    token.map = itemLines
     if (isOrdered) {
       token.info = state.src.slice(start, posAfterMarker - 1)
     }
@@ -44884,7 +44891,7 @@ function list (state, startLine, endLine, silent) {
     state.sCount[nextLine] = oldSCount
     state.tight = oldTight
 
-    token        = state.push('list_item_close', 'li', -1)
+    token = state.push('list_item_close', 'li', -1)
     token.markup = String.fromCharCode(markerCharCode)
 
     nextLine = state.line
@@ -45081,7 +45088,7 @@ function reference (state, startLine, _endLine, silent) {
         nextLine++
       }
     } else if (isSpace(ch)) {
-      /* eslint no-empty:0 */
+      /* Nothing */
     } else {
       break
     }
@@ -45230,23 +45237,23 @@ function reference (state, startLine, _endLine, silent) {
 ;// CONCATENATED MODULE: ./node_modules/markdown-it/lib/common/html_re.mjs
 // Regexps to match html elements
 
-const attr_name     = '[a-zA-Z_:][a-zA-Z0-9:._-]*'
+const attr_name = '[a-zA-Z_:][a-zA-Z0-9:._-]*'
 
-const unquoted      = '[^"\'=<>`\\x00-\\x20]+'
+const unquoted = '[^"\'=<>`\\x00-\\x20]+'
 const single_quoted = "'[^']*'"
 const double_quoted = '"[^"]*"'
 
-const attr_value  = '(?:' + unquoted + '|' + single_quoted + '|' + double_quoted + ')'
+const attr_value = '(?:' + unquoted + '|' + single_quoted + '|' + double_quoted + ')'
 
-const attribute   = '(?:\\s+' + attr_name + '(?:\\s*=\\s*' + attr_value + ')?)'
+const attribute = '(?:\\s+' + attr_name + '(?:\\s*=\\s*' + attr_value + ')?)'
 
-const open_tag    = '<[A-Za-z][A-Za-z0-9\\-]*' + attribute + '*\\s*\\/?>'
+const open_tag = '<[A-Za-z][A-Za-z0-9\\-]*' + attribute + '*\\s*\\/?>'
 
-const close_tag   = '<\\/[A-Za-z][A-Za-z0-9\\-]*\\s*>'
-const comment     = '<!---?>|<!--(?:[^-]|-[^-]|--[^>])*-->'
-const processing  = '<[?][\\s\\S]*?[?]>'
+const close_tag = '<\\/[A-Za-z][A-Za-z0-9\\-]*\\s*>'
+const comment = '<!---?>|<!--(?:[^-]|-[^-]|--[^>])*-->'
+const processing = '<[?][\\s\\S]*?[?]>'
 const declaration = '<![A-Za-z][^>]*>'
-const cdata       = '<!\\[CDATA\\[[\\s\\S]*?\\]\\]>'
+const cdata = '<!\\[CDATA\\[[\\s\\S]*?\\]\\]>'
 
 const HTML_TAG_RE = new RegExp('^(?:' + open_tag + '|' + close_tag + '|' + comment +
                         '|' + processing + '|' + declaration + '|' + cdata + ')')
@@ -45265,12 +45272,12 @@ const HTML_OPEN_CLOSE_TAG_RE = new RegExp('^(?:' + open_tag + '|' + close_tag + 
 //
 const HTML_SEQUENCES = [
   [/^<(script|pre|style|textarea)(?=(\s|>|$))/i, /<\/(script|pre|style|textarea)>/i, true],
-  [/^<!--/,        /-->/,   true],
-  [/^<\?/,         /\?>/,   true],
-  [/^<![A-Z]/,     />/,     true],
+  [/^<!--/, /-->/, true],
+  [/^<\?/, /\?>/, true],
+  [/^<![A-Z]/, />/, true],
   [/^<!\[CDATA\[/, /\]\]>/, true],
   [new RegExp('^</?(' + html_blocks.join('|') + ')(?=(\\s|/?>|$))', 'i'), /^$/, true],
-  [new RegExp(HTML_OPEN_CLOSE_TAG_RE.source + '\\s*$'),  /^$/, false]
+  [new RegExp(HTML_OPEN_CLOSE_TAG_RE.source + '\\s*$'), /^$/, false]
 ]
 
 function html_block (state, startLine, endLine, silent) {
@@ -45329,8 +45336,8 @@ function html_block (state, startLine, endLine, silent) {
 
   state.line = nextLine
 
-  const token   = state.push('html_block', '', 0)
-  token.map     = [startLine, nextLine]
+  const token = state.push('html_block', '', 0)
+  token.map = [startLine, nextLine]
   token.content = state.getLines(startLine, nextLine, state.blkIndent, true)
 
   return true
@@ -45348,7 +45355,7 @@ function heading (state, startLine, endLine, silent) {
   // if it's indented more than 3 spaces, it should be a code block
   if (state.sCount[startLine] - state.blkIndent >= 4) { return false }
 
-  let ch  = state.src.charCodeAt(pos)
+  let ch = state.src.charCodeAt(pos)
 
   if (ch !== 0x23/* # */ || pos >= max) { return false }
 
@@ -45374,16 +45381,16 @@ function heading (state, startLine, endLine, silent) {
 
   state.line = startLine + 1
 
-  const token_o  = state.push('heading_open', 'h' + String(level), 1)
+  const token_o = state.push('heading_open', 'h' + String(level), 1)
   token_o.markup = '########'.slice(0, level)
-  token_o.map    = [startLine, state.line]
+  token_o.map = [startLine, state.line]
 
-  const token_i    = state.push('inline', '', 0)
-  token_i.content  = asciiTrim(state.src.slice(pos, max))
-  token_i.map      = [startLine, state.line]
+  const token_i = state.push('inline', '', 0)
+  token_i.content = asciiTrim(state.src.slice(pos, max))
+  token_i.map = [startLine, state.line]
   token_i.children = []
 
-  const token_c  = state.push('heading_close', 'h' + String(level), -1)
+  const token_c = state.push('heading_close', 'h' + String(level), -1)
   token_c.markup = '########'.slice(0, level)
 
   return true
@@ -45459,17 +45466,17 @@ function lheading (state, startLine, endLine/*, silent */) {
 
   state.line = nextLine + 1
 
-  const token_o    = state.push('heading_open', 'h' + String(level), 1)
-  token_o.markup   = String.fromCharCode(marker)
-  token_o.map      = [startLine, state.line]
+  const token_o = state.push('heading_open', 'h' + String(level), 1)
+  token_o.markup = String.fromCharCode(marker)
+  token_o.map = [startLine, state.line]
 
-  const token_i    = state.push('inline', '', 0)
-  token_i.content  = content
-  token_i.map      = [startLine, state.line - 1]
+  const token_i = state.push('inline', '', 0)
+  token_i.content = content
+  token_i.map = [startLine, state.line - 1]
   token_i.children = []
 
-  const token_c    = state.push('heading_close', 'h' + String(level), -1)
-  token_c.markup   = String.fromCharCode(marker)
+  const token_c = state.push('heading_close', 'h' + String(level), -1)
+  token_c.markup = String.fromCharCode(marker)
 
   state.parentType = oldParentType
 
@@ -45511,12 +45518,12 @@ function paragraph (state, startLine, endLine) {
 
   state.line = nextLine
 
-  const token_o    = state.push('paragraph_open', 'p', 1)
-  token_o.map      = [startLine, state.line]
+  const token_o = state.push('paragraph_open', 'p', 1)
+  token_o.map = [startLine, state.line]
 
-  const token_i    = state.push('inline', '', 0)
-  token_i.content  = content
-  token_i.map      = [startLine, state.line]
+  const token_i = state.push('inline', '', 0)
+  token_i.content = content
+  token_i.map = [startLine, state.line]
   token_i.children = []
 
   state.push('paragraph_close', 'p', -1)
@@ -45551,17 +45558,17 @@ function paragraph (state, startLine, endLine) {
 const parser_block_rules = [
   // First 2 params - rule name & source. Secondary array - list of rules,
   // which can be terminated by this one.
-  ['table',      table,      ['paragraph', 'reference']],
-  ['code',       code],
-  ['fence',      fence,      ['paragraph', 'reference', 'blockquote', 'list']],
+  ['table', table, ['paragraph', 'reference']],
+  ['code', code],
+  ['fence', fence, ['paragraph', 'reference', 'blockquote', 'list']],
   ['blockquote', blockquote, ['paragraph', 'reference', 'blockquote', 'list']],
-  ['hr',         hr,         ['paragraph', 'reference', 'blockquote', 'list']],
-  ['list',       list,       ['paragraph', 'reference', 'blockquote']],
-  ['reference',  reference],
+  ['hr', hr, ['paragraph', 'reference', 'blockquote', 'list']],
+  ['list', list, ['paragraph', 'reference', 'blockquote']],
+  ['reference', reference],
   ['html_block', html_block, ['paragraph', 'reference', 'blockquote']],
-  ['heading',    heading,    ['paragraph', 'reference', 'blockquote']],
-  ['lheading',   lheading],
-  ['paragraph',  paragraph]
+  ['heading', heading, ['paragraph', 'reference', 'blockquote']],
+  ['lheading', lheading],
+  ['paragraph', paragraph]
 ]
 
 /**
@@ -45807,8 +45814,8 @@ StateInline.prototype.scanDelims = function (start, canSplitWord) {
   const right_flanking =
     !isLastWhiteSpace && (!isLastPunctChar || isNextWhiteSpace || isNextPunctChar)
 
-  const can_open  = left_flanking  && (canSplitWord || !right_flanking || isLastPunctChar)
-  const can_close = right_flanking && (canSplitWord || !left_flanking  || isNextPunctChar)
+  const can_open = left_flanking && (canSplitWord || !right_flanking || isLastPunctChar)
+  const can_close = right_flanking && (canSplitWord || !left_flanking || isNextPunctChar)
 
   return { can_open, can_close, length: count }
 }
@@ -46056,6 +46063,20 @@ function rules_inline_escape_escape (state, silent) {
     return true
   }
 
+  // '\' before a space is a literal backslash. Don't consume the space, so a
+  // trailing two-space hard line break is still detected by the newline rule.
+  if (ch1 === 0x20) {
+    if (!silent) {
+      const token = state.push('text_special', '', 0)
+      token.content = '\\'
+      token.markup = '\\'
+      token.info = 'escape'
+    }
+
+    state.pos = pos
+    return true
+  }
+
   let escapedStr = state.src[pos]
 
   if (ch1 >= 0xD800 && ch1 <= 0xDBFF && pos + 1 < max) {
@@ -46079,7 +46100,7 @@ function rules_inline_escape_escape (state, silent) {
     }
 
     token.markup = origStr
-    token.info   = 'escape'
+    token.info = 'escape'
   }
 
   state.pos = pos + 1
@@ -46171,13 +46192,13 @@ function strikethrough_tokenize (state, silent) {
   let token
 
   if (len % 2) {
-    token         = state.push('text', '', 0)
+    token = state.push('text', '', 0)
     token.content = ch
     len--
   }
 
   for (let i = 0; i < len; i += 2) {
-    token         = state.push('text', '', 0)
+    token = state.push('text', '', 0)
     token.content = ch + ch
 
     state.delimiters.push({
@@ -46213,18 +46234,18 @@ function postProcess (state, delimiters) {
 
     const endDelim = delimiters[startDelim.end]
 
-    token         = state.tokens[startDelim.token]
-    token.type    = 's_open'
-    token.tag     = 's'
+    token = state.tokens[startDelim.token]
+    token.type = 's_open'
+    token.tag = 's'
     token.nesting = 1
-    token.markup  = '~~'
+    token.markup = '~~'
     token.content = ''
 
-    token         = state.tokens[endDelim.token]
-    token.type    = 's_close'
-    token.tag     = 's'
+    token = state.tokens[endDelim.token]
+    token.type = 's_close'
+    token.tag = 's'
     token.nesting = -1
-    token.markup  = '~~'
+    token.markup = '~~'
     token.content = ''
 
     if (state.tokens[endDelim.token - 1].type === 'text' &&
@@ -46360,18 +46381,18 @@ function emphasis_postProcess (state, delimiters) {
 
     const ch = String.fromCharCode(startDelim.marker)
 
-    const token_o   = state.tokens[startDelim.token]
-    token_o.type    = isStrong ? 'strong_open' : 'em_open'
-    token_o.tag     = isStrong ? 'strong' : 'em'
+    const token_o = state.tokens[startDelim.token]
+    token_o.type = isStrong ? 'strong_open' : 'em_open'
+    token_o.tag = isStrong ? 'strong' : 'em'
     token_o.nesting = 1
-    token_o.markup  = isStrong ? ch + ch : ch
+    token_o.markup = isStrong ? ch + ch : ch
     token_o.content = ''
 
-    const token_c   = state.tokens[endDelim.token]
-    token_c.type    = isStrong ? 'strong_close' : 'em_close'
-    token_c.tag     = isStrong ? 'strong' : 'em'
+    const token_c = state.tokens[endDelim.token]
+    token_c.type = isStrong ? 'strong_close' : 'em_close'
+    token_c.tag = isStrong ? 'strong' : 'em'
     token_c.nesting = -1
-    token_c.markup  = isStrong ? ch + ch : ch
+    token_c.markup = isStrong ? ch + ch : ch
     token_c.content = ''
 
     if (isStrong) {
@@ -46526,7 +46547,7 @@ function link_link (state, silent) {
 
     const token_o = state.push('link_open', 'a', 1)
     const attrs = [['href', href]]
-    token_o.attrs  = attrs
+    token_o.attrs = attrs
     if (title) {
       attrs.push(['title', title])
     }
@@ -46687,7 +46708,7 @@ function image_image (state, silent) {
 // Process autolinks '<protocol:...>'
 
 /* eslint max-len:0 */
-const EMAIL_RE    = /^([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)$/
+const EMAIL_RE = /^([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)$/
 /* eslint-disable-next-line no-control-regex */
 const AUTOLINK_RE = /^([a-zA-Z][a-zA-Z0-9+.-]{1,31}):([^<>\x00-\x20]*)$/
 
@@ -46715,17 +46736,17 @@ function autolink (state, silent) {
     if (!state.md.validateLink(fullUrl)) { return false }
 
     if (!silent) {
-      const token_o   = state.push('link_open', 'a', 1)
-      token_o.attrs   = [['href', fullUrl]]
-      token_o.markup  = 'autolink'
-      token_o.info    = 'auto'
+      const token_o = state.push('link_open', 'a', 1)
+      token_o.attrs = [['href', fullUrl]]
+      token_o.markup = 'autolink'
+      token_o.info = 'auto'
 
-      const token_t   = state.push('text', '', 0)
+      const token_t = state.push('text', '', 0)
       token_t.content = state.md.normalizeLinkText(url)
 
-      const token_c   = state.push('link_close', 'a', -1)
-      token_c.markup  = 'autolink'
-      token_c.info    = 'auto'
+      const token_c = state.push('link_close', 'a', -1)
+      token_c.markup = 'autolink'
+      token_c.info = 'auto'
     }
 
     state.pos += url.length + 2
@@ -46737,17 +46758,17 @@ function autolink (state, silent) {
     if (!state.md.validateLink(fullUrl)) { return false }
 
     if (!silent) {
-      const token_o   = state.push('link_open', 'a', 1)
-      token_o.attrs   = [['href', fullUrl]]
-      token_o.markup  = 'autolink'
-      token_o.info    = 'auto'
+      const token_o = state.push('link_open', 'a', 1)
+      token_o.attrs = [['href', fullUrl]]
+      token_o.markup = 'autolink'
+      token_o.info = 'auto'
 
-      const token_t   = state.push('text', '', 0)
+      const token_t = state.push('text', '', 0)
       token_t.content = state.md.normalizeLinkText(url)
 
-      const token_c   = state.push('link_close', 'a', -1)
-      token_c.markup  = 'autolink'
-      token_c.info    = 'auto'
+      const token_c = state.push('link_close', 'a', -1)
+      token_c.markup = 'autolink'
+      token_c.info = 'auto'
     }
 
     state.pos += url.length + 2
@@ -46802,7 +46823,7 @@ function html_inline (state, silent) {
     const token = state.push('html_inline', '', 0)
     token.content = match[0]
 
-    if (html_inline_isLinkOpen(token.content))  state.linkLevel++
+    if (html_inline_isLinkOpen(token.content)) state.linkLevel++
     if (html_inline_isLinkClose(token.content)) state.linkLevel--
   }
   state.pos += match[0].length
@@ -46816,7 +46837,7 @@ function html_inline (state, silent) {
 
 
 const DIGITAL_RE = /^&#((?:x[a-f0-9]{1,6}|[0-9]{1,7}));/i
-const NAMED_RE   = /^&([a-z][a-z0-9]{1,31});/i
+const NAMED_RE = /^&([a-z][a-z0-9]{1,31});/i
 
 function entity (state, silent) {
   const pos = state.pos
@@ -46834,10 +46855,10 @@ function entity (state, silent) {
       if (!silent) {
         const code = match[1][0].toLowerCase() === 'x' ? parseInt(match[1].slice(1), 16) : parseInt(match[1], 10)
 
-        const token   = state.push('text_special', '', 0)
+        const token = state.push('text_special', '', 0)
         token.content = isValidEntityCode(code) ? utils_fromCodePoint(code) : utils_fromCodePoint(0xFFFD)
-        token.markup  = match[0]
-        token.info    = 'entity'
+        token.markup = match[0]
+        token.info = 'entity'
       }
       state.pos += match[0].length
       return true
@@ -46848,10 +46869,10 @@ function entity (state, silent) {
       const decoded = decodeHTMLStrict(match[0])
       if (decoded !== match[0]) {
         if (!silent) {
-          const token   = state.push('text_special', '', 0)
+          const token = state.push('text_special', '', 0)
           token.content = decoded
-          token.markup  = match[0]
-          token.info    = 'entity'
+          token.markup = match[0]
+          token.info = 'entity'
         }
         state.pos += match[0].length
         return true
@@ -46950,8 +46971,8 @@ function processDelimiters (delimiters) {
           jumps[closerIdx] = closerIdx - openerIdx + lastJump
           jumps[openerIdx] = lastJump
 
-          closer.open  = false
-          opener.end   = closerIdx
+          closer.open = false
+          opener.end = closerIdx
           opener.close = false
           newMinOpenerIdx = -1
           // treat next token as start of run,
@@ -47057,18 +47078,18 @@ function fragments_join (state) {
 // Parser rules
 
 const parser_inline_rules = [
-  ['text',            text_text],
-  ['linkify',         linkify_linkify],
-  ['newline',         newline],
-  ['escape',          rules_inline_escape_escape],
-  ['backticks',       backtick],
-  ['strikethrough',   strikethrough.tokenize],
-  ['emphasis',        emphasis.tokenize],
-  ['link',            link_link],
-  ['image',           image_image],
-  ['autolink',        autolink],
-  ['html_inline',     html_inline],
-  ['entity',          entity]
+  ['text', text_text],
+  ['linkify', linkify_linkify],
+  ['newline', newline],
+  ['escape', rules_inline_escape_escape],
+  ['backticks', backtick],
+  ['strikethrough', strikethrough.tokenize],
+  ['emphasis', emphasis.tokenize],
+  ['link', link_link],
+  ['image', image_image],
+  ['autolink', autolink],
+  ['html_inline', html_inline],
+  ['entity', entity]
 ]
 
 // `rule2` ruleset was created specifically for emphasis/strikethrough
@@ -47077,12 +47098,12 @@ const parser_inline_rules = [
 // Don't use this for anything except pairs (plugins working with `balance_pairs`).
 //
 const _rules2 = [
-  ['balance_pairs',   link_pairs],
-  ['strikethrough',   strikethrough.postProcess],
-  ['emphasis',        emphasis.postProcess],
+  ['balance_pairs', link_pairs],
+  ['strikethrough', strikethrough.postProcess],
+  ['emphasis', emphasis.postProcess],
   // rules for pairs separate '**' into its own text tokens, which may be left unused,
   // rule below merges unused segments back with the rest of the text
-  ['fragments_join',  fragments_join]
+  ['fragments_join', fragments_join]
 ]
 
 /**
@@ -52661,7 +52682,13 @@ const convertPatternsForFastGlob = (patterns, usingGitRoot, normalizeDirectoryPa
 			break; // Early exit on first negation
 		}
 
-		result.push(normalizeDirectoryPatternForFastGlob(pattern));
+		// `.gitignore` patterns are relative to the repo root, but an anchored pattern like
+		// `/foo` looks like an absolute path to globby's directory-to-glob expansion, which
+		// resolves it against the real filesystem. When the checkout lives under a matching
+		// `/foo/…` path, `/foo` is a real ancestor directory and expands to `/foo/**`, which
+		// ignores the whole tree. Drop the leading slash so the pattern stays anchored to the
+		// cwd instead, letting fast-glob still skip the directory during traversal.
+		result.push(normalizeDirectoryPatternForFastGlob(pattern).replace(/^\//, ''));
 	}
 
 	return hasNegations ? [] : result;
@@ -54234,6 +54261,7 @@ let params = undefined;
  */
 function initialize(p) {
   map.clear();
+  // eslint-disable-next-line unicorn/no-top-level-assignment-in-function
   params = p;
 }
 
@@ -54306,7 +54334,7 @@ const fixableRuleNames = (/* unused pure expression or super */ null && ([
   "MD054", "MD058", "MD060"
 ]));
 const homepage = "https://github.com/DavidAnson/markdownlint";
-const version = "0.41.0";
+const version = "0.41.1";
 
 // EXTERNAL MODULE: ./node_modules/markdownlint/lib/defer-require.cjs
 var defer_require = __nccwpck_require__(9489);
@@ -54438,6 +54466,7 @@ const validStyles = new Set([
       for (const listItemMarker of listItemMarkers) {
         const itemStyle = markerToStyle(listItemMarker.text);
         if (style === "sublist") {
+          // eslint-disable-next-line unicorn/no-computed-property-existence-check
           if (!nestingStyles[nesting]) {
             nestingStyles[nesting] =
               (itemStyle === nestingStyles[nesting - 1]) ?
@@ -54506,7 +54535,7 @@ const validStyles = new Set([
         } else {
           const markerLength = listItemPrefix.text.trim().length;
           const actualEnd = listItemPrefix.startColumn + markerLength - 1;
-          expectedEnd = expectedEnd || actualEnd;
+          expectedEnd ||= actualEnd;
           if ((expectedIndent !== actualIndent) || endMatching) {
             if (expectedEnd === actualEnd) {
               endMatching = true;
@@ -55110,6 +55139,7 @@ function validateHeadingSpaces(onError, heading, delta) {
   const { children, startLine, text } = heading;
   let index = (delta > 0) ? 0 : (children.length - 1);
   while (
+    // eslint-disable-next-line unicorn/no-computed-property-existence-check
     children[index] &&
     (children[index].type !== "atxHeadingSequence")
   ) {
@@ -55254,6 +55284,7 @@ const defaultLines = 1;
 // eslint-disable-next-line jsdoc/reject-any-type
 const getLinesFunction = (/** @type {any} */ linesParam) => {
   if (Array.isArray(linesParam)) {
+    // eslint-disable-next-line unicorn/no-unreadable-new-expression
     const linesArray = new Array(6).fill(defaultLines);
     for (const [ index, value ] of [ ...linesParam.entries() ].slice(0, 6)) {
       linesArray[index] = value;
@@ -55398,7 +55429,7 @@ const getLine = (/** @type {readonly string[]} */ lines, /** @type {number} */ i
   "tags": [ "headings" ],
   "parser": "micromark",
   "function": function MD024(params, onError) {
-    const siblingsOnly = !!params.config.siblings_only || false;
+    const siblingsOnly = !!params.config.siblings_only;
     const knownContents = [ null, [] ];
     let lastLevel = 1;
     let knownContent = knownContents[lastLevel];
@@ -55636,13 +55667,16 @@ const listStyles = Object.keys(listStyleExamples);
  * Gets the column and text of an ordered list item prefix token.
  *
  * @param {import("markdownlint").MicromarkToken} listItemPrefix List item prefix token.
- * @returns {{column: number, value: number}} List item value column and text.
+ * @returns {{startColumn: number, endColumn: number, text: string, number: number}} List item value column and text.
  */
 function getOrderedListItemValue(listItemPrefix) {
   const listItemValue = (0,micromark_helpers.getDescendantsByType)(listItemPrefix, [ "listItemValue" ])[0];
+  const { startColumn, endColumn, text } = listItemValue;
   return {
-    "column": listItemValue.startColumn,
-    "value": Number(listItemValue.text)
+    startColumn,
+    endColumn,
+    text,
+    "number": Number(text)
   };
 }
 
@@ -55656,40 +55690,49 @@ function getOrderedListItemValue(listItemPrefix) {
     const style = String(params.config.style);
     for (const listOrdered of filterByTypesCached([ "listOrdered" ])) {
       const listItemPrefixes = (0,micromark_helpers.getDescendantsByType)(listOrdered, [ "listItemPrefix" ]);
-      let expected = 1;
+      let expectedNumber = 1;
       let incrementing = false;
-      // Check for incrementing number pattern 1/2/3 or 0/1/2
-      if (listItemPrefixes.length >= 2) {
-        const first = getOrderedListItemValue(listItemPrefixes[0]);
-        const second = getOrderedListItemValue(listItemPrefixes[1]);
-        if ((second.value !== 1) || (first.value === 0)) {
-          incrementing = true;
-          if (first.value === 0) {
-            expected = 0;
+      let rightAligned = false;
+      let zeroPrefixed = false;
+      if (listItemPrefixes.length > 0) {
+        // Check for right alignment
+        const firstPrefixEndColumn = listItemPrefixes[0].endColumn;
+        rightAligned = listItemPrefixes.every((prefix) => prefix.endColumn === firstPrefixEndColumn);
+        if (listItemPrefixes.length > 1) {
+          // Check for incrementing number pattern 1/2/3 or 0/1/2
+          const firstValue = getOrderedListItemValue(listItemPrefixes[0]);
+          const secondValue = getOrderedListItemValue(listItemPrefixes[1]);
+          if ((secondValue.number !== 1) || (firstValue.number === 0)) {
+            incrementing = true;
+            if (firstValue.number === 0) {
+              expectedNumber = 0;
+            }
           }
+          zeroPrefixed = firstValue.text.startsWith("0");
         }
       }
       // Determine effective style
       const listStyle = listStyles.includes(style) ? style : (incrementing ? "ordered" : "one");
       if (listStyle === "zero") {
-        expected = 0;
+        expectedNumber = 0;
       } else if (listStyle === "one") {
-        expected = 1;
+        expectedNumber = 1;
       }
       // Validate each list item marker
       for (const listItemPrefix of listItemPrefixes) {
-        const orderedListItemValue = getOrderedListItemValue(listItemPrefix);
-        const actual = orderedListItemValue.value;
+        const expectedText = expectedNumber.toString();
+        const { endColumn, startColumn, "number": actualNumber } = getOrderedListItemValue(listItemPrefix);
+        const length = endColumn - startColumn;
         const fixInfo = {
-          "editColumn": orderedListItemValue.column,
-          "deleteCount": orderedListItemValue.value.toString().length,
-          "insertText": expected.toString()
+          "editColumn": startColumn,
+          "deleteCount": length,
+          "insertText": rightAligned ? expectedText.padStart(length, (zeroPrefixed ? "0" : " ")) : expectedText
         };
         (0,helpers_helpers/* addErrorDetailIf */.qC)(
           onError,
           listItemPrefix.startLine,
-          expected,
-          actual,
+          expectedNumber,
+          actualNumber,
           // @ts-ignore
           "Style: " + listStyleExamples[listStyle],
           undefined,
@@ -55697,7 +55740,7 @@ function getOrderedListItemValue(listItemPrefix) {
           fixInfo
         );
         if (listStyle === "ordered") {
-          expected++;
+          expectedNumber++;
         }
       }
     }
@@ -55881,10 +55924,11 @@ const isList = (/** @type {MicromarkToken} */ token) => (
         (token) => !micromark_helpers.nonContentTokens.has(token.type),
         (token) => micromark_helpers.nonContentTokens.has(token.type) ? [] : token.children
       );
-      let endLine = list.endLine;
-      if (flattenedChildren.length > 0) {
-        endLine = flattenedChildren[flattenedChildren.length - 1].endLine;
-      }
+      const endLine = (
+        (flattenedChildren.length > 0) ?
+          flattenedChildren[flattenedChildren.length - 1] :
+          list
+      ).endLine;
 
       // Look for a blank line below the list
       const lastLineNumber = endLine;
@@ -56171,8 +56215,7 @@ const isParagraphChildMeaningful = (/** @type {MicromarkToken} */ token) => !(
       }
 
       // Process bare tokens for each emphasis marker type
-      for (const entry of emphasisTokensByMarker.entries()) {
-        const [ marker, emphasisTokens ] = entry;
+      for (const [ marker, emphasisTokens ] of emphasisTokensByMarker) {
         for (let i = 0; i + 1 < emphasisTokens.length; i += 2) {
 
           // Process start token of start/end pair
@@ -71556,9 +71599,10 @@ function parseInternal(
           current
         );
         current.children = tokens;
+        // eslint-disable-next-line unicorn/comment-content
         // Avoid stack overflow of Array.push(...spread)
         // @ts-ignore
-        // eslint-disable-next-line unicorn/prefer-spread
+        // eslint-disable-next-line unicorn/no-array-concat-in-loop
         flatTokens = flatTokens.concat(tokens[shared.flatTokensSymbol]);
       }
     } else if (kind === "exit") {
@@ -72143,6 +72187,7 @@ function unescapeStringTokenText(token) {
               };
             }
             const textLower = text.toLowerCase();
+            // eslint-disable-next-line unicorn/prefer-iterator-helpers
             const mixedCaseKey = [ ...fragments.keys() ]
               .find((key) => textLower === key.toLowerCase());
             if (mixedCaseKey) {
@@ -73583,6 +73628,7 @@ function validateRuleList(ruleList, synchronous) {
       }
       for (const tag of rule.tags) {
         const tagUpper = tag.toUpperCase();
+        // eslint-disable-next-line unicorn/no-computed-property-existence-check
         if (!result && allIds[tagUpper]) {
           result = new Error("Tag '" + tag + "' of custom rule at index " +
             customIndex + " is already used as a name.");
@@ -73929,6 +73975,7 @@ function lintContent(
   // eslint-disable-next-line jsdoc/reject-any-type
   const callbackError = (/** @type {any} */ error) => callback(error instanceof Error ? error : new Error(error));
   // Remove UTF-8 byte order marker (if present)
+  // eslint-disable-next-line unicorn/prefer-unicode-code-point-escapes
   content = content.replace(/^\uFEFF/, "");
   // Remove front matter
   const removeFrontMatterResult = removeFrontMatter(content, frontMatter);
@@ -74261,8 +74308,8 @@ function lintFile(
  */
 function lintInput(options, synchronous, callback) {
   // Normalize inputs
-  options = options || {};
-  callback = callback || function noop() {};
+  options ||= {};
+  callback ||= () => {};
   /** @type {Rule[]} */
   // @ts-ignore
   const customRuleList =
@@ -74699,6 +74746,7 @@ function applyFix(line, fixInfo, lineEnding = "\n") {
   const editIndex = editColumn - 1;
   return (deleteCount === -1) ?
     null :
+    // eslint-disable-next-line unicorn/no-unsafe-string-replacement
     line.slice(0, editIndex) + insertText.replace(/\n/g, lineEnding) + line.slice(editIndex + deleteCount);
 }
 
@@ -75151,7 +75199,7 @@ const appendToArray = (destination, source) => {
 // @ts-check
 
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.23.0";
+const packageVersion = "0.23.1";
 
 const libraryName = "markdownlint";
 
@@ -76434,7 +76482,7 @@ const tomlParse = (text) => parse_parse(text);
 /* harmony default export */ const toml_parse = (tomlParse);
 
 ;// CONCATENATED MODULE: ./node_modules/js-yaml/dist/js-yaml.mjs
-/*! js-yaml 5.2.0 https://github.com/nodeca/js-yaml @license MIT */
+/*! js-yaml 5.2.1 https://github.com/nodeca/js-yaml @license MIT */
 //#region src/tag.ts
 var NOT_RESOLVED = Symbol("NOT_RESOLVED");
 var MERGE_KEY = Symbol("MERGE_KEY");
@@ -76939,18 +76987,40 @@ var seqTag = defineSequenceTag("tag:yaml.org,2002:seq", {
 	identify: Array.isArray
 });
 //#endregion
+//#region src/common/object.ts
+function isPlainObject(data) {
+	if (data === null || typeof data !== "object" || Array.isArray(data)) return false;
+	const prototype = Object.getPrototypeOf(data);
+	return prototype === null || prototype === Object.prototype;
+}
+function pick(object, keys) {
+	const result = {};
+	for (const key of keys) if (object[key] !== void 0) result[key] = object[key];
+	return result;
+}
+//#endregion
 //#region src/tag/sequence/omap.ts
 var omapTag = defineSequenceTag("tag:yaml.org,2002:omap", {
-	create: () => [],
-	addItem: (container, item) => {
-		if (Object.prototype.toString.call(item) !== "[object Object]") return "cannot resolve an ordered map item";
-		const object = item;
-		const itemKeys = Object.keys(object);
-		if (itemKeys.length !== 1) return "cannot resolve an ordered map item";
-		for (const existing of container) if (Object.prototype.hasOwnProperty.call(existing, itemKeys[0])) return "cannot resolve an ordered map item";
-		container.push(object);
+	create: () => ({
+		list: [],
+		seen: /* @__PURE__ */ new Set()
+	}),
+	addItem: (carrier, item) => {
+		let key;
+		if (item instanceof Map) {
+			if (item.size !== 1) return "cannot resolve an ordered map item";
+			key = item.keys().next().value;
+		} else if (isPlainObject(item)) {
+			const itemKeys = Object.keys(item);
+			if (itemKeys.length !== 1) return "cannot resolve an ordered map item";
+			key = itemKeys[0];
+		} else return "cannot resolve an ordered map item";
+		if (carrier.seen.has(key)) return "duplicate key in ordered map";
+		carrier.seen.add(key);
+		carrier.list.push(item);
 		return "";
-	}
+	},
+	finalize: (carrier) => carrier.list
 });
 //#endregion
 //#region src/tag/sequence/pairs.ts
@@ -76970,18 +77040,6 @@ var pairsTag = defineSequenceTag("tag:yaml.org,2002:pairs", {
 		return "";
 	}
 });
-//#endregion
-//#region src/common/object.ts
-function isPlainObject(data) {
-	if (data === null || typeof data !== "object" || Array.isArray(data)) return false;
-	const prototype = Object.getPrototypeOf(data);
-	return prototype === null || prototype === Object.prototype;
-}
-function pick(object, keys) {
-	const result = {};
-	for (const key of keys) if (object[key] !== void 0) result[key] = object[key];
-	return result;
-}
 //#endregion
 //#region src/tag/mapping/map.ts
 var mapTag = defineMappingTag("tag:yaml.org,2002:map", {
@@ -79644,6 +79702,9 @@ const readToml = (/** @type {string} */ file, /** @type {FsLike} */ fs) => fs.pr
 // Reads and parses a YAML file
 const readYaml = (/** @type {string} */ file, /** @type {FsLike} */ fs) => fs.promises.readFile(file, utf8).then(yaml_parse);
 
+// Pluralizes a noun (if necessary)
+const pluralize = (/** @type {number} */ count, /** @type {string} */ noun) => `${count} ${noun}${count === 1 ? "" : (noun.endsWith("x") ? "es" : "s")}`;
+
 // Throws a meaningful exception for an unusable configuration file
 const throwForConfigurationFile = (/** @type {string} */ file, /** @type {Error | any} */ error) => {
   throw new Error(
@@ -80322,6 +80383,7 @@ const lintFiles = (
   /** @type {FormattingContext} */ formattingContext
 ) => {
   const { fs, parsers } = context;
+  /** @type {Promise<LintTaskResult>[]} */
   const tasks = [];
   // For each dirInfo
   for (const dirInfo of dirInfos) {
@@ -80377,19 +80439,32 @@ const lintFiles = (
       fs
     };
     // Invoke markdownlint
-    let task = lintPromise(options);
+    /** @type {Promise<LintTaskResult>} */
+    let task = lintPromise(options).then((results) => ({
+      results,
+      "filesAttempted": 0,
+      "issuesAttempted": 0
+    }));
     if (formattingContext.formatting) {
       // Apply fixes to stdin input
-      task = task.then((results) => {
+      task = task.then((taskResult) => {
+        const { results } = taskResult;
         const [ [ id, original ] ] = Object.entries(filteredStrings);
         const errorInfos = results[id];
         formattingContext.formatted = applyFixes(original, errorInfos);
-        return {};
+        return {
+          ...taskResult,
+          "results": {}
+        };
       });
     } else if (markdownlintOptions?.fix) {
       // For any fixable errors, read file, apply fixes, write it back, and re-lint
-      task = task.then((results) => {
-        options.files = [];
+      task = task.then((taskResult) => {
+        const { results } = taskResult;
+        let issuesToFix = 0;
+        /** @type {string[]} */
+        const filesToFix = [];
+        options.files = filesToFix;
         const subTasks = [];
         const errorFiles = Object.keys(results).
           filter((result) => filteredFiles.includes(result));
@@ -80397,8 +80472,8 @@ const lintFiles = (
           const errorInfos = results[fileName].
             filter((errorInfo) => errorInfo.fixInfo);
           if (errorInfos.length > 0) {
-            delete results[fileName];
-            options.files.push(fileName);
+            issuesToFix += errorInfos.length;
+            filesToFix.push(fileName);
             subTasks.push(fs.promises.readFile(fileName, utf8).
               then((/** @type {string} */ original) => {
                 const fixed = applyFixes(original, errorInfos);
@@ -80410,8 +80485,12 @@ const lintFiles = (
         return Promise.all(subTasks).
           then(() => lintPromise(options)).
           then((fixResults) => ({
-            ...results,
-            ...fixResults
+            "results": {
+              ...results,
+              ...fixResults
+            },
+            "filesAttempted": filesToFix.length,
+            "issuesAttempted": issuesToFix
           }));
       });
     }
@@ -80422,35 +80501,50 @@ const lintFiles = (
   return Promise.all(tasks);
 };
 
-// Create list of results
-const createResults = (/** @type {string} */ baseDir, /** @type {LintResults[]} */ taskResults) => {
+// Create flat list of results
+const flattenTaskResults = (/** @type {string} */ baseDir, /** @type {LintTaskResult[]} */ taskResults) => {
   /** @type {LintResult[]} */
-  const results = [];
+  const lintResults = [];
+  let totalIssuesReported = 0;
+  let totalFilesReported = 0;
+  let totalIssuesAttempted = 0;
+  let totalFilesAttempted = 0;
   /** @type {Map<LintResult, number>} */
   const resultToCounter = new Map();
-  let counter = 0;
   for (const taskResult of taskResults) {
-    for (const [ fileName, errorInfos ] of Object.entries(taskResult)) {
+    const { results, filesAttempted, issuesAttempted } = taskResult;
+    const resultsEntries = Object.entries(results).
+      filter(([ , errorInfos ]) => errorInfos.length > 0);
+    for (const [ fileName, errorInfos ] of resultsEntries) {
       for (const errorInfo of errorInfos) {
         const fileNameRelative = pathPosix.relative(baseDir, fileName);
         const result = {
           "fileName": fileNameRelative,
           ...errorInfo
         };
-        results.push(result);
-        resultToCounter.set(result, counter);
-        counter++;
+        lintResults.push(result);
+        resultToCounter.set(result, totalIssuesReported);
+        totalIssuesReported++;
       }
     }
+    totalFilesReported += resultsEntries.length;
+    totalIssuesAttempted += issuesAttempted;
+    totalFilesAttempted += filesAttempted;
   }
-  results.sort((a, b) => (
+  lintResults.sort((a, b) => (
     a.fileName.localeCompare(b.fileName) ||
     (a.lineNumber - b.lineNumber) ||
     a.ruleNames[0].localeCompare(b.ruleNames[0]) ||
     // @ts-ignore
     (resultToCounter.get(a) - resultToCounter.get(b))
   ));
-  return results;
+  return {
+    lintResults,
+    "issuesReported": totalIssuesReported,
+    "filesReported": totalFilesReported,
+    "issuesAttempted": totalIssuesAttempted,
+    "filesAttempted": totalFilesAttempted
+  };
 };
 
 // Output summary via formatters
@@ -80646,14 +80740,17 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
       fileNames.sort();
       logMessage(`Found:${fileNames.join("\n ")}`);
     }
-    logMessage(`Linting: ${fileCount} file(s)`);
+    logMessage(`Linting: ${pluralize(fileCount, "file")}`);
   }
   // Lint files
-  const lintResults = await lintFiles(context, dirInfos, resolvedFileContents, formattingContext);
+  const taskResults = await lintFiles(context, dirInfos, resolvedFileContents, formattingContext);
   // Output summary
-  const results = createResults(baseDir, lintResults);
+  const { lintResults, issuesReported, filesReported, filesAttempted, issuesAttempted } = flattenTaskResults(baseDir, taskResults);
   if (showProgress) {
-    logMessage(`Summary: ${results.length} error(s)`);
+    if (issuesAttempted > 0) {
+      logMessage(`Attempted: ${pluralize(issuesAttempted, "fix")} in ${pluralize(filesAttempted, "file")}`);
+    }
+    logMessage(`Summary: ${pluralize(issuesReported, "issue")} in ${pluralize(filesReported, "file")}`);
   }
   if (formattingContext.formatting) {
     const { pipeline } = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 6466, 19));
@@ -80672,7 +80769,7 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
     await outputResults(
       baseDir,
       relativeDir,
-      results,
+      lintResults,
       outputFormatters,
       modulePaths,
       logMessage,
@@ -80681,8 +80778,8 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
     );
   }
   // Return result
-  const errorsPresent = lintResults.flatMap(
-    (lintResult) => Object.values(lintResult).flatMap(
+  const errorsPresent = taskResults.flatMap(
+    (taskResult) => Object.values(taskResult.results).flatMap(
       (lintErrors) => lintErrors.filter(
         (lintError) => lintError.severity !== "warning"
       )
@@ -80760,6 +80857,8 @@ const markdownlint_cli2_main = async (/** @type {Parameters} */ params) => {
 /** @typedef {[OutputFormatter, ...any]} OutputFormatterConfiguration */
 
 /** @typedef {import("markdownlint").Rule} Rule */
+
+/** @typedef {{ "results": LintResults, "filesAttempted": number, "issuesAttempted": number }} LintTaskResult */
 
 /**
  * @typedef Options
