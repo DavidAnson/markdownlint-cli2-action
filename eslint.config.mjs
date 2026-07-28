@@ -35,6 +35,7 @@ export default [
       "@stylistic/operator-linebreak": [ "error", "after" ],
 
       "unicorn/no-array-callback-reference": "off",
+      "unicorn/prefer-await": "off",
       "unicorn/prefer-module": "off",
       "unicorn/prefer-top-level-await": "off"
     }
