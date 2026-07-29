@@ -2,22 +2,15 @@
   "name": "markdownlint-cli2-action",
   "version": "24.1.0",
   "description": "A GitHub Action to run the markdownlint-cli2 tool for linting Markdown/CommonMark files with the markdownlint library",
-  "author": {
-    "name": "David Anson",
-    "url": "https://dlaa.me/"
-  },
+  "author": "David Anson (https://dlaa.me/)",
   "license": "MIT",
   "type": "module",
   "homepage": "https://github.com/DavidAnson/markdownlint-cli2-action",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/DavidAnson/markdownlint-cli2-action.git"
-  },
-  "bugs": "https://github.com/DavidAnson/markdownlint-cli2-action/issues",
+  "repository": "github:DavidAnson/markdownlint-cli2-action",
   "funding": "https://github.com/sponsors/DavidAnson",
   "scripts": {
     "build": "ncc build markdownlint-cli2-action.mjs",
-    "lint": "eslint *.mjs --max-warnings 0 && markdownlint-cli2 *.md",
+    "lint": "eslint *.mjs package.json --max-warnings 0 && markdownlint-cli2 *.md",
     "test": "npm run lint && npm run build && git diff --exit-code"
   },
   "dependencies": {
@@ -29,7 +22,15 @@
     "@stylistic/eslint-plugin": "5.10.0",
     "@vercel/ncc": "0.44.1",
     "eslint": "10.7.0",
+    "eslint-package-json": "0.3.0",
     "eslint-plugin-n": "18.2.2",
     "eslint-plugin-unicorn": "72.0.0"
-  }
+  },
+  "keywords": [
+    "markdown",
+    "lint",
+    "md",
+    "commonmark",
+    "markdownlint"
+  ]
 }
