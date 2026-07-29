@@ -1,23 +1,34 @@
+// @ts-check
+
 /* eslint-disable n/no-unpublished-import */
 
+import { defineConfig } from "eslint/config";
 import js from "@eslint/js";
-import eslintPluginNode from "eslint-plugin-n";
+import eslintPluginN from "eslint-plugin-n";
 import eslintPluginStylistic from "@stylistic/eslint-plugin";
 import eslintPluginUnicorn from "eslint-plugin-unicorn";
 
-export default [
-  js.configs.all,
-  eslintPluginNode.configs["flat/recommended"],
-  eslintPluginStylistic.configs.customize({
-    "arrowParens": true,
-    "commaDangle": "never",
-    "jsx": false,
-    "quoteProps": "always",
-    "quotes": "double",
-    "semi": true
-  }),
-  eslintPluginUnicorn.configs.all,
+export default defineConfig(
   {
+    "plugins": {
+      js,
+      "n": eslintPluginN,
+      "unicorn": eslintPluginUnicorn,
+      "@stylistic": eslintPluginStylistic
+    },
+    "extends": [
+      "js/all",
+      "n/all",
+      "unicorn/all",
+      eslintPluginStylistic.configs.customize({
+        "arrowParens": true,
+        "commaDangle": "never",
+        "jsx": false,
+        "quoteProps": "always",
+        "quotes": "double",
+        "semi": true
+      })
+    ],
     "linterOptions": {
       "reportUnusedDisableDirectives": true
     },
@@ -40,4 +51,4 @@ export default [
       "unicorn/prefer-top-level-await": "off"
     }
   }
-];
+);
