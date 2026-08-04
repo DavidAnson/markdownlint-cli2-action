@@ -21,7 +21,7 @@
     "@eslint/js": "10.0.1",
     "@stylistic/eslint-plugin": "5.10.0",
     "@vercel/ncc": "0.44.1",
-    "eslint": "10.7.0",
+    "eslint": "10.8.0",
     "eslint-package-json": "0.3.0",
     "eslint-plugin-n": "18.2.2",
     "eslint-plugin-unicorn": "72.0.0"
