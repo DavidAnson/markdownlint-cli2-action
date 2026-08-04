@@ -6,6 +6,8 @@ updates:
       interval: "daily"
     cooldown:
       default-days: 10
+    ignore:
+      - dependency-name: "DavidAnson/markdownlint-cli2-action"
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
