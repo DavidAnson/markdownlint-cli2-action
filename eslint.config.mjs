@@ -52,7 +52,8 @@ export default defineConfig(
       "unicorn/no-array-callback-reference": "off",
       "unicorn/prefer-await": "off",
       "unicorn/prefer-module": "off",
-      "unicorn/prefer-top-level-await": "off"
+      "unicorn/prefer-top-level-await": "off",
+      "unicorn/single-line-block-comment-style": [ "error", "multiline", { "ignore": [ /^@type(?:def)? /u ] } ]
     }
   },
   {
