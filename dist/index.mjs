@@ -3528,12 +3528,7 @@ const ESCAPE = '\\'
 // The characters that carry a meaning of their own inside a regular
 //   expression, so a literal one has to be escaped before it is emitted.
 const REGEX_LITERAL_SPECIAL = /[.*+?()[\]{}^$|\\/]/
-// A line of only spaces is blank -- the trailing-space trimming empties it --
-//   but a line holding a tab is a pattern for a tab-named path, since git
-//   never trims a tab.
-// A leading BOM is removed during compilation, so reject a line that would
-//   become empty after removing it and trimming spaces.
-const REGEX_TEST_BLANK_LINE = /^\uFEFF? *$/
+const BOM = '\uFEFF'
 const REGEX_INVALID_TRAILING_BACKSLASH = /(?:[^\\]|^)\\$/
 const REGEX_REPLACE_LEADING_EXCAPED_EXCLAMATION = /^\\!/
 const REGEX_REPLACE_LEADING_EXCAPED_HASH = /^\\#/
@@ -3770,6 +3765,11 @@ const REGEX_RESTORE_PLACEHOLDER = new RegExp(
 //   into a `RegExp` -- `_make` always turns it back into a real wildcard first.
 const TRAILING_WILDCARD = '\uE000'
 
+// A trailing "/**" is deferred the same way, because `checkRegex` has to tell
+//   it apart from a trailing "/*" (see `checkSourceOf`). For `.ignores()` it
+//   still never matches the folder itself (#21).
+const TRAILING_DOUBLESTAR = '\uE001'
+
 // Replace every bracket expression with a placeholder the replacers below
 //   leave alone, and translate it separately.
 const extractBrackets = pattern => {
@@ -3799,11 +3799,17 @@ const extractBrackets = pattern => {
       //   wildcard by `TRAILING_WILDCARD` and the wildcard replacers), `\[`
       //   (a literal bracket, the one `[` the bracket replacer still expects),
       //   `\ ` (a quoted trailing space), and `\\` (a literal backslash). A
-      //   lone trailing backslash never reaches here -- `checkPattern` throws
-      //   it out first.
+      //   lone trailing backslash can reach here after line-ending cleanup.
       const escaped = pattern[index + 1]
 
       if (
+        escaped === UNDEFINED
+        || escaped === SLASH && index + 2 === length
+      ) {
+        // Git removes a final directory slash before matching. An escape
+        //   without a character after that removal makes the pattern invalid.
+        out += hold(NEVER_MATCH)
+      } else if (
         escaped === '*'
         || escaped === '['
         || escaped === SPACE
@@ -3891,42 +3897,6 @@ const REGEX_INNER_SLASH = /\/(?!$)/
 //   against 400ns.
 const REPLACERS = [
 
-  [
-    // Remove BOM
-    // TODO:
-    // Other similar zero-width characters?
-    /^\uFEFF/,
-    () => EMPTY,
-    '\uFEFF'
-  ],
-
-  [
-    // A trailing line terminator, left on when a whole file's contents are
-    //   added as one pattern rather than split into lines. git never sees one
-    //   -- it reads a `.gitignore` line by line -- so it is not part of the
-    //   pattern and is dropped here, apart from the trailing-space trimming,
-    //   which follows git in touching spaces and nothing else.
-    /[\r\n]+$/,
-    () => EMPTY
-  ],
-
-  // > Trailing spaces are ignored unless they are quoted with backslash ("\")
-  [
-    // Only spaces, never tabs or other whitespace: git trims a trailing run
-    //   of `' '` and nothing else (dir.c, `trim_trailing_spaces`, a single
-    //   `case ' '`), so a pattern ending in a tab keeps it as a literal.
-    // (a\ ) -> (a )
-    // (a  ) -> (a)
-    // (a ) -> (a)
-    // (a \ ) -> (a  )
-    /((?:\\\\)*?)(\\? +)$/,
-    (_, m1, m2) => m1 + (
-      m2.indexOf('\\') === 0
-        ? SPACE
-        : EMPTY
-    )
-  ],
-
   // Replace (\ ) with ' '
   // Only a space: an escaped tab or other whitespace is already a literal by
   //   the time it reaches here, and a bare tab must be left as one, not turned
@@ -3935,11 +3905,14 @@ const REPLACERS = [
   // (\\ ) -> '\\ '
   // (\\\ ) -> '\\ '
   [
-    /(\\+?) /g,
-    (_, m1) => {
-      const {length} = m1
-      return m1.slice(0, length - length % 2) + SPACE
-    }
+    // A run of backslashes is taken whole, from its first one, so no match
+    //   ever starts again inside it -- `(\\+?) ` did, which made a long run
+    //   quadratic.
+    /(\\+)( ?)/g,
+    (_, run, space) => space
+      ? run.slice(0, run.length - run.length % 2) + SPACE
+      : run,
+    ESCAPE + SPACE
   ],
 
   // Escape metacharacters
@@ -4068,8 +4041,9 @@ const REPLACERS = [
       // case: /**
       // > A trailing `"/**"` matches everything inside.
 
-      // #21: everything inside but it should not include the current folder
-      : '\\/.+',
+      // #21: everything inside but it should not include the current folder,
+      //   resolved by `_make`
+      : `\\/${TRAILING_DOUBLESTAR}`,
     '*'
   ],
 
@@ -4173,10 +4147,11 @@ const REPLACERS = [
     source => {
       const last = source[source.length - 1]
 
-      // The pattern is empty, or ends in the pending trailing wildcard the next
-      //   step owns. A trailing `*` that is not the marker is a literal star,
-      //   which anchors like any other final character.
-      if (!last || last === TRAILING_WILDCARD) {
+      // The pattern is empty, or ends in a pending marker `_make` owns --
+      //   the trailing wildcard, or a trailing "/**". A trailing `*` that is
+      //   not the marker is a literal star, which anchors like any other
+      //   final character.
+      if (!last || last === TRAILING_WILDCARD || last === TRAILING_DOUBLESTAR) {
         return source
       }
 
@@ -4194,38 +4169,27 @@ const MODE_IGNORE = 'regex'
 const MODE_CHECK_IGNORE = 'checkRegex'
 const UNDERSCORE = '_'
 
-const TRAILING_WILD_CARD_REPLACERS = {
-  [MODE_IGNORE] (_, p1) {
-    const prefix = p1
-      // '\^':
-      // '/*' does not match EMPTY
-      // '/*' does not match everything
+const replaceTrailingWildcard = (_, p1) => {
+  const prefix = p1
+    // '\^':
+    // '/*' does not match EMPTY
+    // '/*' does not match everything
 
-      // '\\\/':
-      // 'abc/*' does not match 'abc/'
-      ? `${p1}[^/]+`
+    // '\\\/':
+    // 'abc/*' does not match 'abc/'
+    ? `${p1}[^/]+`
 
-      // 'a*' matches 'a'
-      // 'a*' matches 'aa'
-      : '[^/]*'
+    // 'a*' matches 'a'
+    // 'a*' matches 'aa'
+    : '[^/]*'
 
-    return `${prefix}(?=$|\\/$)`
-  },
-
-  [MODE_CHECK_IGNORE] (_, p1) {
-    // When doing `git check-ignore`
-    const prefix = p1
-      // '\\\/':
-      // 'abc/*' DOES match 'abc/' !
-      ? `${p1}[^/]*`
-
-      // 'a*' matches 'a'
-      // 'a*' matches 'aa'
-      : '[^/]*'
-
-    return `${prefix}(?=$|\\/$)`
-  }
+  return `${prefix}(?=$|\\/$)`
 }
+
+const REGEX_REPLACE_TRAILING_DOUBLESTAR = /\uE001$/
+
+// 'abc/**' matches everything under 'abc', but not 'abc/' itself (#21)
+const replaceTrailingDoublestar = () => '.+(?=$|\\/$)'
 
 const WILDCARD = '[^\\/]*'
 
@@ -4242,6 +4206,20 @@ const WILDCARD = '[^\\/]*'
 // The source is read one token at a time -- a wildcard, a single-character
 //   piece (a literal, an escape, a class), or a parenthesised group or anchor
 //   that ends the run -- so only a genuine wildcard is touched.
+
+// The fixed pieces between the wildcard at `at` and the next wildcard of the
+//   run, joined as they appear in the source. A run never holds two wildcards
+//   in a row, so there is always at least one piece.
+const separatorAfter = (run, at) => {
+  let separator = EMPTY
+
+  for (let index = at + 1; index < run.length && !run[index].wildcard; index ++) {
+    separator += run[index].single
+  }
+
+  return separator
+}
+
 const pinWildcards = source => {
   if (source.indexOf(WILDCARD) < 0) {
     return source
@@ -4329,14 +4307,19 @@ const pinWildcards = source => {
         return
       }
 
-      // A wildcard that is not the last in the run is always immediately
-      //   followed by the single character that separates it from the next
-      //   one, because a run never holds two wildcards in a row, so it can be
-      //   pinned to stop there. The last wildcard stays as it is and takes up
-      //   the rest.
+      // A wildcard that is not the last in the run is pinned to the whole
+      //   fixed piece that separates it from the next wildcard, not just to
+      //   that piece's first character: stopping at the first character alone
+      //   would let the wildcard hand over at a place where the rest of the
+      //   separator cannot follow, and the pin leaves no way back, so
+      //   `f*o/*/*` would miss `foo/b/c` -- the first `o` of `foo` is not the
+      //   one the `o/` after it needs. Every piece matches exactly one
+      //   character, so pinning to the first place the whole separator fits
+      //   is the leftmost place it can sit, and the wildcards that follow
+      //   take up whatever is left.
       out += at === lastWildcard
         ? WILDCARD
-        : `(?:(?!${run[at + 1].single})[^\\/])*`
+        : `(?:(?!${separatorAfter(run, at)})[^\\/])*`
     })
 
     run = []
@@ -4392,6 +4375,28 @@ const makeRegexPrefix = pattern => {
       (match, index) => sources[index]
     )
     : replaced
+}
+
+// `checkRegex` tests a path with a trailing slash, 'abc/', the way
+//   `git check-ignore` matches that literal string once the directory itself
+//   is known not to be excluded (see `checkIgnore`): a trailing '/' of the
+//   pattern is dropped, a basename pattern sees an empty basename, and only a
+//   pattern whose last segment is a pending wildcard can match what is left
+//   after the final slash -- 'abc/*' and 'abc/**' match 'abc/', and 'abc/**'
+//   also matches 'abc/d/' (#77, #169).
+const checkSourceOf = (body, prefix) => {
+  if (body[body.length - 1] === SLASH) {
+    prefix = makeRegexPrefix(body.slice(0, - 1))
+  }
+
+  const head = prefix.slice(0, - 1)
+  const last = prefix[prefix.length - 1]
+
+  return last === TRAILING_WILDCARD
+    ? `${head}$`
+    : last === TRAILING_DOUBLESTAR
+      ? `${head}.*$`
+      : NEVER_MATCH
 }
 
 // A trailing slash does not stop a pattern being basename-only: it restricts
@@ -4474,14 +4479,11 @@ const parentOf = path => {
 
 const isString = subject => typeof subject === 'string'
 
-// > A blank line matches no files, so it can serve as a separator for readability.
+// Blank lines and comments are told by `createRule`, once the pattern is
+//   normalized.
 const checkPattern = pattern => pattern
   && isString(pattern)
-  && !REGEX_TEST_BLANK_LINE.test(pattern)
   && !REGEX_INVALID_TRAILING_BACKSLASH.test(pattern)
-
-  // > A line starting with # serves as a comment.
-  && pattern.indexOf('#') !== 0
 
 const splitPattern = pattern => pattern
 .split(REGEX_SPLITALL_CRLF)
@@ -4535,12 +4537,13 @@ class IgnoreRule {
   }
 
   _make (mode, key) {
-    const str = pinWildcards(this.regexPrefix.replace(
-      REGEX_REPLACE_TRAILING_WILDCARD,
-
-      // It does not need to bind pattern
-      TRAILING_WILD_CARD_REPLACERS[mode]
-    ))
+    const str = pinWildcards(
+      mode === MODE_IGNORE
+        ? this.regexPrefix
+        .replace(REGEX_REPLACE_TRAILING_WILDCARD, replaceTrailingWildcard)
+        .replace(REGEX_REPLACE_TRAILING_DOUBLESTAR, replaceTrailingDoublestar)
+        : checkSourceOf(this.body, this.regexPrefix)
+    )
 
     const regex = this.ignoreCase
       ? new RegExp(str, 'i')
@@ -4550,17 +4553,79 @@ class IgnoreRule {
   }
 }
 
+const isLineEnd = char => char === '\r' || char === '\n'
+
+// Drop a line terminator, which can remain when patterns are passed as an
+//   array, and then the trailing spaces. Git trims spaces only, and a space
+//   escaped by an odd run of backslashes stays, unescaped, as the last one.
+// Scanned from the end: a regular expression can only try each start in
+//   turn, which is quadratic over a long run of spaces or backslashes.
+// 'a  ' -> 'a';  'a\ ' -> 'a ';  'a\\ ' -> 'a\\';  'a\t' -> 'a\t'
+const trimEnd = body => {
+  let end = body.length
+
+  while (end && isLineEnd(body[end - 1])) {
+    end --
+  }
+
+  const lineEnd = end
+
+  while (end && body[end - 1] === SPACE) {
+    end --
+  }
+
+  if (end === lineEnd) {
+    return body.slice(0, end)
+  }
+
+  let backslashes = 0
+
+  while (backslashes < end && body[end - backslashes - 1] === ESCAPE) {
+    backslashes ++
+  }
+
+  return backslashes % 2
+    ? body.slice(0, end - 1) + SPACE
+    : body.slice(0, end)
+}
+
 const createRule = ({
   pattern,
   mark
 }, ignoreCase) => {
+  // Git drops a BOM before it reads the first line, so before anything else.
+  let body = pattern[0] === BOM
+    ? pattern.slice(1)
+    : pattern
+
+  // > A line starting with # serves as a comment.
+  if (body[0] === '#') {
+    return
+  }
+
   let negative = false
-  let body = pattern
 
   // > An optional prefix "!" which negates the pattern;
-  if (body.indexOf('!') === 0) {
+  if (body[0] === '!') {
     negative = true
-    body = body.substr(1)
+    body = body.slice(1)
+  }
+
+  // Normalize the body before checking which slashes anchor the pattern.
+  //   Otherwise `bar/ ` is mistaken for a pattern containing an inner slash.
+  //   Only a body ending in a space or a line terminator has anything to trim.
+  const last = body[body.length - 1]
+
+  if (last === SPACE || last === '\r' || last === '\n') {
+    body = trimEnd(body)
+  }
+
+  // > A blank line matches no files, so it can serve as a separator for
+  // >   readability.
+  // Nor does a lone "!", or anything else left empty here: an empty pattern
+  //   would compile to a regex matching every path.
+  if (!body) {
+    return
   }
 
   body = body
@@ -4619,8 +4684,10 @@ class RuleManager {
       }
     }
 
-    if (checkPattern(pattern.pattern)) {
-      const rule = createRule(pattern, this._ignoreCase)
+    const rule = checkPattern(pattern.pattern)
+      && createRule(pattern, this._ignoreCase)
+
+    if (rule) {
       this._added = true
       this._rules.push(rule)
 
@@ -4643,7 +4710,52 @@ class RuleManager {
         : pattern
     ).forEach(this._add, this)
 
+    if (this._added) {
+      this._literalRules = UNDEFINED
+    }
+
     return this._added
+  }
+
+  // Match the literal 'abc/' for `checkIgnore`, last rule wins. Only a rule
+  //   ending in a wildcard can match it (see `checkSourceOf`), so the rest
+  //   are left out once, rather than tested or compiled for every path.
+  testLiteral (path) {
+    const rules = this._literalRules || (
+      this._literalRules = this._rules.filter(
+        ({body}) => body[body.length - (
+          body[body.length - 1] === SLASH ? 2 : 1
+        )] === '*'
+      )
+    )
+
+    let ignored = false
+    let unignored = false
+    let matchedRule
+
+    for (let index = rules.length - 1; index >= 0; index --) {
+      const rule = rules[index]
+
+      if (rule.checkRegex.test(path)) {
+        ignored = !rule.negative
+        unignored = rule.negative
+        matchedRule = rule.negative
+          ? UNDEFINED
+          : rule
+        break
+      }
+    }
+
+    const ret = {
+      ignored,
+      unignored
+    }
+
+    if (matchedRule) {
+      ret.rule = matchedRule
+    }
+
+    return ret
   }
 
   // Test one single path without recursively checking parent directories
@@ -4857,17 +4969,20 @@ class Ignore {
       return this.test(path)
     }
 
-    const parentPath = parentOf(path)
+    // Like `git check-ignore`: a directory excluded by itself or by an
+    //   ancestor settles it, and only then is the literal 'abc/' matched
+    //   against the rules (see `checkSourceOf`).
+    const dir = this._t(path, this._testCache, true)
 
-    if (parentPath) {
-      const parent = this._t(parentPath, this._testCache, true)
-
-      if (parent.ignored) {
-        return parent
-      }
+    if (dir.ignored) {
+      return dir
     }
 
-    return this._rules.test(path, false, MODE_CHECK_IGNORE)
+    const literal = this._rules.testLiteral(path)
+
+    return literal.ignored || literal.unignored
+      ? literal
+      : dir
   }
 
   _t (
@@ -14361,11 +14476,77 @@ class Request {
     }
   }
 
-  onUpgrade (statusCode, headers, socket) {
+  /**
+   * @param {number|null} statusCode
+   * @param {Buffer[]|null} headers
+   * @param {import('node:stream').Duplex} socket
+   * @param {string} [statusText]
+   */
+  onUpgrade (statusCode, headers, socket, statusText = '') {
+    this.onFinally()
+
     assert(!this.aborted)
     assert(!this.completed)
 
-    return this[kHandler].onUpgrade(statusCode, headers, socket)
+    if (statusCode !== null) {
+      this.#publishUpgradeHeaders(statusCode, headers, statusText)
+    }
+
+    const result = this[kHandler].onUpgrade(statusCode, headers, socket)
+
+    if (!this.aborted) {
+      this.completed = true
+      if (statusCode !== null) {
+        this.#publishUpgradeTrailers()
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * @param {number} statusCode
+   * @param {import('node:http2').IncomingHttpHeaders} headers
+   * @param {(headers: import('node:http2').IncomingHttpHeaders) => Buffer[]} parseHeaders
+   * @param {string} [statusText]
+   */
+  onUpgradeResponse (statusCode, headers, parseHeaders, statusText = '') {
+    assert(!this.aborted)
+    assert(this.completed)
+
+    if (channels.headers.hasSubscribers) {
+      this.#publishUpgradeHeaders(statusCode, parseHeaders(headers), statusText)
+    }
+    this.#publishUpgradeTrailers()
+  }
+
+  /**
+   * @param {Error} error
+   */
+  onUpgradeError (error) {
+    assert(!this.aborted)
+    assert(this.completed)
+
+    if (channels.error.hasSubscribers) {
+      channels.error.publish({ request: this, error })
+    }
+  }
+
+  /**
+   * @param {number} statusCode
+   * @param {Buffer[]} headers
+   * @param {string} statusText
+   */
+  #publishUpgradeHeaders (statusCode, headers, statusText) {
+    if (channels.headers.hasSubscribers) {
+      channels.headers.publish({ request: this, response: { statusCode, headers, statusText } })
+    }
+  }
+
+  #publishUpgradeTrailers () {
+    if (channels.trailers.hasSubscribers) {
+      channels.trailers.publish({ request: this, trailers: [] })
+    }
   }
 
   onComplete (trailers) {
@@ -16264,7 +16445,7 @@ class Parser {
   }
 
   onUpgrade (head) {
-    const { upgrade, client, socket, headers, statusCode } = this
+    const { upgrade, client, socket, headers, statusCode, statusText } = this
 
     assert(upgrade)
     assert(client[kSocket] === socket)
@@ -16299,9 +16480,10 @@ class Parser {
     client.emit('disconnect', client[kUrl], [client], new InformationalError('upgrade'))
 
     try {
-      request.onUpgrade(statusCode, headers, socket)
-    } catch (err) {
-      util.destroy(socket, err)
+      request.onUpgrade(statusCode, headers, socket, statusText)
+    } catch (error) {
+      util.errorRequest(client, request, error)
+      util.destroy(socket, error)
     }
 
     client[kResume]()
@@ -16708,7 +16890,7 @@ async function connectH1 (client, socket) {
 
 function clearIdleSocketValidation (socket) {
   if (socket[kIdleSocketValidationTimeout]) {
-    clearTimeout(socket[kIdleSocketValidationTimeout])
+    clearImmediate(socket[kIdleSocketValidationTimeout])
     socket[kIdleSocketValidationTimeout] = null
   }
 
@@ -16717,15 +16899,23 @@ function clearIdleSocketValidation (socket) {
 
 function scheduleIdleSocketValidation (client, socket) {
   socket[kIdleSocketValidation] = 1
-  socket[kIdleSocketValidationTimeout] = setTimeout(() => {
+  // Yield to the check phase (after poll) so unsolicited bytes / FIN / RST
+  // already pending on this idle keep-alive socket are processed before the
+  // next request is written (GHSA-35p6-xmwp-9g52).
+  //
+  // setTimeout(0) pays Node's ~1ms timer floor on every sequential reuse
+  // (#5493). setImmediate avoids that, but an *unref'd* Immediate lets poll
+  // block for ~500ms when the event loop is otherwise idle (#5600 / #5606).
+  // A ref'd Immediate both keeps the pending request alive and makes poll
+  // return immediately — the hybrid those issues asked for.
+  socket[kIdleSocketValidationTimeout] = setImmediate(() => {
     socket[kIdleSocketValidationTimeout] = null
     socket[kIdleSocketValidation] = 2
 
     if (client[kSocket] === socket && !socket.destroyed) {
       client[kResume]()
     }
-  }, 0)
-  socket[kIdleSocketValidationTimeout].unref?.()
+  })
 }
 
 /**
@@ -16874,12 +17064,22 @@ function writeH1 (client, request) {
   const socket = client[kSocket]
   clearIdleSocketValidation(socket)
 
-  const abort = (err) => {
-    if (request.aborted || request.completed) {
+  /**
+   * @param {Error} [error]
+   */
+  const abort = (error) => {
+    if (request.aborted) {
       return
     }
 
-    util.errorRequest(client, request, err || new RequestAbortedError())
+    if (request.completed) {
+      if (request.upgrade || request.method === 'CONNECT') {
+        util.destroy(socket, new InformationalError('aborted'))
+      }
+      return
+    }
+
+    util.errorRequest(client, request, error || new RequestAbortedError())
 
     util.destroy(body)
     util.destroy(socket, new InformationalError('aborted'))
@@ -17336,6 +17536,7 @@ module.exports = connectH1
 
 
 const assert = __nccwpck_require__(4589)
+const { errorMonitor } = __nccwpck_require__(8474)
 const { pipeline } = __nccwpck_require__(7075)
 const util = __nccwpck_require__(3440)
 const {
@@ -17410,6 +17611,15 @@ function parseH2Headers (headers) {
   }
 
   return result
+}
+
+/**
+ * @param {import('node:http2').IncomingHttpHeaders} headers
+ * @returns {Buffer[]}
+ */
+function parseH2ResponseHeaders (headers) {
+  const { [HTTP2_HEADER_STATUS]: _statusCode, ...realHeaders } = headers
+  return parseH2Headers(realHeaders)
 }
 
 async function connectH2 (client, socket) {
@@ -17632,22 +17842,32 @@ function writeH2 (client, request) {
   headers[HTTP2_HEADER_AUTHORITY] = host || `${hostname}${port ? `:${port}` : ''}`
   headers[HTTP2_HEADER_METHOD] = method
 
-  const abort = (err) => {
-    if (request.aborted || request.completed) {
+  /**
+   * @param {Error} [error]
+   */
+  const abort = (error) => {
+    if (request.aborted) {
       return
     }
 
-    err = err || new RequestAbortedError()
+    if (request.completed) {
+      if (method === 'CONNECT' && stream != null) {
+        util.destroy(stream, error || new RequestAbortedError())
+      }
+      return
+    }
 
-    util.errorRequest(client, request, err)
+    error = error || new RequestAbortedError()
+
+    util.errorRequest(client, request, error)
 
     if (stream != null) {
-      util.destroy(stream, err)
+      util.destroy(stream, error)
     }
 
     // We do not destroy the socket as we can continue using the session
     // the stream get's destroyed and the session remains to create new streams
-    util.destroy(body, err)
+    util.destroy(body, error)
     client[kQueue][client[kRunningIdx]++] = null
     client[kResume]()
   }
@@ -17666,25 +17886,57 @@ function writeH2 (client, request) {
 
   if (method === 'CONNECT') {
     session.ref()
-    // We are already connected, streams are pending, first request
-    // will create a new stream. We trigger a request to create the stream and wait until
-    // `ready` event is triggered
     // We disabled endStream to allow the user to write to the stream
     stream = session.request(headers, { endStream: false, signal })
+    let upgradeResponseFinished = false
 
-    if (stream.id && !stream.pending) {
-      request.onUpgrade(null, null, stream)
-      ++session[kOpenStreams]
-      client[kQueue][client[kRunningIdx]++] = null
-    } else {
-      stream.once('ready', () => {
-        request.onUpgrade(null, null, stream)
-        ++session[kOpenStreams]
-        client[kQueue][client[kRunningIdx]++] = null
-      })
+    /**
+     * @param {import('node:http2').IncomingHttpHeaders} headers
+     */
+    const onResponse = (headers) => {
+      upgradeResponseFinished = true
+      stream.off(errorMonitor, onUpgradeError)
+      request.onUpgradeResponse(Number(headers[HTTP2_HEADER_STATUS]), headers, parseH2ResponseHeaders)
     }
 
+    /**
+     * @param {Error} error
+     */
+    const onUpgradeError = (error) => {
+      upgradeResponseFinished = true
+      stream.off('response', onResponse)
+      request.onUpgradeError(error)
+    }
+
+    const onReady = () => {
+      try {
+        request.onUpgrade(null, null, stream)
+      } catch (error) {
+        stream.off('response', onResponse)
+        abort(error)
+        return
+      }
+
+      if (request.aborted) {
+        return
+      }
+
+      stream.off('error', abort)
+      stream.once(errorMonitor, onUpgradeError)
+      client[kQueue][client[kRunningIdx]++] = null
+    }
+
+    stream.once('response', onResponse)
+    stream.once('error', abort)
+    ++session[kOpenStreams]
+    onReady()
+
     stream.once('close', () => {
+      if (!upgradeResponseFinished && request.completed) {
+        stream.off('response', onResponse)
+        stream.off(errorMonitor, onUpgradeError)
+        request.onUpgradeError(new InformationalError(`HTTP/2: "stream error" received - code ${stream.rstCode}`))
+      }
       session[kOpenStreams] -= 1
       if (session[kOpenStreams] === 0) session.unref()
     })
@@ -20383,6 +20635,7 @@ class RetryHandler {
     this.end = null
     this.etag = null
     this.resume = null
+    this.headersSent = false
 
     // Handle possible onConnect duplication
     this.handler.onConnect(reason => {
@@ -20393,6 +20646,20 @@ class RetryHandler {
         this.reason = reason
       }
     })
+  }
+
+  checkpointResponseEnd (headers, resume) {
+    if (this.end == null && this.opts.method !== 'HEAD') {
+      const contentLength = headers['content-length']
+      this.end = contentLength != null ? Number(contentLength) - 1 : null
+
+      assert(
+        this.end == null || Number.isFinite(this.end),
+        'invalid content-length'
+      )
+    }
+
+    this.resume = this.end != null ? resume : null
   }
 
   onRequestSent () {
@@ -20483,7 +20750,12 @@ class RetryHandler {
     this.retryCount += 1
 
     if (statusCode >= 300) {
-      if (this.retryOpts.statusCodes.includes(statusCode) === false) {
+      // Only expose a response if no earlier attempt has reached the caller.
+      // Otherwise abort this attempt so the error settles the existing body
+      // instead of replacing it with a new response.
+      if (!this.headersSent && this.retryOpts.statusCodes.includes(statusCode) === false) {
+        this.headersSent = true
+        this.checkpointResponseEnd(headers, resume)
         return this.handler.onHeaders(
           statusCode,
           rawHeaders,
@@ -20552,8 +20824,15 @@ class RetryHandler {
 
       const { start, size, end = size - 1 } = contentRange
 
-      assert(this.start === start, 'content-range mismatch')
-      assert(this.end == null || this.end === end, 'content-range mismatch')
+      if (this.start !== start || (this.end != null && this.end !== end)) {
+        this.abort(
+          new RequestRetryError('Content-Range mismatch', statusCode, {
+            headers,
+            data: { count: this.retryCount }
+          })
+        )
+        return false
+      }
 
       this.resume = resume
       return true
@@ -20565,6 +20844,7 @@ class RetryHandler {
         const range = parseRangeHeader(headers['content-range'])
 
         if (range == null) {
+          this.headersSent = true
           return this.handler.onHeaders(
             statusCode,
             rawHeaders,
@@ -20603,6 +20883,7 @@ class RetryHandler {
       )
 
       this.resume = resume
+      this.headersSent = true
       this.etag = headers.etag != null ? headers.etag : null
 
       // Weak etags are not useful for comparison nor cache
@@ -20642,7 +20923,7 @@ class RetryHandler {
   }
 
   onError (err) {
-    if (this.aborted || isDisturbed(this.opts.body)) {
+    if (this.aborted || isDisturbed(this.opts.body) || (this.headersSent && this.resume == null)) {
       return this.handler.onError(err)
     }
 
@@ -25100,6 +25381,49 @@ const COLON = 0x3A
  */
 const SPACE = 0x20
 
+const DATA = Buffer.from('data')
+const EVENT = Buffer.from('event')
+const ID = Buffer.from('id')
+const RETRY = Buffer.from('retry')
+
+function isASCIINumberBytes (buffer, start) {
+  if (start >= buffer.length) {
+    return false
+  }
+
+  for (let i = start; i < buffer.length; i++) {
+    if (buffer[i] < 0x30 || buffer[i] > 0x39) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function isValidLastEventIdBytes (buffer, start) {
+  for (let i = start; i < buffer.length; i++) {
+    if (buffer[i] === 0x00) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function isFieldName (line, length, field) {
+  if (length !== field.length) {
+    return false
+  }
+
+  for (let i = 0; i < length; i++) {
+    if (line[i] !== field[i]) {
+      return false
+    }
+  }
+
+  return true
+}
+
 /**
  * @typedef {object} EventSourceStreamEvent
  * @type {object}
@@ -25140,11 +25464,14 @@ class EventSourceStream extends Transform {
   eventEndCheck = false
 
   /**
-   * @type {Buffer}
+   * @type {Buffer[]}
    */
-  buffer = null
+  chunks = []
 
+  chunkIndex = 0
   pos = 0
+  lineChunkIndex = 0
+  linePos = 0
 
   event = {
     data: undefined,
@@ -25183,92 +25510,20 @@ class EventSourceStream extends Transform {
       return
     }
 
-    // Cache the chunk in the buffer, as the data might not be complete while
-    // processing it
-    // TODO: Investigate if there is a more performant way to handle
-    // incoming chunks
-    // see: https://github.com/nodejs/undici/issues/2630
-    if (this.buffer) {
-      this.buffer = Buffer.concat([this.buffer, chunk])
-    } else {
-      this.buffer = chunk
-    }
+    this.chunks.push(chunk)
 
     // Strip leading byte-order-mark if we opened the stream and started
     // the processing of the incoming data
     if (this.checkBOM) {
-      switch (this.buffer.length) {
-        case 1:
-          // Check if the first byte is the same as the first byte of the BOM
-          if (this.buffer[0] === BOM[0]) {
-            // If it is, we need to wait for more data
-            callback()
-            return
-          }
-          // Set the checkBOM flag to false as we don't need to check for the
-          // BOM anymore
-          this.checkBOM = false
-
-          // The buffer only contains one byte so we need to wait for more data
-          callback()
-          return
-        case 2:
-          // Check if the first two bytes are the same as the first two bytes
-          // of the BOM
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1]
-          ) {
-            // If it is, we need to wait for more data, because the third byte
-            // is needed to determine if it is the BOM or not
-            callback()
-            return
-          }
-
-          // Set the checkBOM flag to false as we don't need to check for the
-          // BOM anymore
-          this.checkBOM = false
-          break
-        case 3:
-          // Check if the first three bytes are the same as the first three
-          // bytes of the BOM
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1] &&
-            this.buffer[2] === BOM[2]
-          ) {
-            // If it is, we can drop the buffered data, as it is only the BOM
-            this.buffer = Buffer.alloc(0)
-            // Set the checkBOM flag to false as we don't need to check for the
-            // BOM anymore
-            this.checkBOM = false
-
-            // Await more data
-            callback()
-            return
-          }
-          // If it is not the BOM, we can start processing the data
-          this.checkBOM = false
-          break
-        default:
-          // The buffer is longer than 3 bytes, so we can drop the BOM if it is
-          // present
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1] &&
-            this.buffer[2] === BOM[2]
-          ) {
-            // Remove the BOM from the buffer
-            this.buffer = this.buffer.subarray(3)
-          }
-
-          // Set the checkBOM flag to false as we don't need to check for the
-          this.checkBOM = false
-          break
+      if (this.handleBOM()) {
+        callback()
+        return
       }
     }
 
-    while (this.pos < this.buffer.length) {
+    while (this.hasCurrentByte()) {
+      const byte = this.currentByte()
+
       // If the previous line ended with an end-of-line, we need to check
       // if the next character is also an end-of-line.
       if (this.eventEndCheck) {
@@ -25281,10 +25536,9 @@ class EventSourceStream extends Transform {
         if (this.crlfCheck) {
           // If the current character is a line feed, we can remove it
           // from the buffer and reset the crlfCheck flag
-          if (this.buffer[this.pos] === LF) {
-            this.buffer = this.buffer.subarray(this.pos + 1)
-            this.pos = 0
+          if (byte === LF) {
             this.crlfCheck = false
+            this.consumeCurrentByte()
 
             // It is possible that the line feed is not the end of the
             // event. We need to check if the next character is an
@@ -25300,19 +25554,17 @@ class EventSourceStream extends Transform {
           this.crlfCheck = false
         }
 
-        if (this.buffer[this.pos] === LF || this.buffer[this.pos] === CR) {
+        if (byte === LF || byte === CR) {
           // If the current character is a carriage return, we need to
           // set the crlfCheck flag to true, as we need to check if the
           // next character is a line feed so we can remove it from the
           // buffer
-          if (this.buffer[this.pos] === CR) {
+          if (byte === CR) {
             this.crlfCheck = true
           }
 
-          this.buffer = this.buffer.subarray(this.pos + 1)
-          this.pos = 0
-          if (
-            this.event.data !== undefined || this.event.event || this.event.id || this.event.retry) {
+          this.consumeCurrentByte()
+          if (this.hasPendingEvent()) {
             this.processEvent(this.event)
           }
           this.clearEvent()
@@ -25326,22 +25578,18 @@ class EventSourceStream extends Transform {
 
       // If the current character is an end-of-line, we can process the
       // line
-      if (this.buffer[this.pos] === LF || this.buffer[this.pos] === CR) {
+      if (byte === LF || byte === CR) {
         // If the current character is a carriage return, we need to
         // set the crlfCheck flag to true, as we need to check if the
         // next character is a line feed
-        if (this.buffer[this.pos] === CR) {
+        if (byte === CR) {
           this.crlfCheck = true
         }
 
         // In any case, we can process the line as we reached an
         // end-of-line character
-        this.parseLine(this.buffer.subarray(0, this.pos), this.event)
-
-        // Remove the processed line from the buffer
-        this.buffer = this.buffer.subarray(this.pos + 1)
-        // Reset the position as we removed the processed line from the buffer
-        this.pos = 0
+        this.parseLine(this.readLine(), this.event)
+        this.consumeCurrentByte()
         // A line was processed and this could be the end of the event. We need
         // to check if the next line is empty to determine if the event is
         // finished.
@@ -25349,7 +25597,7 @@ class EventSourceStream extends Transform {
         continue
       }
 
-      this.pos++
+      this.advanceCursor()
     }
 
     callback()
@@ -25374,64 +25622,53 @@ class EventSourceStream extends Transform {
       return
     }
 
-    let field = ''
-    let value = ''
+    let fieldLength = line.length
+    let valueStart = line.length
 
     // If the line contains a U+003A COLON character (:)
     if (colonPosition !== -1) {
-      // Collect the characters on the line before the first U+003A COLON
-      // character (:), and let field be that string.
-      // TODO: Investigate if there is a more performant way to extract the
-      // field
-      // see: https://github.com/nodejs/undici/issues/2630
-      field = line.subarray(0, colonPosition).toString('utf8')
+      fieldLength = colonPosition
 
       // Collect the characters on the line after the first U+003A COLON
       // character (:), and let value be that string.
       // If value starts with a U+0020 SPACE character, remove it from value.
-      let valueStart = colonPosition + 1
+      valueStart = colonPosition + 1
       if (line[valueStart] === SPACE) {
         ++valueStart
       }
-      // TODO: Investigate if there is a more performant way to extract the
-      // value
-      // see: https://github.com/nodejs/undici/issues/2630
-      value = line.subarray(valueStart).toString('utf8')
-
-      // Otherwise, the string is not empty but does not contain a U+003A COLON
-      // character (:)
-    } else {
-      // Process the field using the steps described below, using the whole
-      // line as the field name, and the empty string as the field value.
-      field = line.toString('utf8')
-      value = ''
     }
 
-    // Modify the event with the field name and value. The value is also
-    // decoded as UTF-8
-    switch (field) {
-      case 'data':
-        if (event[field] === undefined) {
-          event[field] = value
-        } else {
-          event[field] += `\n${value}`
-        }
-        break
-      case 'retry':
-        if (isASCIINumber(value)) {
-          event[field] = value
-        }
-        break
-      case 'id':
-        if (isValidLastEventId(value)) {
-          event[field] = value
-        }
-        break
-      case 'event':
-        if (value.length > 0) {
-          event[field] = value
-        }
-        break
+    if (isFieldName(line, fieldLength, DATA)) {
+      const value = line.toString('utf8', valueStart)
+
+      if (event.data === undefined) {
+        event.data = value
+      } else {
+        event.data += `\n${value}`
+      }
+      return
+    }
+
+    if (isFieldName(line, fieldLength, RETRY)) {
+      if (isASCIINumberBytes(line, valueStart)) {
+        event.retry = line.toString('utf8', valueStart)
+      }
+      return
+    }
+
+    if (isFieldName(line, fieldLength, ID)) {
+      if (isValidLastEventIdBytes(line, valueStart)) {
+        event.id = line.toString('utf8', valueStart)
+      }
+      return
+    }
+
+    if (isFieldName(line, fieldLength, EVENT)) {
+      const value = line.toString('utf8', valueStart)
+
+      if (value.length > 0) {
+        event.event = value
+      }
     }
   }
 
@@ -25461,12 +25698,151 @@ class EventSourceStream extends Transform {
   }
 
   clearEvent () {
-    this.event = {
-      data: undefined,
-      event: undefined,
-      id: undefined,
-      retry: undefined
+    this.event.data = undefined
+    this.event.event = undefined
+    this.event.id = undefined
+    this.event.retry = undefined
+  }
+
+  hasPendingEvent () {
+    return this.event.data !== undefined ||
+      this.event.event !== undefined ||
+      this.event.id !== undefined ||
+      this.event.retry !== undefined
+  }
+
+  hasCurrentByte () {
+    return this.chunkIndex < this.chunks.length &&
+      this.pos < this.chunks[this.chunkIndex].length
+  }
+
+  currentByte () {
+    return this.chunks[this.chunkIndex][this.pos]
+  }
+
+  consumeCurrentByte () {
+    this.advanceCursor()
+    this.syncLineStartToCursor()
+  }
+
+  advanceCursor () {
+    this.pos++
+
+    while (this.chunkIndex < this.chunks.length && this.pos >= this.chunks[this.chunkIndex].length) {
+      this.chunkIndex++
+      this.pos = 0
     }
+  }
+
+  syncLineStartToCursor () {
+    this.lineChunkIndex = this.chunkIndex
+    this.linePos = this.pos
+    this.dropConsumedChunks()
+  }
+
+  dropConsumedChunks () {
+    while (this.lineChunkIndex > 0) {
+      this.chunks.shift()
+      this.lineChunkIndex--
+      this.chunkIndex--
+    }
+
+    if (this.chunkIndex === this.chunks.length) {
+      this.chunks.length = 0
+      this.chunkIndex = 0
+      this.pos = 0
+      this.lineChunkIndex = 0
+      this.linePos = 0
+    }
+  }
+
+  readLine () {
+    if (this.lineChunkIndex === this.chunkIndex) {
+      return this.chunks[this.chunkIndex].subarray(this.linePos, this.pos)
+    }
+
+    const chunks = []
+    let length = 0
+
+    for (let i = this.lineChunkIndex; i <= this.chunkIndex; i++) {
+      const chunk = this.chunks[i]
+      const start = i === this.lineChunkIndex ? this.linePos : 0
+      const end = i === this.chunkIndex ? this.pos : chunk.length
+      const slice = chunk.subarray(start, end)
+      length += slice.length
+      chunks.push(slice)
+    }
+
+    return Buffer.concat(chunks, length)
+  }
+
+  peekBufferedByte (offset) {
+    let chunkIndex = this.lineChunkIndex
+    let pos = this.linePos
+
+    while (chunkIndex < this.chunks.length) {
+      const chunk = this.chunks[chunkIndex]
+      const remaining = chunk.length - pos
+
+      if (offset < remaining) {
+        return chunk[pos + offset]
+      }
+
+      offset -= remaining
+      chunkIndex++
+      pos = 0
+    }
+  }
+
+  discardLeadingBytes (count) {
+    while (count > 0 && this.lineChunkIndex < this.chunks.length) {
+      const chunk = this.chunks[this.lineChunkIndex]
+      const remaining = chunk.length - this.linePos
+
+      if (count < remaining) {
+        this.linePos += count
+        count = 0
+      } else {
+        count -= remaining
+        this.lineChunkIndex++
+        this.linePos = 0
+      }
+    }
+
+    this.chunkIndex = this.lineChunkIndex
+    this.pos = this.linePos
+    this.dropConsumedChunks()
+  }
+
+  handleBOM () {
+    const first = this.peekBufferedByte(0)
+    const second = this.peekBufferedByte(1)
+    const third = this.peekBufferedByte(2)
+
+    if (second === undefined) {
+      if (first === BOM[0]) {
+        return true
+      }
+
+      this.checkBOM = false
+      return true
+    }
+
+    if (third === undefined) {
+      if (first === BOM[0] && second === BOM[1]) {
+        return true
+      }
+
+      this.checkBOM = false
+      return false
+    }
+
+    if (first === BOM[0] && second === BOM[1] && third === BOM[2]) {
+      this.discardLeadingBytes(3)
+    }
+
+    this.checkBOM = false
+    return !this.hasCurrentByte()
   }
 }
 
@@ -36735,7 +37111,7 @@ function establishWebSocketConnection (url, protocols, client, ws, onEstablish, 
         // is specified, the server needs to include the same field and one of
         // the selected subprotocol values in its response for the connection to
         // be established.
-        if (!requestProtocols.includes(secProtocol)) {
+        if (requestProtocols === null || !requestProtocols.includes(secProtocol)) {
           failWebsocketConnection(ws, 'Protocol was not set in the opening handshake.')
           return
         }
@@ -37496,7 +37872,12 @@ class PerMessageDeflate {
 
         if (this.#maxPayloadSize > 0 && this.#inflate[kLength] > this.#maxPayloadSize) {
           callback(new MessageSizeExceededError())
+          // The inflater may still hold buffered input that can emit a late
+          // zlib error. Remove the data listener, then deterministically stop
+          // the stream so a subsequent 'error' cannot fire without a listener
+          // (which would terminate the process as an unhandled error event).
           this.#inflate.removeAllListeners()
+          this.#inflate.destroy()
           this.#inflate = null
           return
         }
@@ -55867,7 +56248,7 @@ function markdownLineEndingOrSpace(code) {
  * @returns {boolean}
  *   Whether it matches.
  */
-function markdownSpace(code) {
+function micromark_util_character_markdownSpace(code) {
   return code === -2 || code === -1 || code === 32;
 }
 
@@ -55946,7 +56327,7 @@ function regexCheck(regex) {
 
 
 
-// To do: implement `spaceOrTab`, `spaceOrTabMinMax`, `spaceOrTabWithOptions`.
+// To do: implement `spaceOrTabWithOptions` (`connect`, `content`).
 
 /**
  * Parse spaces and tabs.
@@ -55974,20 +56355,20 @@ function regexCheck(regex) {
  * @param {State} ok
  *   State switched to when successful.
  * @param {TokenType} type
- *   Type (`' \t'`).
+ *   Type of the whole whitespace.
  * @param {number | undefined} [max=Infinity]
  *   Max (exclusive).
  * @returns {State}
  *   Start state.
  */
 function factorySpace(effects, ok, type, max) {
-  const limit = max ? max - 1 : Number.POSITIVE_INFINITY;
+  const limit = max ? max - 1 : Infinity;
   let size = 0;
   return start;
 
   /** @type {State} */
   function start(code) {
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.enter(type);
       return prefix(code);
     }
@@ -55996,12 +56377,64 @@ function factorySpace(effects, ok, type, max) {
 
   /** @type {State} */
   function prefix(code) {
-    if (markdownSpace(code) && size++ < limit) {
+    if (micromark_util_character_markdownSpace(code) && size++ < limit) {
       effects.consume(code);
       return prefix;
     }
     effects.exit(type);
     return ok(code);
+  }
+}
+
+/**
+ * Parse spaces and tabs, with a required minimum and maximum, matching
+ * `markdown-rs`’s `space_or_tab_min_max`.
+ *
+ * Unlike `factorySpace`, this can fail: `nok` is used when fewer than
+ * `min` spaces or tabs are found.
+ *
+ * @param {Effects} effects
+ *   Context.
+ * @param {State} ok
+ *   State switched to when successful.
+ * @param {State} nok
+ *   State switched to when unsuccessful.
+ * @param {TokenType} type
+ *   Type of the whole whitespace.
+ * @param {number} min
+ *   Minimum allowed characters (inclusive).
+ * @param {number} max
+ *   Maximum allowed characters (inclusive).
+ * @returns {State}
+ *   Start state.
+ */
+function factorySpaceMinMax(effects, ok, nok, type, min, max) {
+  let size = 0;
+  return start;
+
+  /** @type {State} */
+  function start(code) {
+    if (max > 0 && markdownSpace(code)) {
+      effects.enter(type);
+      return prefix(code);
+    }
+    return after(code);
+  }
+
+  /** @type {State} */
+  function prefix(code) {
+    if (markdownSpace(code) && size < max) {
+      effects.consume(code);
+      size++;
+      return prefix;
+    }
+    effects.exit(type);
+    return after(code);
+  }
+
+  /** @type {State} */
+  function after(code) {
+    return size >= min ? ok(code) : nok(code);
   }
 }
 ;// CONCATENATED MODULE: ./node_modules/micromark-factory-whitespace/index.js
@@ -56043,7 +56476,7 @@ function factoryWhitespace(effects, ok) {
       seen = true;
       return start;
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       return factorySpace(effects, start, seen ? "linePrefix" : "lineSuffix")(code);
     }
     return ok(code);
@@ -56100,7 +56533,7 @@ function factoryAttributes(effects, ok, nok, attributesType, attributesMarkerTyp
       type = attributeClassType;
       return shortcutStart(code);
     }
-    if (disallowEol && markdownSpace(code)) {
+    if (disallowEol && micromark_util_character_markdownSpace(code)) {
       return factorySpace(effects, between, "whitespace")(code);
     }
     if (!disallowEol && markdownLineEndingOrSpace(code)) {
@@ -56161,7 +56594,7 @@ function factoryAttributes(effects, ok, nok, attributesType, attributesMarkerTyp
   function name(code) {
     if (code === null || markdownLineEnding(code) || unicodeWhitespace(code) || unicodePunctuation(code) && code !== 45 && code !== 46 && code !== 58 && code !== 95) {
       effects.exit(attributeNameType);
-      if (disallowEol && markdownSpace(code)) {
+      if (disallowEol && micromark_util_character_markdownSpace(code)) {
         return factorySpace(effects, nameAfter, "whitespace")(code);
       }
       if (!disallowEol && markdownLineEndingOrSpace(code)) {
@@ -56200,7 +56633,7 @@ function factoryAttributes(effects, ok, nok, attributesType, attributesMarkerTyp
       marker = code;
       return valueQuotedStart;
     }
-    if (disallowEol && markdownSpace(code)) {
+    if (disallowEol && micromark_util_character_markdownSpace(code)) {
       return factorySpace(effects, valueBefore, "whitespace")(code);
     }
     if (!disallowEol && markdownLineEndingOrSpace(code)) {
@@ -57790,7 +58223,7 @@ function tokenizeBlankLine(effects, ok, nok) {
    * @type {State}
    */
   function start(code) {
-    return markdownSpace(code) ? factorySpace(effects, after, "linePrefix")(code) : after(code);
+    return micromark_util_character_markdownSpace(code) ? factorySpace(effects, after, "linePrefix")(code) : after(code);
   }
 
   /**
@@ -58757,7 +59190,7 @@ function tokenizeTable(effects, ok, nok) {
       // Note: in `markdown-rs`, we need to reset, in `micromark-js` we don‘t.
       return nok(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       // To do: check if this is fine.
       // effects.attempt(State::Next(StateName::GfmTableHeadRowBreak), State::Nok)
       // State::Retry(space_or_tab(tokenizer))
@@ -58847,7 +59280,7 @@ function tokenizeTable(effects, ok, nok) {
     effects.enter('tableDelimiterRow');
     // Track if we’ve seen a `:` or `|`.
     seen = false;
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       return factorySpace(effects, headDelimiterBefore, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code);
     }
     return headDelimiterBefore(code);
@@ -58896,7 +59329,7 @@ function tokenizeTable(effects, ok, nok) {
    * @type {State}
    */
   function headDelimiterCellBefore(code) {
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       return factorySpace(effects, headDelimiterValueBefore, "whitespace")(code);
     }
     return headDelimiterValueBefore(code);
@@ -58999,7 +59432,7 @@ function tokenizeTable(effects, ok, nok) {
    * @type {State}
    */
   function headDelimiterRightAlignmentAfter(code) {
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       return factorySpace(effects, headDelimiterCellAfter, "whitespace")(code);
     }
     return headDelimiterCellAfter(code);
@@ -59100,7 +59533,7 @@ function tokenizeTable(effects, ok, nok) {
       effects.exit('tableRow');
       return ok(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       return factorySpace(effects, bodyRowBreak, "whitespace")(code);
     }
 
@@ -61701,7 +62134,7 @@ function tokenizeThematicBreak(effects, ok, nok) {
       return sequence;
     }
     effects.exit("thematicBreakSequence");
-    return markdownSpace(code) ? factorySpace(effects, atBreak, "whitespace")(code) : atBreak(code);
+    return micromark_util_character_markdownSpace(code) ? factorySpace(effects, atBreak, "whitespace")(code) : atBreak(code);
   }
 }
 ;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/list.js
@@ -61816,7 +62249,7 @@ function tokenizeListStart(effects, ok, nok) {
 
   /** @type {State} */
   function otherPrefix(code) {
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.enter("listItemPrefixWhitespace");
       effects.consume(code);
       effects.exit("listItemPrefixWhitespace");
@@ -61853,7 +62286,7 @@ function tokenizeListContinuation(effects, ok, nok) {
 
   /** @type {State} */
   function notBlank(code) {
-    if (self.containerState.furtherBlankLines || !markdownSpace(code)) {
+    if (self.containerState.furtherBlankLines || !micromark_util_character_markdownSpace(code)) {
       self.containerState.furtherBlankLines = undefined;
       self.containerState.initialBlankLine = undefined;
       return notInCurrentItem(code);
@@ -61915,7 +62348,7 @@ function tokenizeListItemPrefixWhitespace(effects, ok, nok) {
   /** @type {State} */
   function afterPrefix(code) {
     const tail = self.events[self.events.length - 1];
-    return !markdownSpace(code) && tail && tail[1].type === "listItemPrefixWhitespace" ? ok(code) : nok(code);
+    return !micromark_util_character_markdownSpace(code) && tail && tail[1].type === "listItemPrefixWhitespace" ? ok(code) : nok(code);
   }
 }
 ;// CONCATENATED MODULE: ./node_modules/micromark-core-commonmark/lib/block-quote.js
@@ -61989,7 +62422,7 @@ function tokenizeBlockQuoteStart(effects, ok, nok) {
    * @type {State}
    */
   function after(code) {
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.enter("blockQuotePrefixWhitespace");
       effects.consume(code);
       effects.exit("blockQuotePrefixWhitespace");
@@ -62032,7 +62465,7 @@ function tokenizeBlockQuoteContinuation(effects, ok, nok) {
    * @type {State}
    */
   function contStart(code) {
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       // Always populated by defaults.
 
       return factorySpace(effects, contBefore, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code);
@@ -62395,7 +62828,7 @@ function micromark_factory_label_factoryLabel(effects, ok, nok, type, markerType
       return atBreak(code);
     }
     effects.consume(code);
-    if (!seen) seen = !markdownSpace(code);
+    if (!seen) seen = !micromark_util_character_markdownSpace(code);
     return code === 92 ? labelEscape : labelInside;
   }
 
@@ -62732,7 +63165,7 @@ function tokenizeDefinition(effects, ok, nok) {
    * @type {State}
    */
   function after(code) {
-    return markdownSpace(code) ? factorySpace(effects, afterWhitespace, "whitespace")(code) : afterWhitespace(code);
+    return micromark_util_character_markdownSpace(code) ? factorySpace(effects, afterWhitespace, "whitespace")(code) : afterWhitespace(code);
   }
 
   /**
@@ -62815,7 +63248,7 @@ function tokenizeTitleBefore(effects, ok, nok) {
    * @type {State}
    */
   function titleAfter(code) {
-    return markdownSpace(code) ? factorySpace(effects, titleAfterOptionalWhitespace, "whitespace")(code) : titleAfterOptionalWhitespace(code);
+    return micromark_util_character_markdownSpace(code) ? factorySpace(effects, titleAfterOptionalWhitespace, "whitespace")(code) : titleAfterOptionalWhitespace(code);
   }
 
   /**
@@ -63156,7 +63589,7 @@ function tokenizeHeadingAtx(effects, ok, nok) {
       // tokenizer.interrupt = false
       return ok(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       return factorySpace(effects, atBreak, "whitespace")(code);
     }
 
@@ -63370,7 +63803,7 @@ function tokenizeSetextUnderline(effects, ok, nok) {
       return inside;
     }
     effects.exit("setextHeadingLineSequence");
-    return markdownSpace(code) ? factorySpace(effects, after, "lineSuffix")(code) : after(code);
+    return micromark_util_character_markdownSpace(code) ? factorySpace(effects, after, "lineSuffix")(code) : after(code);
   }
 
   /**
@@ -63816,7 +64249,7 @@ function tokenizeHtmlFlow(effects, ok, nok) {
    * @type {State}
    */
   function completeClosingTagAfter(code) {
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return completeClosingTagAfter;
     }
@@ -63857,7 +64290,7 @@ function tokenizeHtmlFlow(effects, ok, nok) {
       effects.consume(code);
       return completeAttributeName;
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return completeAttributeNameBefore;
     }
@@ -63905,7 +64338,7 @@ function tokenizeHtmlFlow(effects, ok, nok) {
       effects.consume(code);
       return completeAttributeValueBefore;
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return completeAttributeNameAfter;
     }
@@ -63934,7 +64367,7 @@ function tokenizeHtmlFlow(effects, ok, nok) {
       markerB = code;
       return completeAttributeValueQuoted;
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return completeAttributeValueBefore;
     }
@@ -63996,7 +64429,7 @@ function tokenizeHtmlFlow(effects, ok, nok) {
    * @type {State}
    */
   function completeAttributeValueQuotedAfter(code) {
-    if (code === 47 || code === 62 || markdownSpace(code)) {
+    if (code === 47 || code === 62 || micromark_util_character_markdownSpace(code)) {
       return completeAttributeNameBefore(code);
     }
     return nok(code);
@@ -64036,7 +64469,7 @@ function tokenizeHtmlFlow(effects, ok, nok) {
       // tokenizer.concrete = true
       return continuation(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return completeAfter;
     }
@@ -64469,7 +64902,7 @@ function tokenizeCodeFenced(effects, ok, nok) {
       return nok(code);
     }
     effects.exit("codeFencedFenceSequence");
-    return markdownSpace(code) ? factorySpace(effects, infoBefore, "whitespace")(code) : infoBefore(code);
+    return micromark_util_character_markdownSpace(code) ? factorySpace(effects, infoBefore, "whitespace")(code) : infoBefore(code);
   }
 
   /**
@@ -64514,7 +64947,7 @@ function tokenizeCodeFenced(effects, ok, nok) {
       effects.exit("codeFencedFenceInfo");
       return infoBefore(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.exit("chunkString");
       effects.exit("codeFencedFenceInfo");
       return factorySpace(effects, metaBefore, "whitespace")(code);
@@ -64623,7 +65056,7 @@ function tokenizeCodeFenced(effects, ok, nok) {
    * @type {State}
    */
   function contentStart(code) {
-    return initialPrefix > 0 && markdownSpace(code) ? factorySpace(effects, beforeContentChunk, "linePrefix", initialPrefix + 1)(code) : beforeContentChunk(code);
+    return initialPrefix > 0 && micromark_util_character_markdownSpace(code) ? factorySpace(effects, beforeContentChunk, "linePrefix", initialPrefix + 1)(code) : beforeContentChunk(code);
   }
 
   /**
@@ -64722,7 +65155,7 @@ function tokenizeCodeFenced(effects, ok, nok) {
 
       // To do: `enter` here or in next state?
       effects.enter("codeFencedFence");
-      return markdownSpace(code) ? factorySpace(effects, beforeSequenceClose, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code) : beforeSequenceClose(code);
+      return micromark_util_character_markdownSpace(code) ? factorySpace(effects, beforeSequenceClose, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code) : beforeSequenceClose(code);
     }
 
     /**
@@ -64765,7 +65198,7 @@ function tokenizeCodeFenced(effects, ok, nok) {
       }
       if (size >= sizeOpen) {
         effects.exit("codeFencedFenceSequence");
-        return markdownSpace(code) ? factorySpace(effects, sequenceCloseAfter, "whitespace")(code) : sequenceCloseAfter(code);
+        return micromark_util_character_markdownSpace(code) ? factorySpace(effects, sequenceCloseAfter, "whitespace")(code) : sequenceCloseAfter(code);
       }
       return nok(code);
     }
@@ -68824,7 +69257,7 @@ function tokenizeHtmlText(effects, ok, nok) {
       returnState = tagCloseBetween;
       return lineEndingBefore(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return tagCloseBetween;
     }
@@ -68878,7 +69311,7 @@ function tokenizeHtmlText(effects, ok, nok) {
       returnState = tagOpenBetween;
       return lineEndingBefore(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return tagOpenBetween;
     }
@@ -68924,7 +69357,7 @@ function tokenizeHtmlText(effects, ok, nok) {
       returnState = tagOpenAttributeNameAfter;
       return lineEndingBefore(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return tagOpenAttributeNameAfter;
     }
@@ -68955,7 +69388,7 @@ function tokenizeHtmlText(effects, ok, nok) {
       returnState = tagOpenAttributeValueBefore;
       return lineEndingBefore(code);
     }
-    if (markdownSpace(code)) {
+    if (micromark_util_character_markdownSpace(code)) {
       effects.consume(code);
       return tagOpenAttributeValueBefore;
     }
@@ -69088,7 +69521,7 @@ function tokenizeHtmlText(effects, ok, nok) {
   function lineEndingAfter(code) {
     // Always populated by defaults.
 
-    return markdownSpace(code) ? factorySpace(effects, lineEndingAfterPrefix, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code) : lineEndingAfterPrefix(code);
+    return micromark_util_character_markdownSpace(code) ? factorySpace(effects, lineEndingAfterPrefix, "linePrefix", self.parser.constructs.disable.null.includes('codeIndented') ? undefined : 4)(code) : lineEndingAfterPrefix(code);
   }
 
   /**
@@ -71756,9 +72189,9 @@ function ansiRegex({onlyFirst = false} = {}) {
 	// Valid string terminator sequences are BEL, ESC\, and 0x9c
 	const ST = '(?:\\u0007|\\u001B\\u005C|\\u009C)';
 
-	// OSC sequences only: ESC ] ... ST
-	// The payload stops at the first terminator character rather than scanning ahead for one, so an unterminated `ESC ]` cannot rescan the rest of the input. Terminals likewise abort a control string on an unexpected ESC.
-	const osc = `(?:\\u001B\\][^\\u0007\\u001B\\u009C]*${ST})`;
+	// OSC sequences only: ESC ] ... ST (or the C1 introducer 0x9d ... ST)
+	// The payload stops at the first terminator character rather than scanning ahead for one, so an unterminated `ESC ]` cannot rescan the rest of the input. Terminals likewise abort a control string on an unexpected ESC. The payload also stops at 0x9d so an unterminated C1 OSC cannot swallow the next one.
+	const osc = `(?:(?:\\u001B\\]|\\u009D)[^\\u0007\\u001B\\u009C\\u009D]*${ST})`;
 
 	// CSI and related: ESC/C1, optional intermediates, optional params (supports ; and :) then final byte
 	const csi = '[\\u001B\\u009B][[\\]()#;?]*(?:\\d{1,4}(?:[;:]\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]';
@@ -71810,7 +72243,7 @@ const lookup_data_narrowRanges = (/* unused pure expression or super */ null && 
 
 const wideMinimalCodePoint = 4352;
 const wideMaximumCodePoint = 262141;
-const wideRanges = [4352, 4447, 8986, 8987, 9001, 9002, 9193, 9196, 9200, 9200, 9203, 9203, 9725, 9726, 9748, 9749, 9776, 9783, 9800, 9811, 9855, 9855, 9866, 9871, 9875, 9875, 9889, 9889, 9898, 9899, 9917, 9918, 9924, 9925, 9934, 9934, 9940, 9940, 9962, 9962, 9970, 9971, 9973, 9973, 9978, 9978, 9981, 9981, 9989, 9989, 9994, 9995, 10024, 10024, 10060, 10060, 10062, 10062, 10067, 10069, 10071, 10071, 10133, 10135, 10160, 10160, 10175, 10175, 11035, 11036, 11088, 11088, 11093, 11093, 11904, 11929, 11931, 12019, 12032, 12245, 12272, 12287, 12289, 12350, 12353, 12438, 12441, 12543, 12549, 12591, 12593, 12686, 12688, 12773, 12783, 12830, 12832, 12871, 12880, 42124, 42128, 42182, 43360, 43388, 44032, 55203, 63744, 64255, 65040, 65049, 65072, 65106, 65108, 65126, 65128, 65131, 94176, 94180, 94192, 94198, 94208, 101589, 101631, 101662, 101760, 101874, 110576, 110579, 110581, 110587, 110589, 110590, 110592, 110882, 110898, 110898, 110928, 110930, 110933, 110933, 110948, 110951, 110960, 111355, 119552, 119638, 119648, 119670, 126980, 126980, 127183, 127183, 127374, 127374, 127377, 127386, 127488, 127490, 127504, 127547, 127552, 127560, 127568, 127569, 127584, 127589, 127744, 127776, 127789, 127797, 127799, 127868, 127870, 127891, 127904, 127946, 127951, 127955, 127968, 127984, 127988, 127988, 127992, 128062, 128064, 128064, 128066, 128252, 128255, 128317, 128331, 128334, 128336, 128359, 128378, 128378, 128405, 128406, 128420, 128420, 128507, 128591, 128640, 128709, 128716, 128716, 128720, 128722, 128725, 128728, 128732, 128735, 128747, 128748, 128756, 128764, 128992, 129003, 129008, 129008, 129292, 129338, 129340, 129349, 129351, 129535, 129648, 129660, 129664, 129674, 129678, 129734, 129736, 129736, 129741, 129756, 129759, 129770, 129775, 129784, 131072, 196605, 196608, 262141];
+const wideRanges = [4352, 4447, 8986, 8987, 9001, 9002, 9193, 9196, 9200, 9200, 9203, 9203, 9725, 9726, 9748, 9749, 9776, 9783, 9800, 9811, 9855, 9855, 9866, 9871, 9875, 9875, 9889, 9889, 9898, 9899, 9917, 9918, 9924, 9925, 9934, 9934, 9940, 9940, 9962, 9962, 9970, 9971, 9973, 9973, 9978, 9978, 9981, 9981, 9989, 9989, 9994, 9995, 10024, 10024, 10060, 10060, 10062, 10062, 10067, 10069, 10071, 10071, 10133, 10135, 10160, 10160, 10175, 10175, 11035, 11036, 11088, 11088, 11093, 11093, 11904, 11929, 11931, 12019, 12032, 12245, 12272, 12287, 12289, 12350, 12353, 12438, 12441, 12543, 12549, 12591, 12593, 12686, 12688, 12773, 12783, 12830, 12832, 12871, 12880, 42124, 42128, 42182, 43360, 43388, 44032, 55203, 63744, 64255, 65040, 65049, 65072, 65106, 65108, 65126, 65128, 65131, 94176, 94180, 94192, 94198, 94208, 101594, 101631, 101664, 101760, 101874, 101888, 102801, 102816, 102866, 110576, 110579, 110581, 110587, 110589, 110590, 110592, 110888, 110898, 110898, 110928, 110930, 110933, 110933, 110948, 110952, 110960, 111355, 119552, 119638, 119648, 119670, 126980, 126980, 127183, 127183, 127374, 127374, 127377, 127386, 127406, 127406, 127488, 127490, 127504, 127547, 127552, 127560, 127568, 127569, 127584, 127589, 127744, 127776, 127789, 127797, 127799, 127868, 127870, 127891, 127904, 127946, 127951, 127955, 127968, 127984, 127988, 127988, 127992, 128062, 128064, 128064, 128066, 128252, 128255, 128317, 128331, 128334, 128336, 128359, 128378, 128378, 128405, 128406, 128420, 128420, 128507, 128591, 128640, 128709, 128716, 128716, 128720, 128722, 128725, 128729, 128732, 128735, 128747, 128748, 128756, 128764, 128986, 128986, 128992, 129003, 129008, 129008, 129292, 129338, 129340, 129349, 129351, 129535, 129648, 129660, 129664, 129734, 129736, 129736, 129740, 129757, 129759, 129771, 129775, 129786, 131072, 196605, 196608, 262141];
 
 ;// CONCATENATED MODULE: ./node_modules/get-east-asian-width/utilities.js
 /**
@@ -71883,7 +72316,7 @@ const isAmbiguous = codePoint => {
 	return utilities_isInRange(ambiguousRanges, codePoint);
 };
 
-const isFullWidth = codePoint => {
+const isFullwidth = codePoint => {
 	if (
 		codePoint < fullwidthMinimalCodePoint
 		|| codePoint > fullwidthMaximumCodePoint
@@ -71894,7 +72327,7 @@ const isFullWidth = codePoint => {
 	return utilities_isInRange(fullwidthRanges, codePoint);
 };
 
-const isHalfWidth = codePoint => {
+const isHalfwidth = codePoint => {
 	if (
 		codePoint < halfwidthMinimalCodePoint
 		|| codePoint > halfwidthMaximumCodePoint
@@ -71939,11 +72372,11 @@ function lookup_getCategory(codePoint) {
 		return 'ambiguous';
 	}
 
-	if (isFullWidth(codePoint)) {
+	if (isFullwidth(codePoint)) {
 		return 'fullwidth';
 	}
 
-	if (isHalfWidth(codePoint)) {
+	if (isHalfwidth(codePoint)) {
 		return 'halfwidth';
 	}
 
@@ -71977,7 +72410,7 @@ function eastAsianWidth(codePoint, {ambiguousAsWide = false} = {}) {
 	validate(codePoint);
 
 	if (
-		isFullWidth(codePoint)
+		isFullwidth(codePoint)
 		|| isWide(codePoint)
 		|| (ambiguousAsWide && isAmbiguous(codePoint))
 	) {
