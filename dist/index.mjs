@@ -3564,12 +3564,6 @@ const define = (object, key, value) => {
 
 const RETURN_FALSE = () => false
 
-// See fixtures #59
-const cleanRangeBackSlash = slashes => {
-  const {length} = slashes
-  return slashes.slice(0, length - length % 2)
-}
-
 // > The range notation, e.g. [a-zA-Z],
 // > can be used to match one of the characters in a range.
 //
@@ -3709,14 +3703,14 @@ const scanBracket = (pattern, start) => {
       }
 
       if (end > nameStart && pattern[end - 1] === ':') {
-        const expanded = POSIX_CLASSES[pattern.slice(nameStart, end - 1)]
+        const name = pattern.slice(nameStart, end - 1)
 
         // An unknown class name makes the whole pattern match nothing
-        if (expanded === UNDEFINED) {
+        if (!Object.prototype.hasOwnProperty.call(POSIX_CLASSES, name)) {
           return null
         }
 
-        body += expanded
+        body += POSIX_CLASSES[name]
         prev = EMPTY
         index = end
       } else {
@@ -3760,15 +3754,38 @@ const REGEX_RESTORE_PLACEHOLDER = new RegExp(
 //   That is what keeps it apart from a user-escaped literal `\*`: the unescape
 //   steps collapse the escaped one to the exact `\*` a wildcard would leave
 //   behind, so by the time `_make` runs the two are otherwise the same string
-//   and a literal star gets wrongly rewritten into a wildcard. This marker is a
-//   private-use character no compiled pattern carries, and it never survives
-//   into a `RegExp` -- `_make` always turns it back into a real wildcard first.
+//   and a literal star gets wrongly rewritten into a wildcard. The marker is a
+//   private-use character, and `extractBrackets` keeps one that came out of the
+//   pattern apart from it, so the only marker `_make` ever turns back into a
+//   real wildcard is the one this chain put there itself.
 const TRAILING_WILDCARD = '\uE000'
 
 // A trailing "/**" is deferred the same way, because `checkRegex` has to tell
 //   it apart from a trailing "/*" (see `checkSourceOf`). For `.ignores()` it
 //   still never matches the folder itself (#21).
 const TRAILING_DOUBLESTAR = '\uE001'
+
+// The three characters above mean something to the chain that builds the
+//   source rather than to the path, so one that came out of the pattern is
+//   held aside like a bracket expression instead of going straight out. Being
+//   held is what makes it safe: the restore runs after the step that anchors
+//   the source, so the character comes back in the middle of the source and
+//   not at its end, which is the one place `_make` and `checkSourceOf` look
+//   for a marker. Without it a pattern's own character lands where a pending
+//   marker sits, and `_make` turns it into a real trailing wildcard.
+//
+// It is held as a one-member class rather than bare, in both of the branches
+//   a reserved character can reach, so that the property can be
+//   read off this function alone -- a reserved character never goes out on
+//   its own -- rather than depending on where in the chain the restore
+//   happens to run. In the expression built here `[x]` matches exactly what
+//   `x` matches, none of the three being special to a regular expression or
+//   inside a class, so no test can tell the two apart: the class is insurance,
+//   and the paragraph above is the reason it is not needed.
+const isReserved = char =>
+  char === PLACEHOLDER
+  || char === TRAILING_WILDCARD
+  || char === TRAILING_DOUBLESTAR
 
 // Replace every bracket expression with a placeholder the replacers below
 //   leave alone, and translate it separately.
@@ -3794,12 +3811,19 @@ const extractBrackets = pattern => {
       //   `\1`, `\/` keep their regular-expression meaning, and would turn a
       //   `\?` into `[^\/]`.
       //
-      // Four escapes are left for the chain, each with dedicated handling it
-      //   would be wrong to bypass: `\*` (a literal star, told apart from a
-      //   wildcard by `TRAILING_WILDCARD` and the wildcard replacers), `\[`
-      //   (a literal bracket, the one `[` the bracket replacer still expects),
-      //   `\ ` (a quoted trailing space), and `\\` (a literal backslash). A
-      //   lone trailing backslash can reach here after line-ending cleanup.
+      // Three escapes are still left for the chain: `\*` (a literal star,
+      //   told apart from a wildcard by `TRAILING_WILDCARD` and the wildcard
+      //   replacers), `\[` (a literal bracket, the one `[` the bracket
+      //   replacer still expects), and `\ ` (a quoted space, which one pass
+      //   below rewrites in bulk -- holding each one aside instead costs more
+      //   on a pattern built out of them). A lone trailing backslash can reach
+      //   here after line-ending cleanup.
+      //
+      // A quoted backslash is not among them. The chain doubles every
+      //   backslash, then takes the doubling back out again, and a quoted one
+      //   standing next to a character the chain also escapes left the two
+      //   counts sharing a run, so one of the escapes was lost. Held here as
+      //   the literal it means, it never joins that run.
       const escaped = pattern[index + 1]
 
       if (
@@ -3813,22 +3837,21 @@ const extractBrackets = pattern => {
         escaped === '*'
         || escaped === '['
         || escaped === SPACE
-        || escaped === ESCAPE
       ) {
         out += pattern.slice(index, index + 2)
       } else {
         out += hold(
           REGEX_LITERAL_SPECIAL.test(escaped)
             ? ESCAPE + escaped
-            : escaped
+            : isReserved(escaped)
+              ? `[${escaped}]`
+              : escaped
         )
       }
 
       index += 2
-    } else if (char === PLACEHOLDER) {
-      // Hold a literal placeholder character aside as well, so that pattern
-      //   text can never be mistaken for a placeholder we emitted.
-      out += hold(`[${PLACEHOLDER}]`)
+    } else if (isReserved(char)) {
+      out += hold(`[${char}]`)
       index ++
     } else if (char === '[') {
       const scanned = scanBracket(pattern, index)
@@ -4074,23 +4097,23 @@ const REPLACERS = [
   // trailing wildcard, held apart from a literal star
   [
     // The step above leaves a trailing `*` alone, so a single `\*` is all that
-    //   can be left at the end here. Whether it is a wildcard or a literal
-    //   turns on the backslashes the user put in front of it: the escaper has
-    //   since doubled every one, so what stands here is those `2N` doubled
-    //   backslashes and then the star's own escape. An even number of the
-    //   original `N` leaves the star unescaped -- a wildcard -- and an odd
-    //   number escapes it -- a literal. This runs while the two are still
-    //   distinct, before the unescape steps below collapse the literal onto
-    //   the very `\*` a wildcard leaves behind.
+    //   can be left at the end here, and what stands in front of it says which
+    //   kind it is. A wildcard arrives as the escaper wrote it, `\*` with
+    //   nothing before it; a literal arrives as the user's own escape, which
+    //   the escaper doubled, and then the star's own -- `\\` and then `\*`.
+    //   There is no third case: every backslash still reaching the chain is
+    //   one `\*`, `\[` or `\ ` carries itself, and each is followed by its
+    //   own character, so a longer run can never form. This runs while the
+    //   two are still distinct, before the unescape steps below collapse the
+    //   literal onto the very `\*` a wildcard leaves behind.
     /(^|[^\\])((?:\\\\)*)\\\*$/,
 
     (match, p1, p2) =>
-      // `p2` holds the doubled user backslashes; half of them is `N`.
-      (p2.length / 2) % 2 === 0
+      p2 === EMPTY
         // A real wildcard: carry it to `_make` as the marker, so the unescape
         //   steps and the trailing-wildcard rewrite can never mistake it for a
         //   literal `\*` (nor the reverse).
-        ? p1 + p2 + TRAILING_WILDCARD
+        ? p1 + TRAILING_WILDCARD
         // A literal star: leave it exactly as it stands for the unescape steps.
         : match,
     '*'
@@ -4117,12 +4140,12 @@ const REPLACERS = [
     //   been held aside by `extractBrackets`, so the only `[` left in the
     //   pattern is an escaped, literal one.
 
-    // `\` is escaped by step 3
-    /\\\[([^\]/]*?)(\\*)($|\])/g,
+    // A backslash could only stand at the end of the range if it quoted the
+    //   `]`, and `\]` is held aside long before this.
+    /\\\[([^\]/]*?)($|\])/g,
 
-    // '\\[bar]' -> '\\\\[bar\\]'
-    (match, range, endEscape, close) =>
-      `\\[${range}${cleanRangeBackSlash(endEscape)}${close}`,
+    // '\\[bar]' -> '\\\\[bar]'
+    (match, range, close) => `\\[${range}${close}`,
     '['
   ],
 
@@ -4193,23 +4216,10 @@ const replaceTrailingDoublestar = () => '.+(?=$|\\/$)'
 
 const WILDCARD = '[^\\/]*'
 
-// Where a run of non-slash wildcards is split by single fixed characters --
-//   `[^/]*x[^/]*y...` -- the engine has many equivalent ways to lay the
-//   input across the wildcards, and on input that does not match it works
-//   through all of them, so the time grows with the number of wildcards
-//   rather than the length of the path. Every wildcard but the last in such a
-//   run can be pinned to stop at the character that follows it, which leaves
-//   one way to lay out the input and no rewinding, without changing which
-//   paths match: the fixed characters still bound the count, and the last
-//   wildcard still absorbs the rest.
-//
-// The source is read one token at a time -- a wildcard, a single-character
-//   piece (a literal, an escape, a class), or a parenthesised group or anchor
-//   that ends the run -- so only a genuine wildcard is touched.
-
-// The fixed pieces between the wildcard at `at` and the next wildcard of the
-//   run, joined as they appear in the source. A run never holds two wildcards
-//   in a row, so there is always at least one piece.
+// The fixed piece between the wildcard at `at` and the next wildcard of the
+//   run: the tokens that separate them, joined as they appear in the source.
+//   A run never holds two wildcards in a row, so there is always at least one
+//   token.
 const separatorAfter = (run, at) => {
   let separator = EMPTY
 
@@ -4220,6 +4230,29 @@ const separatorAfter = (run, at) => {
   return separator
 }
 
+// Where a run of non-slash wildcards is split by fixed pieces --
+//   `[^/]*ab[^/]*cd...` -- the engine has many equivalent ways to lay the
+//   input across the wildcards, and on input that does not match it works
+//   through all of them, so the time grows with the number of wildcards
+//   rather than the length of the path. Every wildcard but the last in such a
+//   run can be pinned to stop where the piece after it begins, which leaves
+//   one way to lay out the input and no rewinding, without changing which
+//   paths match: the fixed pieces still bound the count, and the last
+//   wildcard still absorbs the rest.
+//
+// A wildcard is pinned to the whole piece, never to the piece's first
+//   character. The pin leaves no way back, so a wildcard that stopped at that
+//   first character would hand over wherever the character happens to turn
+//   up, including the places the rest of the piece cannot follow -- which is
+//   how `f*o/*/*` came to miss `foo/b/c`, the first `o` of `foo` not being
+//   the one the `o/` after it needs. Every token of a piece matches exactly
+//   one character, so the first place the whole piece fits is the leftmost
+//   place it can sit, and whatever is left over goes to the wildcards that
+//   follow.
+//
+// The source is read one token at a time -- a wildcard, a single-character
+//   piece (a literal, an escape, a class), or a parenthesised group or anchor
+//   that ends the run -- so only a genuine wildcard is touched.
 const pinWildcards = source => {
   if (source.indexOf(WILDCARD) < 0) {
     return source
@@ -4307,16 +4340,9 @@ const pinWildcards = source => {
         return
       }
 
-      // A wildcard that is not the last in the run is pinned to the whole
-      //   fixed piece that separates it from the next wildcard, not just to
-      //   that piece's first character: stopping at the first character alone
-      //   would let the wildcard hand over at a place where the rest of the
-      //   separator cannot follow, and the pin leaves no way back, so
-      //   `f*o/*/*` would miss `foo/b/c` -- the first `o` of `foo` is not the
-      //   one the `o/` after it needs. Every piece matches exactly one
-      //   character, so pinning to the first place the whole separator fits
-      //   is the leftmost place it can sit, and the wildcards that follow
-      //   take up whatever is left.
+      // Every wildcard but the last is pinned to the whole piece that
+      //   follows it, for the reason set out above this function. The last
+      //   one stays as it is and takes up the rest.
       out += at === lastWildcard
         ? WILDCARD
         : `(?:(?!${separatorAfter(run, at)})[^\\/])*`
