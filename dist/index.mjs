@@ -3529,7 +3529,6 @@ const ESCAPE = '\\'
 //   expression, so a literal one has to be escaped before it is emitted.
 const REGEX_LITERAL_SPECIAL = /[.*+?()[\]{}^$|\\/]/
 const BOM = '\uFEFF'
-const REGEX_INVALID_TRAILING_BACKSLASH = /(?:[^\\]|^)\\$/
 // A run of two or more asterisks is a globstar (#175)
 const REGEX_ANCHORED_GLOBSTAR = /^\/\*{2,}$/
 const REGEX_REPLACE_LEADING_EXCAPED_EXCLAMATION = /^\\!/
@@ -3665,13 +3664,11 @@ const scanBracket = (pattern, start) => {
     }
 
     if (char === ESCAPE) {
-      const escaped = pattern[index + 1]
-      if (escaped === UNDEFINED) {
-        return null
-      }
+      // A pattern can not end on a lone backslash -- `createRule` has
+      //   already thrown it away -- so there is a character to read.
+      const escaped = pattern[++ index]
       body += escapeMember(escaped)
       prev = escaped
-      index ++
     } else if (
       char === '-'
       && prev
@@ -3681,8 +3678,6 @@ const scanBracket = (pattern, start) => {
       index ++
       let to = pattern[index]
       if (to === ESCAPE) {
-        // A pattern can not end on a lone backslash -- `checkPattern` has
-        //   already thrown it away -- so there is an upper bound to read.
         to = pattern[index += 1]
       }
       // An out-of-order range matches nothing in git but is a syntax error in
@@ -3818,8 +3813,7 @@ const extractBrackets = pattern => {
       //   replacers), `\[` (a literal bracket, the one `[` the bracket
       //   replacer still expects), and `\ ` (a quoted space, which one pass
       //   below rewrites in bulk -- holding each one aside instead costs more
-      //   on a pattern built out of them). A lone trailing backslash can reach
-      //   here after line-ending cleanup.
+      //   on a pattern built out of them).
       //
       // A quoted backslash is not among them. The chain doubles every
       //   backslash, then takes the doubling back out again, and a quoted one
@@ -3828,10 +3822,7 @@ const extractBrackets = pattern => {
       //   the literal it means, it never joins that run.
       const escaped = pattern[index + 1]
 
-      if (
-        escaped === UNDEFINED
-        || escaped === SLASH && index + 2 === length
-      ) {
+      if (escaped === SLASH && index + 2 === length) {
         // Git removes a final directory slash before matching. An escape
         //   without a character after that removal makes the pattern invalid.
         out += hold(NEVER_MATCH)
@@ -3893,6 +3884,7 @@ const DIRECT = null
 // A separator at the beginning or in the middle of a pattern, as opposed to
 //   one at the very end.
 const REGEX_INNER_SLASH = /\/(?!$)/
+const WILDCARD = '[^\\/]*'
 
 // > If the pattern ends with a slash,
 // > it is removed for the purpose of the following description,
@@ -4012,7 +4004,7 @@ const REPLACERS = [
     /^\^*(?:\\\*\\\*\\\/)+/,
 
     // '**/foo' <-> 'foo'
-    () => '^(?:.*\\/)?',
+    () => '(?:^|\\/)',
     '*'
   ],
 
@@ -4023,8 +4015,8 @@ const REPLACERS = [
     // If starts with '**', adding a '^' to the regular expression also works
     DIRECT,
     (source, pattern) => {
-      // Nothing to anchor to, or already anchored
-      if (!source || source[0] === '^') {
+      // Nothing to anchor to, or already anchored (`^` or `(?:^|\/)`)
+      if (!source || source[0] === '^' || source[0] === '(') {
         return source
       }
 
@@ -4095,19 +4087,14 @@ const REPLACERS = [
     // 'abc.*/' -> go
     // 'abc.*'  -> skip this rule,
     //    coz trailing single wildcard will be handed by [trailing wildcard]
-    /(^|[^\\]+)(\\\*)+(?=.+)/g,
+    /(^|[^\\])(?:\\\*)+(?!$)/g,
 
     // '*.js' matches '.js'
     // '*.js' doesn't match 'abc'
-    (_, p1, p2) => {
-      // 1.
-      // > An asterisk "*" matches anything except a slash.
-      // 2.
-      // > Other consecutive asterisks are considered regular asterisks
-      // > and will match according to the previous rules.
-      const unescaped = p2.replace(/\\\*/g, '[^\\/]*')
-      return p1 + unescaped
-    },
+    // 1. An asterisk "*" matches anything except a slash.
+    // 2. Other consecutive asterisks are considered regular asterisks
+    //    and collapse into one non-slash wildcard run.
+    (_, p1) => p1 + WILDCARD,
     '*'
   ],
 
@@ -4228,10 +4215,10 @@ const replaceTrailingWildcard = (_, p1) => {
 
 const REGEX_REPLACE_TRAILING_DOUBLESTAR = /\uE001$/
 
-// 'abc/**' matches everything under 'abc', but not 'abc/' itself (#21)
-const replaceTrailingDoublestar = () => '.+(?=$|\\/$)'
-
-const WILDCARD = '[^\\/]*'
+// 'abc/**' matches everything under 'abc', but not 'abc/' itself (#21):
+//   requiring one arbitrary character (line terminators included, #176)
+//   after 'abc/' is necessary and sufficient for `.test(path)`.
+const replaceTrailingDoublestar = () => '[\\s\\S]'
 
 // The fixed piece between the wildcard at `at` and the next wildcard of the
 //   run: the tokens that separate them, joined as they appear in the source.
@@ -4447,7 +4434,7 @@ const checkSourceOf = (body, prefix) => {
   return last === TRAILING_WILDCARD
     ? `${head}$`
     : last === TRAILING_DOUBLESTAR
-      ? `${head}.*$`
+      ? head
       : NEVER_MATCH
 }
 
@@ -4531,13 +4518,18 @@ const parentOf = path => {
 
 const isString = subject => typeof subject === 'string'
 
-// Blank lines and comments are told by `createRule`, once the pattern is
-//   normalized.
+// Blank lines, comments and trailing lone backslashes are told by
+//   `createRule`, once the pattern is normalized.
 const checkPattern = pattern => pattern
   && isString(pattern)
-  && !REGEX_INVALID_TRAILING_BACKSLASH.test(pattern)
 
-const splitPattern = pattern => pattern
+// Git drops one CR before each LF, and one at the end of a final line that
+//   has no LF after it.
+const splitPattern = pattern => (
+  pattern[pattern.length - 1] === '\r'
+    ? pattern.slice(0, - 1)
+    : pattern
+)
 .split(REGEX_SPLITALL_CRLF)
 .filter(Boolean)
 
@@ -4605,34 +4597,54 @@ class IgnoreRule {
   }
 }
 
-const isLineEnd = char => char === '\r' || char === '\n'
+const hasTrailingBackslash = str => {
+  let count = 0
 
-// Drop a line terminator, which can remain when patterns are passed as an
-//   array, and then the trailing spaces. Git trims spaces only, and a space
+  while (str[str.length - count - 1] === ESCAPE) {
+    count ++
+  }
+
+  return count % 2 === 1
+}
+
+// Read a line the way git does: when `stripLineEnd` is set (an unsplit array
+//   or object pattern), drop any trailing blank lines along with the LF
+//   before each and at most one CR at the end of the line; then trim trailing
+//   spaces in the same backward pass. Git trims spaces only, and a space
 //   escaped by an odd run of backslashes stays, unescaped, as the last one.
 // Scanned from the end: a regular expression can only try each start in
 //   turn, which is quadratic over a long run of spaces or backslashes.
 // 'a  ' -> 'a';  'a\ ' -> 'a ';  'a\\ ' -> 'a\\';  'a\t' -> 'a\t'
-const trimEnd = body => {
-  let end = body.length
+// 'a\r\n' -> 'a';  'a\r\r' -> 'a\r';  'a\n\r' -> 'a'
+const trimEnd = (body, stripLineEnd) => {
+  let lineEnd = body.length
+  let end
 
-  while (end && isLineEnd(body[end - 1])) {
-    end --
-  }
+  for (;;) {
+    if (stripLineEnd && body[lineEnd - 1] === '\r') {
+      lineEnd --
+    }
 
-  const lineEnd = end
+    end = lineEnd
 
-  while (end && body[end - 1] === SPACE) {
-    end --
+    while (body[end - 1] === SPACE) {
+      end --
+    }
+
+    if (!stripLineEnd || body[end - 1] !== '\n') {
+      break
+    }
+
+    lineEnd = end - 1
   }
 
   if (end === lineEnd) {
-    return body.slice(0, end)
+    return body.slice(0, lineEnd)
   }
 
   let backslashes = 0
 
-  while (backslashes < end && body[end - backslashes - 1] === ESCAPE) {
+  while (body[end - backslashes - 1] === ESCAPE) {
     backslashes ++
   }
 
@@ -4641,12 +4653,15 @@ const trimEnd = body => {
     : body.slice(0, end)
 }
 
-const createRule = ({
+const createRule = (
   pattern,
-  mark
-}, ignoreCase) => {
+  mark,
+  ignoreCase,
+  stripLineEnd,
+  stripBOM
+) => {
   // Git drops a BOM before it reads the first line, so before anything else.
-  let body = pattern[0] === BOM
+  let body = stripBOM && pattern[0] === BOM
     ? pattern.slice(1)
     : pattern
 
@@ -4665,18 +4680,23 @@ const createRule = ({
 
   // Normalize the body before checking which slashes anchor the pattern.
   //   Otherwise `bar/ ` is mistaken for a pattern containing an inner slash.
-  //   Only a body ending in a space or a line terminator has anything to trim.
+  //   A line from `splitPattern` has already lost its line ending, so only a
+  //   trailing space remains to trim there.
   const last = body[body.length - 1]
 
-  if (last === SPACE || last === '\r' || last === '\n') {
-    body = trimEnd(body)
+  if (
+    last === SPACE
+    || stripLineEnd && (last === '\r' || last === '\n')
+  ) {
+    body = trimEnd(body, stripLineEnd)
   }
 
   // > A blank line matches no files, so it can serve as a separator for
   // >   readability.
-  // Nor does a lone "!", or anything else left empty here: an empty pattern
-  //   would compile to a regex matching every path.
-  if (!body) {
+  // Nor does a lone "!", a pattern ending on an unpaired backslash, or
+  //   anything else left empty here: an empty pattern would compile to a
+  //   regex matching every path.
+  if (!body || hasTrailingBackslash(body)) {
     return
   }
 
@@ -4721,7 +4741,7 @@ class RuleManager {
     this._basenameCount = 0
   }
 
-  _add (pattern) {
+  _add (pattern, index) {
     // #32
     if (pattern && pattern[KEY_IGNORE]) {
       this._rules = this._rules.concat(pattern._rules._rules)
@@ -4730,14 +4750,19 @@ class RuleManager {
       return
     }
 
-    if (isString(pattern)) {
-      pattern = {
-        pattern
-      }
-    }
+    const isStr = isString(pattern)
+    const raw = isStr
+      ? pattern
+      : pattern.pattern
 
-    const rule = checkPattern(pattern.pattern)
-      && createRule(pattern, this._ignoreCase)
+    const rule = checkPattern(raw)
+      && createRule(
+        raw,
+        isStr ? UNDEFINED : pattern.mark,
+        this._ignoreCase,
+        !this._split,
+        this._stripBOM && !index
+      )
 
     if (rule) {
       this._added = true
@@ -4755,9 +4780,11 @@ class RuleManager {
   // @param {Array<string> | string | Ignore} pattern
   add (pattern) {
     this._added = false
+    this._split = isString(pattern)
+    this._stripBOM = !this._split || pattern[0] === BOM
 
     makeArray(
-      isString(pattern)
+      this._split
         ? splitPattern(pattern)
         : pattern
     ).forEach(this._add, this)
@@ -4941,6 +4968,10 @@ checkPath.isNotRelative = isNotRelative
 checkPath.convert = p => p
 
 
+const convertPath = target =>
+  isString(target) && checkPath.convert(target)
+
+
 class Ignore {
   constructor ({
     ignorecase = true,
@@ -4979,11 +5010,7 @@ class Ignore {
   }
 
   // @returns {TestResult}
-  _test (originalPath, cache) {
-    const path = originalPath
-      // Supports nullable path
-      && checkPath.convert(originalPath)
-
+  _test (originalPath, cache, path) {
     checkPath(
       path,
       originalPath,
@@ -4992,14 +5019,23 @@ class Ignore {
         : RETURN_FALSE
     )
 
-    return this._t(path, cache)
+    return path
+      ? this._t(path, cache)
+      : {
+        ignored: false,
+        unignored: false
+      }
   }
 
-  checkIgnore (path) {
-    // If the path doest not end with a slash, `.ignores()` is much equivalent
+  checkIgnore (target) {
+    // A Windows path is converted first, so that a directory given with a
+    //   trailing separator, `\` or `/`, is told the same way
+    const path = convertPath(target)
+
+    // If the path does not end with a slash, `.ignores()` is much equivalent
     //   to `git check-ignore`
-    if (path.charCodeAt(path.length - 1) !== SLASH_CODE) {
-      return this.test(path)
+    if (!path || path.charCodeAt(path.length - 1) !== SLASH_CODE) {
+      return this._test(target, this._testCache, path)
     }
 
     // Like `git check-ignore`: a directory excluded by itself or by an
@@ -5044,7 +5080,7 @@ class Ignore {
   }
 
   ignores (path) {
-    return this._test(path, this._ignoreCache).ignored
+    return this._test(path, this._ignoreCache, convertPath(path)).ignored
   }
 
   createFilter () {
@@ -5057,14 +5093,14 @@ class Ignore {
 
   // @returns {TestResult}
   test (path) {
-    return this._test(path, this._testCache)
+    return this._test(path, this._testCache, convertPath(path))
   }
 }
 
 const factory = options => new Ignore(options)
 
 const isPathValid = path =>
-  checkPath(path && checkPath.convert(path), path, RETURN_FALSE)
+  checkPath(convertPath(path), path, RETURN_FALSE)
 
 /* istanbul ignore next */
 const setupWindows = () => {
@@ -60810,7 +60846,7 @@ const fixableRuleNames = (/* unused pure expression or super */ null && ([
   "MD054", "MD058", "MD060"
 ]));
 const homepage = "https://github.com/DavidAnson/markdownlint";
-const version = "0.42.1";
+const version = "0.42.2";
 
 // EXTERNAL MODULE: ./node_modules/markdownlint/lib/defer-require.cjs
 var defer_require = __nccwpck_require__(9489);
@@ -78155,8 +78191,30 @@ var shared = __nccwpck_require__(3408);
 /** @typedef {import("micromark-util-types").State} State */
 /** @typedef {import("micromark-util-types").Token} Token */
 /** @typedef {import("micromark-util-types").Tokenizer} Tokenizer */
+/** @typedef {import("micromark-util-types").TokenType} TokenType */
 /** @typedef {import("markdownlint").MicromarkToken} MicromarkToken */
 /** @typedef {typeof import("./micromark-types.d.mts")} _ambient_ */
+
+/** @type {TokenType[]} */
+const eventTokenTypesToReplicate = [
+  "attentionSequence",
+  "autolink",
+  "autolinkEmail",
+  "autolinkMarker",
+  "autolinkProtocol",
+  "codeTextData",
+  "codeTextPadding",
+  "codeTextSequence",
+  "data",
+  "htmlText",
+  "htmlTextData",
+  "lineEnding",
+  "mathText",
+  "mathTextData",
+  "mathTextPadding",
+  "mathTextSequence"
+];
+const eventTypesToReplicate = new Set(eventTokenTypesToReplicate);
 
 /**
  * Gets a modified micromark-extension-directive without support for inline directives.
@@ -78262,7 +78320,7 @@ function getEvents(
           .filter((event) => {
             const [ , eventToken ] = event;
             const { type } = eventToken;
-            return (type === "data") || (type === "lineEnding");
+            return eventTypesToReplicate.has(type);
           });
 
         // Determine the type of the undefined reference
@@ -80647,7 +80705,7 @@ function getEffectiveConfig(ruleList, config, aliasToRuleNames) {
     let severity = "error";
     let effectiveValue = {};
     if (value) {
-      if (value instanceof Object) {
+      if ((value instanceof Object) || (Object.getPrototypeOf(value) === null)) {
         /** @type {{ enabled?: boolean, severity?: "error" | "warning" }} */
         const valueObject = value;
         enabled = (valueObject.enabled === undefined) || !!valueObject.enabled;
@@ -82074,7 +82132,7 @@ const appendToArray = (destination, source) => {
 // @ts-check
 
 const packageName = "markdownlint-cli2";
-const packageVersion = "0.24.1";
+const packageVersion = "0.24.2";
 
 const libraryName = "markdownlint";
 
