@@ -47,6 +47,7 @@ export default defineConfig(
 
       "@stylistic/array-bracket-spacing": [ "error", "always" ],
       "@stylistic/dot-location": [ "error", "object" ],
+      "@stylistic/list-style": [ "error", { "singleLine": { "spacing": "never" }, "overrides": { "[]": { "singleLine": { "spacing": "always" } } } } ],
       "@stylistic/operator-linebreak": [ "error", "after" ],
 
       "unicorn/no-array-callback-reference": "off",
